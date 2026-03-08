@@ -115,7 +115,17 @@ class GmailClient:
                                     
                                 with open(filepath, "wb") as f:
                                     f.write(part.get_payload(decode=True))
-                                downloaded_files.append(filepath)
+                                
+                                # Extract sender for parser routing
+                                sender, sender_enc = decode_header(msg.get("From", ""))[0]
+                                if isinstance(sender, bytes):
+                                    sender = sender.decode(sender_enc if sender_enc else "utf-8")
+
+                                downloaded_files.append({
+                                    "filepath": filepath,
+                                    "sender": sender,
+                                    "subject": subject
+                                })
                                 print(f"[{self.username}] Downloaded: {filepath}")
                 
                 return downloaded_files

@@ -3,6 +3,8 @@ import sys
 from src.config import GMAIL_USER, GMAIL_APP_PASSWORD, TARGET_SENDERS, TARGET_KEYWORDS, DOWNLOAD_DIR
 from src.gmail_client import GmailClient
 from src.pdf_extractor import PDFExtractor
+from src.parser_factory import get_parser
+from src.csv_exporter import CSVExporter
 
 def main():
     if not GMAIL_USER or not GMAIL_APP_PASSWORD:
@@ -26,18 +28,35 @@ def main():
 
     for msg_id in message_ids:
         # Download PDFs
-        files = client.fetch_and_extract_pdfs(msg_id, DOWNLOAD_DIR, TARGET_KEYWORDS)
+        files_info = client.fetch_and_extract_pdfs(msg_id, DOWNLOAD_DIR, TARGET_KEYWORDS)
         
-        for file in files:
-            print(f"Extracting text from: {file}")
-            extractor = PDFExtractor(file)
-            text = extractor.extract_text()
-            extracted_data.append({
-                "filepath": file,
-                "raw_text": text
-            })
+        for file_info in files_info:
+            filepath = file_info["filepath"]
+            sender = file_info["sender"]
+            
+            print(f"Extracting text from: {filepath}")
+            extractor = PDFExtractor(filepath)
+            raw_text = extractor.extract_text()
+            
+            print(f"Parsing content for sender: {sender}")
+            parser = get_parser(sender, raw_text)
+            parsed_info = parser.parse()
+            
+            # Attach source file info
+            parsed_info["Source File"] = os.path.basename(filepath)
+            extracted_data.append(parsed_info)
 
-    print(f"Extraction complete. Processed {len(extracted_data)} PDF(s) in {DOWNLOAD_DIR}")
+    if extracted_data:
+        print(f"Extraction complete. Exporting {len(extracted_data)} record(s) to CSV...")
+        exporter = CSVExporter(extracted_data, DOWNLOAD_DIR)
+        csv_path = exporter.export()
+        print(f"CSV generated at: {csv_path}")
+        
+        # Delivery mechanism (MVP group chat alert simulation)
+        print("Review Alert: Please review the generated CSV file.")
+    else:
+        print("No valid data extracted. No CSV generated.")
+        
     client.close()
 
 if __name__ == "__main__":
