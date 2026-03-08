@@ -5,6 +5,7 @@ from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 import logging
+from src.config import OAUTH_CLIENT_SECRETS_PATH, OAUTH_TOKEN_PATH
 
 # Setup logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -13,9 +14,9 @@ logger = logging.getLogger(__name__)
 # If modifying these scopes, delete the token file.
 SCOPES = ['https://www.googleapis.com/auth/gmail.readonly']
 
-# Default paths
-DEFAULT_CLIENT_SECRETS_FILE = 'config/client_secrets.json'
-DEFAULT_TOKEN_FILE = 'config/token.json'
+# Default paths (imported from config)
+DEFAULT_CLIENT_SECRETS_FILE = OAUTH_CLIENT_SECRETS_PATH
+DEFAULT_TOKEN_FILE = OAUTH_TOKEN_PATH
 
 
 def get_gmail_service(client_secrets_path=None, token_path=None):
