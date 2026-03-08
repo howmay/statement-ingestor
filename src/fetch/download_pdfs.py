@@ -9,37 +9,94 @@ logger = logging.getLogger(__name__)
 
 def extract_sender_tag(sender: str) -> str:
     """
-    Extract a clean tag from sender email address.
-    Example: "billing@apple.com" -> "apple"
-             "receipts@uber.com" -> "uber"
-             "no-reply@amazon.com" -> "amazon"
+    Extract a meaningful tag from sender email address for filename prefix.
+    Prioritizes bank/business identification over generic domain parts.
     
     Args:
         sender: Email address string.
     
     Returns:
-        Clean tag string (lowercase, alphanumeric only).
+        Clean tag string (lowercase, alphanumeric and underscores only).
     """
     # Extract domain part after @
-    if '@' in sender:
-        domain = sender.split('@')[1]
-        # Remove common prefixes like "no-reply.", "billing.", etc.
-        domain_parts = domain.split('.')
-        if len(domain_parts) >= 2:
-            # Use the main domain part (e.g., "apple" from "apple.com")
-            tag = domain_parts[-2]  # Second last part
-        else:
-            tag = domain_parts[0]
-    else:
-        # No @ found, use the whole string
-        tag = sender
+    if '@' not in sender:
+        # Clean the whole string if no @ found
+        tag = re.sub(r'[^a-zA-Z0-9]', '_', sender).lower()
+        return tag[:30] if tag else 'unknown'
     
-    # Clean the tag: only alphanumeric, lowercase
-    tag = re.sub(r'[^a-zA-Z0-9]', '', tag).lower()
+    domain = sender.split('@')[1]
+    
+    # Bank/company domain mapping for better identification
+    # Key patterns in domain -> preferred tag
+    domain_patterns = {
+        # HSBC patterns
+        r'hsbc\.com\.sg$': 'hsbc_sg',
+        r'hsbc\.com\.tw$': 'hsbc_tw',
+        r'hsbc\.': 'hsbc',
+        
+        # Fubon patterns
+        r'taipeifubon\.com\.tw$': 'fubon_tw',
+        r'fubon\.': 'fubon',
+        
+        # Esun Bank
+        r'esunbank\.com$': 'esunbank',
+        
+        # Common financial patterns
+        r'bank\.': '_bank',
+        r'financial\.': '_financial',
+        r'credit\.': '_credit',
+        r'estatements\.': 'estatements_',
+        
+        # Generic company patterns
+        r'apple\.com$': 'apple',
+        r'uber\.com$': 'uber',
+        r'amazon\.com$': 'amazon',
+    }
+    
+    # Try to match known patterns first
+    for pattern, preferred_tag in domain_patterns.items():
+        if re.search(pattern, domain, re.IGNORECASE):
+            # Clean the preferred tag
+            clean_tag = re.sub(r'[^a-zA-Z0-9_]', '_', preferred_tag).lower()
+            return clean_tag[:30] if clean_tag else 'unknown'
+    
+    # Fallback: extract meaningful parts from domain
+    domain_parts = domain.split('.')
+    
+    # Remove common email prefixes (mail., service., no-reply., etc.)
+    filtered_parts = []
+    for part in domain_parts:
+        if part.lower() not in ['mail', 'service', 'no-reply', 'noreply', 'billing', 
+                               'receipts', 'support', 'info', 'contact', 'admin',
+                               'cards', 'estatement', 'estatements']:
+            filtered_parts.append(part)
+    
+    # If we filtered everything out, use original parts
+    if not filtered_parts:
+        filtered_parts = domain_parts
+    
+    # Build tag from remaining parts (max 3 parts)
+    if len(filtered_parts) >= 2:
+        # For domains like "mail.hsbc.com.sg", take "hsbc" and "sg"
+        if len(filtered_parts) >= 3:
+            # Take second-to-last and last parts (e.g., "hsbc" and "sg")
+            tag_parts = [filtered_parts[-2], filtered_parts[-1]]
+        else:
+            tag_parts = filtered_parts
+    else:
+        tag_parts = filtered_parts
+    
+    # Join with underscores and clean
+    tag = '_'.join(tag_parts)
+    tag = re.sub(r'[^a-zA-Z0-9_]', '_', tag).lower()
+    
+    # Remove leading/trailing underscores and consecutive underscores
+    tag = re.sub(r'_+', '_', tag).strip('_')
+    
     if not tag:
         tag = 'unknown'
     
-    return tag[:20]  # Limit length
+    return tag[:30]  # Limit length but allow more for complex domains
 
 
 def download_attachment(service, message_id: str, attachment_info: Dict[str, Any], sender_tag: str = None) -> str:
