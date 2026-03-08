@@ -19,6 +19,25 @@ DEFAULT_CLIENT_SECRETS_FILE = OAUTH_CLIENT_SECRETS_PATH
 DEFAULT_TOKEN_FILE = OAUTH_TOKEN_PATH
 
 
+def _test_token_usable(creds):
+    """
+    Test if the given credentials can actually access the Gmail API.
+    
+    Args:
+        creds: google.oauth2.credentials.Credentials object.
+    
+    Returns:
+        bool: True if token works, False otherwise.
+    """
+    try:
+        service = build('gmail', 'v1', credentials=creds)
+        service.users().getProfile(userId='me').execute()
+        return True
+    except Exception as e:
+        logger.warning(f"Token usability test failed: {e}")
+        return False
+
+
 def get_gmail_service(client_secrets_path=None, token_path=None, port=None):
     """
     Authenticate and return a Gmail API service object using OAuth2.
@@ -63,12 +82,22 @@ def get_gmail_service(client_secrets_path=None, token_path=None, port=None):
         except Exception as e:
             logger.warning(f"Failed to load token: {e}")
     
+    # Test cached token usability (even if it appears valid)
+    if creds and creds.valid:
+        if not _test_token_usable(creds):
+            logger.warning("Cached token appears valid but API test failed. Will re-authenticate.")
+            creds = None
+    
     # If there are no (valid) credentials available, let the user log in
     if not creds or not creds.valid:
         if creds and creds.expired and creds.refresh_token:
             logger.info("Refreshing expired credentials")
             try:
                 creds.refresh(Request())
+                # Test if refreshed token actually works
+                if not _test_token_usable(creds):
+                    logger.warning("Refreshed token failed API test. Will re-authenticate.")
+                    creds = None
             except Exception as e:
                 logger.warning(f"Failed to refresh token: {e}")
                 creds = None
