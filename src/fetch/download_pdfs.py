@@ -1,12 +1,48 @@
 import os
 import logging
+import re
 from typing import List, Dict, Any
 from src.config import DOWNLOAD_DIR
 
 logger = logging.getLogger(__name__)
 
 
-def download_attachment(service, message_id: str, attachment_info: Dict[str, Any]) -> str:
+def extract_sender_tag(sender: str) -> str:
+    """
+    Extract a clean tag from sender email address.
+    Example: "billing@apple.com" -> "apple"
+             "receipts@uber.com" -> "uber"
+             "no-reply@amazon.com" -> "amazon"
+    
+    Args:
+        sender: Email address string.
+    
+    Returns:
+        Clean tag string (lowercase, alphanumeric only).
+    """
+    # Extract domain part after @
+    if '@' in sender:
+        domain = sender.split('@')[1]
+        # Remove common prefixes like "no-reply.", "billing.", etc.
+        domain_parts = domain.split('.')
+        if len(domain_parts) >= 2:
+            # Use the main domain part (e.g., "apple" from "apple.com")
+            tag = domain_parts[-2]  # Second last part
+        else:
+            tag = domain_parts[0]
+    else:
+        # No @ found, use the whole string
+        tag = sender
+    
+    # Clean the tag: only alphanumeric, lowercase
+    tag = re.sub(r'[^a-zA-Z0-9]', '', tag).lower()
+    if not tag:
+        tag = 'unknown'
+    
+    return tag[:20]  # Limit length
+
+
+def download_attachment(service, message_id: str, attachment_info: Dict[str, Any], sender_tag: str = None) -> str:
     """
     Download a single attachment from Gmail.
     
@@ -14,6 +50,7 @@ def download_attachment(service, message_id: str, attachment_info: Dict[str, Any
         service: Authenticated Gmail API service object.
         message_id: Gmail message ID.
         attachment_info: Attachment metadata from list_attachments().
+        sender_tag: Optional tag to prefix filename with (e.g., "apple").
     
     Returns:
         Path to the downloaded file.
@@ -42,6 +79,13 @@ def download_attachment(service, message_id: str, attachment_info: Dict[str, Any
         import re
         safe_filename = re.sub(r'[^\w\-_.]', '_', os.path.basename(original_filename))
         safe_filename = safe_filename[:200]  # Limit length
+        
+        # Add sender tag prefix if provided
+        if sender_tag:
+            # Remove any existing extension temporarily
+            name_without_ext, ext = os.path.splitext(safe_filename)
+            # Add tag prefix
+            safe_filename = f"{sender_tag}_{name_without_ext}{ext}"
         
         filepath = os.path.join(DOWNLOAD_DIR, safe_filename)
         
@@ -89,18 +133,21 @@ def download_pdf_attachments(service, message_id: str, email_metadata: Dict[str,
     sender = email_metadata.get('sender', 'Unknown')
     subject = email_metadata.get('subject', 'No Subject')
     
-    logger.info(f"Processing attachments from: {sender} - {subject}")
+    # Extract sender tag for filename prefixing
+    sender_tag = extract_sender_tag(sender)
+    logger.info(f"Processing attachments from: {sender} ({sender_tag}) - {subject}")
     
     downloaded_files = []
     attachments = list_attachments(service, message_id)
     
     for att in attachments:
         try:
-            filepath = download_attachment(service, message_id, att)
+            filepath = download_attachment(service, message_id, att, sender_tag)
             downloaded_files.append({
                 'filepath': filepath,
                 'filename': att['filename'],
                 'sender': sender,
+                'sender_tag': sender_tag,
                 'subject': subject,
                 'message_id': message_id
             })
