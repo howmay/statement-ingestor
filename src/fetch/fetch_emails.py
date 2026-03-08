@@ -34,7 +34,11 @@ def build_gmail_query(senders: List[str], keywords: List[str]) -> str:
         query_parts.append(keyword_query)
     query_parts.append("has:attachment filename:pdf")
     
-    return " ".join(query_parts)
+    final_query = " ".join(query_parts)
+    logger.debug(f"Built Gmail query: {final_query}")
+    logger.debug(f"  - Senders: {senders}")
+    logger.debug(f"  - Keywords: {keywords}")
+    return final_query
 
 
 def search_emails(service, senders=None, keywords=None, max_results=100) -> List[Dict[str, Any]]:
@@ -60,26 +64,37 @@ def search_emails(service, senders=None, keywords=None, max_results=100) -> List
     if keywords is None:
         keywords = TARGET_KEYWORDS
     
+    logger.info(f"Starting email search with:")
+    logger.info(f"  - Senders: {senders}")
+    logger.info(f"  - Keywords: {keywords}")
+    logger.info(f"  - Max results: {max_results}")
+    
     query = build_gmail_query(senders, keywords)
     logger.info(f"Searching emails with query: {query}")
     
     emails = []
     page_token = None
+    page_count = 0
     
     try:
         while True:
+            page_count += 1
+            page_max_results = min(50, max_results - len(emails))
+            logger.debug(f"Fetching page {page_count} (max {page_max_results} results)")
+            
             # Call the Gmail API
             response = service.users().messages().list(
                 userId='me',
                 q=query,
-                maxResults=min(50, max_results - len(emails)),
+                maxResults=page_max_results,
                 pageToken=page_token
             ).execute()
             
             messages = response.get('messages', [])
-            logger.info(f"Found {len(messages)} messages in this page")
+            logger.info(f"Page {page_count}: Found {len(messages)} messages")
             
-            for msg in messages:
+            for i, msg in enumerate(messages):
+                logger.debug(f"Processing message {i+1}/{len(messages)}: {msg['id']}")
                 # Get full message metadata (lightweight, not full content)
                 msg_detail = service.users().messages().get(
                     userId='me',
@@ -100,6 +115,7 @@ def search_emails(service, senders=None, keywords=None, max_results=100) -> List
                     'subject': subject,
                     'internalDate': msg_detail.get('internalDate')
                 })
+                logger.debug(f"  Added: {sender[:50]}... - {subject[:50]}...")
             
             # Check if we have enough results or reached end
             if len(emails) >= max_results:
@@ -108,13 +124,14 @@ def search_emails(service, senders=None, keywords=None, max_results=100) -> List
                 
             page_token = response.get('nextPageToken')
             if not page_token:
+                logger.debug(f"No more pages available")
                 break
                 
     except Exception as e:
         logger.error(f"Error searching emails: {e}")
         raise
     
-    logger.info(f"Total emails found: {len(emails)}")
+    logger.info(f"Email search completed. Total emails found: {len(emails)}")
     return emails[:max_results]
 
 
