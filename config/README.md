@@ -27,15 +27,28 @@
 6. Download the JSON file and rename it to `client_secrets.json`.
 7. Place `client_secrets.json` in the `config/` directory.
 
-## 4. Update `.env` file
+## 4. Configure OAuth Port (Optional)
 
-Add the following environment variable to your `.env` file (optional):
+By default, the OAuth2 flow uses port **8080**. If that port is already in use, you can change it by setting the `OAUTH_PORT` environment variable in your `.env` file:
+
+```
+OAUTH_PORT=8081
+```
+
+**Important**: If you change the port, you must also update the **Authorized redirect URIs** in your Google Cloud Console OAuth2 client configuration to include both:
+- `http://localhost:8080/` (default)
+- `http://localhost:8081/` (or your chosen port)
+
+## 5. Update `.env` file
+
+Add the following environment variables to your `.env` file (optional):
 
 ```
 GOOGLE_APPLICATION_CREDENTIALS=config/client_secrets.json
+OAUTH_PORT=8080  # Change if port 8080 is already in use
 ```
 
-## 5. First Run Authorization
+## 6. First Run Authorization
 
 When you run the script for the first time:
 

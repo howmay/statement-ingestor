@@ -3,10 +3,10 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# For MVP, we can support a single account via env, 
-# or multiple if we parse a JSON string. We'll start with one for simplicity.
-GMAIL_USER = os.getenv("GMAIL_USER", "example@gmail.com")
-GMAIL_APP_PASSWORD = os.getenv("GMAIL_APP_PASSWORD", "")
+# OAuth2 Configuration
+OAUTH_CLIENT_SECRETS_PATH = os.getenv("OAUTH_CLIENT_SECRETS_PATH", "config/client_secrets.json")
+OAUTH_TOKEN_PATH = os.getenv("OAUTH_TOKEN_PATH", "config/token.json")
+OAUTH_PORT = int(os.getenv("OAUTH_PORT", "8080"))
 
 # Search Criteria
 TARGET_SENDERS = [

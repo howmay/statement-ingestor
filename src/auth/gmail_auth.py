@@ -5,6 +5,7 @@ from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 import logging
+from src.config import OAUTH_CLIENT_SECRETS_PATH, OAUTH_TOKEN_PATH, OAUTH_PORT
 
 # Setup logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -13,12 +14,12 @@ logger = logging.getLogger(__name__)
 # If modifying these scopes, delete the token file.
 SCOPES = ['https://www.googleapis.com/auth/gmail.readonly']
 
-# Default paths
-DEFAULT_CLIENT_SECRETS_FILE = 'config/client_secrets.json'
-DEFAULT_TOKEN_FILE = 'config/token.json'
+# Default paths (imported from config)
+DEFAULT_CLIENT_SECRETS_FILE = OAUTH_CLIENT_SECRETS_PATH
+DEFAULT_TOKEN_FILE = OAUTH_TOKEN_PATH
 
 
-def get_gmail_service(client_secrets_path=None, token_path=None):
+def get_gmail_service(client_secrets_path=None, token_path=None, port=None):
     """
     Authenticate and return a Gmail API service object using OAuth2.
     
@@ -27,6 +28,8 @@ def get_gmail_service(client_secrets_path=None, token_path=None):
                                    Defaults to 'config/client_secrets.json'.
         token_path (str): Path to store/load the token file.
                           Defaults to 'config/token.json'.
+        port (int): Port for the local OAuth2 server.
+                    Defaults to OAUTH_PORT from config (8080).
     
     Returns:
         googleapiclient.discovery.Resource: Authenticated Gmail API service object.
@@ -39,6 +42,8 @@ def get_gmail_service(client_secrets_path=None, token_path=None):
         client_secrets_path = DEFAULT_CLIENT_SECRETS_FILE
     if token_path is None:
         token_path = DEFAULT_TOKEN_FILE
+    if port is None:
+        port = OAUTH_PORT
     
     # Check if client secrets file exists
     if not os.path.exists(client_secrets_path):
@@ -69,14 +74,15 @@ def get_gmail_service(client_secrets_path=None, token_path=None):
                 creds = None
         
         if not creds:
-            logger.info(f"Starting OAuth2 flow with {client_secrets_path}")
+            logger.info(f"Starting OAuth2 flow with {client_secrets_path} on port {port}")
             try:
                 flow = InstalledAppFlow.from_client_secrets_file(
                     client_secrets_path, SCOPES
                 )
-                creds = flow.run_local_server(port=8080)
+                creds = flow.run_local_server(port=port)
             except Exception as e:
-                raise ValueError(f"OAuth2 flow failed: {e}")
+                raise ValueError(f"OAuth2 flow failed on port {port}: {e}. "
+                               f"Try setting OAUTH_PORT environment variable to a different port (e.g., 8081).")
             
             # Save the credentials for the next run
             logger.info(f"Saving credentials to {token_path}")
