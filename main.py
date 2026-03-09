@@ -1,12 +1,12 @@
 import os
 import sys
 import logging
-from src.config import TARGET_SENDERS, TARGET_KEYWORDS, DOWNLOAD_DIR
+from src.config import TARGET_SENDERS, TARGET_KEYWORDS, DOWNLOAD_DIR, get_bank_password
 from src.auth.gmail_auth import get_gmail_service
 from src.fetch.fetch_emails import search_emails, list_attachments
 from src.fetch.download_pdfs import batch_download_pdfs
+from src.pdf.pdf_to_text import extract_text_from_pdf
 # Temporarily keep imports for future steps (will be replaced in later steps)
-from src.pdf_extractor import PDFExtractor
 from src.parser_factory import get_parser
 from src.csv_exporter import CSVExporter
 
@@ -89,6 +89,54 @@ def main():
         print(f"   ✗ PDF download failed: {e}")
         sys.exit(1)
     
+    # Step 4: Extract text from PDFs
+    print("\n3. Extracting text from PDFs (Step 4)...")
+    extracted_texts = []
+    
+    if downloaded_files:
+        for i, file_info in enumerate(downloaded_files):
+            filepath = file_info['filepath']
+            filename = file_info['filename']
+            sender_tag = file_info.get('sender_tag', 'unknown')
+            sender = file_info.get('sender', '')
+            
+            try:
+                print(f"   Processing: {filename}...")
+                
+                # Get password for this bank/sender
+                password = get_bank_password(sender)
+                if password:
+                    print(f"   Using password for: {sender_tag}")
+                
+                text = extract_text_from_pdf(filepath, password)
+                
+                if text:
+                    print(f"   ✓ Extracted {len(text)} characters")
+                    extracted_texts.append({
+                        'filepath': filepath,
+                        'filename': filename,
+                        'sender': sender,
+                        'sender_tag': sender_tag,
+                        'text': text,
+                        'subject': file_info.get('subject', ''),
+                        'password_used': bool(password)
+                    })
+                else:
+                    print(f"   ⚠ No text extracted (may be scanned/image PDF or incorrect password)")
+            except ValueError as e:
+                if "Incorrect password" in str(e) or "password" in str(e).lower():
+                    print(f"   ✗ Extraction failed: {e}")
+                    print(f"   Please check BANK_PASSWORDS configuration for {sender_tag}")
+                else:
+                    print(f"   ✗ Extraction failed: {e}")
+            except Exception as e:
+                print(f"   ✗ Extraction failed: {e}")
+                continue
+        
+        print(f"\n   Successfully extracted text from {len(extracted_texts)}/{len(downloaded_files)} PDF(s)")
+    else:
+        print("   No PDFs to process")
+    
     # Summary
     print("\n" + "=" * 60)
     print("Summary")
@@ -96,12 +144,26 @@ def main():
     print(f"• Authenticated user: {user_email}")
     print(f"• Emails found: {len(emails)}")
     print(f"• PDFs downloaded: {len(downloaded_files)}")
+    print(f"• Texts extracted: {len(extracted_texts)}")
     if downloaded_files:
         print(f"• Download location: {DOWNLOAD_DIR}")
-    print("\nNext steps:")
-    print("1. Step 4: PDF text extraction (src/pdf/pdf_to_text.py)")
-    print("2. Step 5: LLM parsing (src/llm/parse_receipt.py)")
-    print("3. Step 6: CSV export (src/output/csv_writer.py)")
+    
+    # Show preview of extracted text if available
+    if extracted_texts:
+        print("\n" + "-" * 60)
+        print("Extracted Text Preview (first 2 PDFs):")
+        print("-" * 60)
+        for i, item in enumerate(extracted_texts[:2]):
+            print(f"\n[{i+1}] {item['filename']} (from: {item['sender_tag']})")
+            preview = item['text'][:200]
+            print(f"    {preview}...")
+            if len(item['text']) > 200:
+                print(f"    ({len(item['text']) - 200} more characters)")
+    
+    print("\n" + "=" * 60)
+    print("Next steps:")
+    print("1. Step 5: LLM parsing (src/llm/parse_receipt.py)")
+    print("2. Step 6: CSV export (src/output/csv_writer.py)")
     print("=" * 60)
 
 if __name__ == "__main__":
