@@ -181,17 +181,29 @@ def main():
                     'subject': item.get('subject', '')
                 }
                 
-                # Parse receipt text
-                parsed = parse_receipt_text(item['text'], source_info)
-                parsed['original_file'] = item['filename']
-                parsed['sender_tag'] = item['sender_tag']
-                parsed_receipts.append(parsed)
+                # Parse receipt text (returns list of transactions)
+                transactions = parse_receipt_text(item['text'], source_info)
                 
-                # Show brief result
-                if parsed.get('amount') and parsed.get('currency'):
-                    print(f"   ✓ {parsed.get('expense_name')[:30]:<30} {parsed.get('amount')} {parsed.get('currency')}")
+                if not transactions:
+                    print(f"   ⚠ No transactions extracted from PDF")
+                    continue
+                
+                # Add metadata to each transaction and collect them
+                for tx in transactions:
+                    tx['original_file'] = item['filename']
+                    tx['sender_tag'] = item['sender_tag']
+                    parsed_receipts.append(tx)
+                
+                # Show brief result for first transaction
+                first_tx = transactions[0]
+                if first_tx.get('amount') and first_tx.get('currency'):
+                    tx_count = len(transactions)
+                    if tx_count > 1:
+                        print(f"   ✓ {tx_count} transactions found, first: {first_tx.get('expense_name')[:30]:<30} {first_tx.get('amount')} {first_tx.get('currency')}")
+                    else:
+                        print(f"   ✓ {first_tx.get('expense_name')[:30]:<30} {first_tx.get('amount')} {first_tx.get('currency')}")
                 else:
-                    print(f"   ⚠ Limited info extracted")
+                    print(f"   ⚠ Limited info extracted from {len(transactions)} transaction(s)")
                     
             except ReceiptParsingError as e:
                 print(f"   ✗ Parsing failed: {e}")
