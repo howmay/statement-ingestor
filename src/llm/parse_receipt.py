@@ -44,8 +44,15 @@ def parse_receipt_text(text: str, source_info: Dict[str, Any] = None) -> Dict[st
     
     logger.info(f"Parsing receipt text ({len(text)} chars), source: {source_info.get('sender_tag', 'unknown')}")
     
+    # Check if OpenAI API key is available
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key or api_key == "your_openai_api_key_here":
+        logger.info("No OpenAI API key configured, using heuristic parsing")
+        return _parse_with_heuristics(text, source_info)
+    
     # Try OpenAI first, fallback to heuristic parsing
     try:
+        logger.info("Attempting OpenAI API parsing...")
         return _parse_with_openai(text, source_info)
     except Exception as e:
         logger.warning(f"OpenAI parsing failed: {e}, trying heuristic fallback")
@@ -78,11 +85,12 @@ def _parse_with_openai(text: str, source_info: Dict[str, Any]) -> Dict[str, Any]
     
     # Initialize OpenAI client
     client = OpenAI(api_key=api_key)
+    logger.info(f"Initialized OpenAI client for receipt parsing (model: gpt-4o-mini)")
     
     # Truncate text to fit token limits (keep first 4000 chars for context)
     truncated_text = text[:4000]
     if len(text) > 4000:
-        logger.debug(f"Truncated text from {len(text)} to 4000 characters for LLM")
+        logger.info(f"Truncated text from {len(text)} to 4000 characters for LLM")
     
     # Get sender tag for context
     sender_tag = source_info.get('sender_tag', 'unknown')
@@ -144,7 +152,7 @@ Return JSON with: date, amount, currency, expense_name, expense_type, source, co
         )
         
         result_text = response.choices[0].message.content
-        logger.debug(f"OpenAI response: {result_text}")
+        logger.info(f"OpenAI response received ({len(result_text)} chars): {result_text[:200]}...")
         
         # Parse JSON response
         try:
