@@ -63,38 +63,60 @@ def get_bank_password(sender: str) -> str:
     if not sender or '@' not in sender:
         return ""
     
-    domain = sender.split('@')[1].lower()
+    sender_lower = sender.lower()
+    domain = sender_lower.split('@')[1]
     
-    # Map domain patterns to bank keys (more precise for HSBC)
-    domain_to_bank = {
-        # HSBC Singapore patterns
-        "mail.hsbc.com.sg": "hsbc_sg",
-        "hsbc.com.sg": "hsbc_sg",
+    # First try exact sender match (most specific)
+    # This allows matching specific senders like cards@estatements.hsbc.com.tw
+    sender_patterns = [
+        # HSBC Taiwan credit card senders (most specific)
+        ("cards@estatements.hsbc.com.tw", "hsbc_tw_credit"),
         
-        # HSBC Taiwan patterns
-        "estatements.hsbc.com.tw": "hsbc_tw",
-        "cards.estatements.hsbc.com.tw": "hsbc_tw",
-        "hsbc.com.tw": "hsbc_tw",
+        # HSBC Taiwan bank statement senders
+        ("estatement@estatements.hsbc.com.tw", "hsbc_tw_bank"),
         
-        # Fubon patterns
-        "bhu.taipeifubon.com.tw": "fubon",
-        "taipeifubon.com.tw": "fubon",
-        
-        # Esun Bank patterns
-        "esunbank.com": "esunbank",
-        
-        # Generic mapping by domain part (fallback)
-        "hsbc": "hsbc",
-        "fubon": "fubon",
-        "esunbank": "esunbank",
-    }
+        # HSBC Singapore senders
+        ("hsbc@mail.hsbc.com.sg", "hsbc_sg"),
+    ]
     
-    # Find matching bank key
     bank_key = None
-    for pattern, key in domain_to_bank.items():
-        if pattern in domain:
+    
+    # Try exact sender match first
+    for pattern, key in sender_patterns:
+        if sender_lower == pattern:
             bank_key = key
+            logger.debug(f"Exact sender match: {sender} -> {key}")
             break
+    
+    # If no exact sender match, try domain patterns
+    if not bank_key:
+        domain_patterns = [
+            # HSBC Taiwan patterns
+            ("estatements.hsbc.com.tw", "hsbc_tw"),
+            ("hsbc.com.tw", "hsbc_tw"),
+            
+            # HSBC Singapore patterns
+            ("mail.hsbc.com.sg", "hsbc_sg"),
+            ("hsbc.com.sg", "hsbc_sg"),
+            
+            # Fubon patterns
+            ("bhu.taipeifubon.com.tw", "fubon"),
+            ("taipeifubon.com.tw", "fubon"),
+            
+            # Esun Bank patterns
+            ("esunbank.com", "esunbank"),
+            
+            # Generic mapping by domain part (fallback)
+            ("hsbc", "hsbc"),
+            ("fubon", "fubon"),
+            ("esunbank", "esunbank"),
+        ]
+        
+        for pattern, key in domain_patterns:
+            if domain == pattern or pattern in domain:
+                bank_key = key
+                logger.debug(f"Domain match: {domain} -> {key}")
+                break
     
     if not bank_key:
         # Try to extract bank name from domain
@@ -102,6 +124,7 @@ def get_bank_password(sender: str) -> str:
         for part in domain_parts:
             if part in BANK_PASSWORDS:
                 bank_key = part
+                logger.debug(f"Domain part match: {part} -> {bank_key}")
                 break
     
     # Try to get password with fallback logic
@@ -112,11 +135,27 @@ def get_bank_password(sender: str) -> str:
         password_keys_to_try.append(bank_key)
         
         # Add fallback keys based on bank type
-        if bank_key in ['hsbc_sg', 'hsbc_tw']:
-            password_keys_to_try.append('hsbc')
-        elif bank_key in ['fubon_tw', 'fubon']:
+        if bank_key.startswith('hsbc_'):
+            # Handle HSBC keys with fallback hierarchy
+            if '_credit' in bank_key:
+                # hsbc_tw_credit → hsbc_tw → hsbc
+                base_key = bank_key.replace('_credit', '')
+                password_keys_to_try.append(base_key)
+                password_keys_to_try.append('hsbc')
+            elif '_bank' in bank_key:
+                # hsbc_tw_bank → hsbc_tw → hsbc
+                base_key = bank_key.replace('_bank', '')
+                password_keys_to_try.append(base_key)
+                password_keys_to_try.append('hsbc')
+            elif bank_key in ['hsbc_sg', 'hsbc_tw']:
+                # hsbc_sg → hsbc, hsbc_tw → hsbc
+                password_keys_to_try.append('hsbc')
+            elif bank_key == 'hsbc':
+                # Already at base level, no further fallback
+                pass
+        elif bank_key.startswith('fubon'):
             password_keys_to_try.append('fubon')
-        elif bank_key in ['esunbank']:
+        elif bank_key.startswith('esunbank'):
             password_keys_to_try.append('esunbank')
     
     # Try each key in order
