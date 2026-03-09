@@ -104,12 +104,33 @@ def main():
             try:
                 print(f"   Processing: {filename}...")
                 
-                # Get password for this bank/sender
-                password = get_bank_password(sender)
-                if password:
-                    print(f"   Using password for: {sender_tag}")
+                # Get passwords to try (now returns list)
+                passwords = get_bank_password(sender)
                 
-                text = extract_text_from_pdf(filepath, password)
+                text = None
+                password_used = None
+                
+                if passwords:
+                    print(f"   Trying {len(passwords)} password(s)...")
+                    for i, password in enumerate(passwords):
+                        try:
+                            masked_pw = password[:3] + "..." + password[-3:] if len(password) > 6 else "***"
+                            print(f"     Password {i+1}/{len(passwords)}: {masked_pw}")
+                            
+                            text = extract_text_from_pdf(filepath, password)
+                            if text:
+                                password_used = password
+                                break
+                        except ValueError as e:
+                            if "Incorrect password" in str(e) or "password" in str(e).lower():
+                                # Try next password
+                                continue
+                            else:
+                                # Other ValueError, re-raise
+                                raise
+                else:
+                    # No passwords configured
+                    text = extract_text_from_pdf(filepath)
                 
                 if text:
                     print(f"   ✓ Extracted {len(text)} characters")
@@ -120,10 +141,14 @@ def main():
                         'sender_tag': sender_tag,
                         'text': text,
                         'subject': file_info.get('subject', ''),
-                        'password_used': bool(password)
+                        'password_used': bool(password_used),
+                        'password_tried': len(passwords) if passwords else 0
                     })
                 else:
-                    print(f"   ⚠ No text extracted (may be scanned/image PDF or incorrect password)")
+                    if passwords:
+                        print(f"   ✗ All {len(passwords)} passwords failed")
+                    else:
+                        print(f"   ⚠ No text extracted (may be scanned/image PDF or no password)")
             except ValueError as e:
                 if "Incorrect password" in str(e) or "password" in str(e).lower():
                     print(f"   ✗ Extraction failed: {e}")

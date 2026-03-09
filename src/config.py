@@ -23,147 +23,64 @@ TARGET_KEYWORDS_STR = os.getenv("TARGET_KEYWORDS", "receipt,invoice,billing,收�
 TARGET_KEYWORDS = [k.strip() for k in TARGET_KEYWORDS_STR.split(",") if k.strip()]
 
 # Bank passwords for encrypted PDFs
-# Format: JSON string or key=value pairs
-# Example JSON: {"hsbc": "A123456789", "fubon": "B987654321", "esunbank": "C111111111"}
-BANK_PASSWORDS_JSON = os.getenv("BANK_PASSWORDS", "{}")
-BANK_PASSWORDS = {}
+# Format: comma-separated list of passwords (simple mode)
+# Example: "password1,password2,password3"
+# Legacy format (key=value pairs) also supported for backward compatibility
+BANK_PASSWORDS_STR = os.getenv("BANK_PASSWORDS", "")
+BANK_PASSWORDS = []
 
-try:
-    BANK_PASSWORDS = json.loads(BANK_PASSWORDS_JSON)
-    if not isinstance(BANK_PASSWORDS, dict):
-        logger.warning("BANK_PASSWORDS should be a JSON dictionary, got %s", type(BANK_PASSWORDS))
-        BANK_PASSWORDS = {}
-except json.JSONDecodeError:
-    # Fallback: try parsing as key=value pairs separated by commas
-    logger.warning("BANK_PASSWORDS is not valid JSON, trying key=value format")
-    try:
-        pairs = BANK_PASSWORDS_JSON.split(",")
-        for pair in pairs:
-            if "=" in pair:
-                key, value = pair.split("=", 1)
-                BANK_PASSWORDS[key.strip()] = value.strip()
-    except Exception:
-        logger.warning("Failed to parse BANK_PASSWORDS, using empty dict")
-        BANK_PASSWORDS = {}
+if BANK_PASSWORDS_STR:
+    # Try to parse as simple comma-separated list first
+    if "=" not in BANK_PASSWORDS_STR:
+        # Simple list format: "pass1,pass2,pass3"
+        passwords = [p.strip() for p in BANK_PASSWORDS_STR.split(",") if p.strip()]
+        BANK_PASSWORDS = passwords
+        logger.info(f"Loaded {len(BANK_PASSWORDS)} passwords from simple list")
+    else:
+        # Legacy key=value format for backward compatibility
+        # Convert to list of passwords (ignoring keys)
+        try:
+            passwords = []
+            pairs = BANK_PASSWORDS_STR.split(",")
+            for pair in pairs:
+                if "=" in pair:
+                    key, value = pair.split("=", 1)
+                    passwords.append(value.strip())
+                else:
+                    # Handle edge case: password containing "="
+                    passwords.append(pair.strip())
+            BANK_PASSWORDS = passwords
+            logger.info(f"Loaded {len(BANK_PASSWORDS)} passwords from legacy key=value format")
+        except Exception:
+            logger.warning("Failed to parse BANK_PASSWORDS, using empty list")
+            BANK_PASSWORDS = []
+else:
+    logger.debug("No BANK_PASSWORDS configured")
 
 DOWNLOAD_DIR = os.path.join(os.path.dirname(__file__), "..", "downloads")
 os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 
 
-def get_bank_password(sender: str) -> str:
+def get_passwords() -> list[str]:
     """
-    Get password for a bank PDF based on sender email address.
-    
-    Args:
-        sender: Email address string.
+    Get list of passwords to try for encrypted PDFs.
     
     Returns:
-        Password string or empty string if no password configured.
+        List of password strings to try in order.
     """
-    if not sender or '@' not in sender:
-        return ""
+    return BANK_PASSWORDS.copy()
+
+
+def get_bank_password(sender: str) -> list[str]:
+    """
+    Get passwords for a bank PDF (legacy function for backward compatibility).
+    Now returns list of all passwords regardless of sender.
     
-    sender_lower = sender.lower()
-    domain = sender_lower.split('@')[1]
+    Args:
+        sender: Email address string (ignored in new simple mode).
     
-    # First try exact sender match (most specific)
-    # This allows matching specific senders like cards@estatements.hsbc.com.tw
-    sender_patterns = [
-        # HSBC Taiwan credit card senders (most specific)
-        ("cards@estatements.hsbc.com.tw", "hsbc_tw_credit"),
-        
-        # HSBC Taiwan bank statement senders
-        ("estatement@estatements.hsbc.com.tw", "hsbc_tw_bank"),
-        
-        # HSBC Singapore senders
-        ("hsbc@mail.hsbc.com.sg", "hsbc_sg"),
-    ]
-    
-    bank_key = None
-    
-    # Try exact sender match first
-    for pattern, key in sender_patterns:
-        if sender_lower == pattern:
-            bank_key = key
-            logger.debug(f"Exact sender match: {sender} -> {key}")
-            break
-    
-    # If no exact sender match, try domain patterns
-    if not bank_key:
-        domain_patterns = [
-            # HSBC Taiwan patterns
-            ("estatements.hsbc.com.tw", "hsbc_tw"),
-            ("hsbc.com.tw", "hsbc_tw"),
-            
-            # HSBC Singapore patterns
-            ("mail.hsbc.com.sg", "hsbc_sg"),
-            ("hsbc.com.sg", "hsbc_sg"),
-            
-            # Fubon patterns
-            ("bhu.taipeifubon.com.tw", "fubon"),
-            ("taipeifubon.com.tw", "fubon"),
-            
-            # Esun Bank patterns
-            ("esunbank.com", "esunbank"),
-            
-            # Generic mapping by domain part (fallback)
-            ("hsbc", "hsbc"),
-            ("fubon", "fubon"),
-            ("esunbank", "esunbank"),
-        ]
-        
-        for pattern, key in domain_patterns:
-            if domain == pattern or pattern in domain:
-                bank_key = key
-                logger.debug(f"Domain match: {domain} -> {key}")
-                break
-    
-    if not bank_key:
-        # Try to extract bank name from domain
-        domain_parts = domain.split('.')
-        for part in domain_parts:
-            if part in BANK_PASSWORDS:
-                bank_key = part
-                logger.debug(f"Domain part match: {part} -> {bank_key}")
-                break
-    
-    # Try to get password with fallback logic
-    password_keys_to_try = []
-    
-    if bank_key:
-        # Add the specific bank key first
-        password_keys_to_try.append(bank_key)
-        
-        # Add fallback keys based on bank type
-        if bank_key.startswith('hsbc_'):
-            # Handle HSBC keys with fallback hierarchy
-            if '_credit' in bank_key:
-                # hsbc_tw_credit → hsbc_tw → hsbc
-                base_key = bank_key.replace('_credit', '')
-                password_keys_to_try.append(base_key)
-                password_keys_to_try.append('hsbc')
-            elif '_bank' in bank_key:
-                # hsbc_tw_bank → hsbc_tw → hsbc
-                base_key = bank_key.replace('_bank', '')
-                password_keys_to_try.append(base_key)
-                password_keys_to_try.append('hsbc')
-            elif bank_key in ['hsbc_sg', 'hsbc_tw']:
-                # hsbc_sg → hsbc, hsbc_tw → hsbc
-                password_keys_to_try.append('hsbc')
-            elif bank_key == 'hsbc':
-                # Already at base level, no further fallback
-                pass
-        elif bank_key.startswith('fubon'):
-            password_keys_to_try.append('fubon')
-        elif bank_key.startswith('esunbank'):
-            password_keys_to_try.append('esunbank')
-    
-    # Try each key in order
-    for key in password_keys_to_try:
-        if key in BANK_PASSWORDS:
-            password = BANK_PASSWORDS[key]
-            logger.debug(f"Found password for bank '{key}' (sender: {sender})")
-            return password
-    
-    logger.debug(f"No password configured for sender: {sender}")
-    return ""
+    Returns:
+        List of password strings to try in order.
+    """
+    logger.debug(f"Getting passwords for sender: {sender}")
+    return get_passwords()
