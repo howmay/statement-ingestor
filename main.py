@@ -10,6 +10,7 @@ from src.llm.parse_receipt import parse_receipt_text, parse_multiple_receipts, R
 # Temporarily keep imports for future steps (will be replaced in later steps)
 from src.parser_factory import get_parser
 from src.csv_exporter import CSVExporter
+from src.output.csv_writer import export_receipts_to_csv
 
 def main():
     # Setup logging
@@ -243,9 +244,38 @@ def main():
             if len(item['text']) > 200:
                 print(f"    ({len(item['text']) - 200} more characters)")
     
+    # Step 6: CSV Export
+    print("\n" + "=" * 60)
+    print("Step 6: CSV Export")
+    print("=" * 60)
+    
+    if parsed_receipts:
+        try:
+            # Create output directory
+            output_dir = os.path.join(os.path.dirname(__file__), "output")
+            csv_path = export_receipts_to_csv(parsed_receipts, output_dir)
+            
+            if csv_path and os.path.exists(csv_path):
+                print(f"✓ CSV exported: {csv_path}")
+                print(f"  • Contains {len(parsed_receipts)} receipt(s)")
+                print(f"  • File size: {os.path.getsize(csv_path):,} bytes")
+                
+                # Show sample of exported data
+                print("\n  Sample exported data:")
+                for i, receipt in enumerate(parsed_receipts[:2]):  # Show first 2
+                    print(f"    {i+1}. {receipt.get('expense_name', 'Unknown')}: "
+                          f"{receipt.get('amount', 'N/A')} {receipt.get('currency', '')} "
+                          f"({receipt.get('date', 'N/A')})")
+            else:
+                print("⚠ CSV export failed or file not created")
+        except Exception as e:
+            print(f"✗ CSV export error: {e}")
+    else:
+        print("⚠ No parsed receipts to export")
+    
     print("\n" + "=" * 60)
     print("Next steps:")
-    print("1. Step 6: CSV export (src/output/csv_writer.py)")
+    print("1. Review exported CSV file")
     if not parsed_receipts:
         print("2. Configure OPENAI_API_KEY in .env for better LLM parsing")
     print("=" * 60)
