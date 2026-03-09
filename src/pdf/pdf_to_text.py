@@ -5,15 +5,15 @@ from typing import Optional
 logger = logging.getLogger(__name__)
 
 
-def extract_text_from_pdf(pdf_path: str) -> Optional[str]:
+def extract_text_from_pdf(pdf_path: str, password: str = None) -> Optional[str]:
     """
-    Extract text content from a PDF file.
+    Extract text content from a PDF file, optionally with password for encrypted PDFs.
     
     Uses pdfplumber as primary extractor, with PyPDF2 as fallback.
-    MVP assumes text-based PDFs (not scanned images requiring OCR).
     
     Args:
         pdf_path: Path to the PDF file.
+        password: Optional password for encrypted PDFs.
     
     Returns:
         Extracted text content, or None if extraction fails.
@@ -34,12 +34,15 @@ def extract_text_from_pdf(pdf_path: str) -> Optional[str]:
     if file_size == 0:
         raise ValueError(f"PDF file is empty: {pdf_path}")
     
-    logger.info(f"Extracting text from: {pdf_path} ({file_size} bytes)")
+    if password:
+        logger.info(f"Extracting text from encrypted PDF: {pdf_path} ({file_size} bytes)")
+    else:
+        logger.info(f"Extracting text from: {pdf_path} ({file_size} bytes)")
     
     # Try pdfplumber first (better text extraction)
     try:
         import pdfplumber
-        text = _extract_with_pdfplumber(pdf_path)
+        text = _extract_with_pdfplumber(pdf_path, password)
         if text and text.strip():
             logger.info(f"Successfully extracted {len(text)} characters using pdfplumber")
             return text
@@ -53,7 +56,7 @@ def extract_text_from_pdf(pdf_path: str) -> Optional[str]:
     # Fallback to PyPDF2
     try:
         import PyPDF2
-        text = _extract_with_pypdf2(pdf_path)
+        text = _extract_with_pypdf2(pdf_path, password)
         if text and text.strip():
             logger.info(f"Successfully extracted {len(text)} characters using PyPDF2")
             return text
@@ -66,17 +69,22 @@ def extract_text_from_pdf(pdf_path: str) -> Optional[str]:
         logger.error(f"PyPDF2 extraction failed: {e}")
     
     # If we get here, extraction failed
-    logger.warning(f"No text could be extracted from: {pdf_path}")
-    logger.warning("This may be a scanned/image-based PDF (OCR not supported in MVP)")
+    if password:
+        logger.warning(f"No text could be extracted from encrypted PDF: {pdf_path}")
+        logger.warning("Password may be incorrect, or PDF may be scanned/image-based")
+    else:
+        logger.warning(f"No text could be extracted from: {pdf_path}")
+        logger.warning("This may be an encrypted or scanned/image-based PDF")
     return None
 
 
-def _extract_with_pdfplumber(pdf_path: str) -> str:
+def _extract_with_pdfplumber(pdf_path: str, password: str = None) -> str:
     """
     Extract text using pdfplumber library.
     
     Args:
         pdf_path: Path to the PDF file.
+        password: Optional password for encrypted PDFs.
     
     Returns:
         Extracted text content.
@@ -85,28 +93,44 @@ def _extract_with_pdfplumber(pdf_path: str) -> str:
     
     all_text = []
     
-    with pdfplumber.open(pdf_path) as pdf:
-        logger.debug(f"PDF has {len(pdf.pages)} page(s)")
-        
-        for i, page in enumerate(pdf.pages):
-            try:
-                text = page.extract_text()
-                if text:
-                    all_text.append(f"--- Page {i+1} ---\n{text}")
-                    logger.debug(f"Page {i+1}: extracted {len(text)} characters")
-            except Exception as e:
-                logger.warning(f"Error extracting text from page {i+1}: {e}")
-                continue
+    try:
+        with pdfplumber.open(pdf_path, password=password) as pdf:
+            logger.debug(f"PDF has {len(pdf.pages)} page(s)")
+            
+            for i, page in enumerate(pdf.pages):
+                try:
+                    text = page.extract_text()
+                    if text:
+                        all_text.append(f"--- Page {i+1} ---\n{text}")
+                        logger.debug(f"Page {i+1}: extracted {len(text)} characters")
+                except Exception as e:
+                    logger.warning(f"Error extracting text from page {i+1}: {e}")
+                    continue
+    except Exception as e:
+        # Check if it's a password-related error
+        error_str = str(e).lower()
+        if "password" in error_str or "encrypted" in error_str:
+            raise ValueError(f"Incorrect password or encrypted PDF: {e}")
+        # Check for specific PDFPasswordIncorrect exception from pdfminer
+        try:
+            from pdfminer.pdfdocument import PDFPasswordIncorrect
+            if isinstance(e, PDFPasswordIncorrect):
+                raise ValueError("Incorrect password for encrypted PDF")
+        except ImportError:
+            pass
+        # Re-raise other exceptions
+        raise
     
     return "\n\n".join(all_text)
 
 
-def _extract_with_pypdf2(pdf_path: str) -> str:
+def _extract_with_pypdf2(pdf_path: str, password: str = None) -> str:
     """
     Extract text using PyPDF2 library (fallback).
     
     Args:
         pdf_path: Path to the PDF file.
+        password: Optional password for encrypted PDFs.
     
     Returns:
         Extracted text content.
@@ -117,7 +141,7 @@ def _extract_with_pypdf2(pdf_path: str) -> str:
     
     try:
         with open(pdf_path, 'rb') as f:
-            reader = PyPDF2.PdfReader(f)
+            reader = PyPDF2.PdfReader(f, password=password)
             logger.debug(f"PDF has {len(reader.pages)} page(s)")
             
             for i, page in enumerate(reader.pages):
@@ -129,13 +153,20 @@ def _extract_with_pypdf2(pdf_path: str) -> str:
                 except Exception as e:
                     logger.warning(f"Error extracting text from page {i+1}: {e}")
                     continue
+    except PyPDF2.errors.FileNotDecryptedError:
+        raise ValueError("PDF is encrypted and no password provided")
+    except PyPDF2.errors.PdfReadError as e:
+        if "incorrect password" in str(e).lower():
+            raise ValueError("Incorrect password for encrypted PDF")
+        else:
+            raise ValueError(f"Failed to read PDF with PyPDF2: {e}")
     except Exception as e:
         raise ValueError(f"Failed to read PDF with PyPDF2: {e}")
     
     return "\n\n".join(all_text)
 
 
-def is_text_based_pdf(pdf_path: str) -> bool:
+def is_text_based_pdf(pdf_path: str, password: str = None) -> bool:
     """
     Check if a PDF appears to be text-based (not scanned images).
     
@@ -144,12 +175,13 @@ def is_text_based_pdf(pdf_path: str) -> bool:
     
     Args:
         pdf_path: Path to the PDF file.
+        password: Optional password for encrypted PDFs.
     
     Returns:
         True if PDF appears to contain extractable text.
     """
     try:
-        text = extract_text_from_pdf(pdf_path)
+        text = extract_text_from_pdf(pdf_path, password)
         if text is None:
             return False
         
@@ -174,16 +206,23 @@ if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO)
     
     if len(sys.argv) < 2:
-        print("Usage: python src/pdf/pdf_to_text.py <pdf_file>")
+        print("Usage: python src/pdf/pdf_to_text.py <pdf_file> [password]")
+        print("")
+        print("Examples:")
+        print("  python src/pdf/pdf_to_text.py document.pdf")
+        print("  python src/pdf/pdf_to_text.py encrypted.pdf mypassword")
         sys.exit(1)
     
     pdf_file = sys.argv[1]
+    password = sys.argv[2] if len(sys.argv) >= 3 else None
     
     try:
-        text = extract_text_from_pdf(pdf_file)
+        text = extract_text_from_pdf(pdf_file, password)
         if text:
             print(f"\n{'='*60}")
             print(f"Extracted text from: {pdf_file}")
+            if password:
+                print(f"Using password: {'*' * len(password)}")
             print(f"{'='*60}\n")
             # Show first 500 characters as preview
             preview = text[:500]
@@ -195,7 +234,10 @@ if __name__ == '__main__':
             print(f"{'='*60}")
         else:
             print("No text could be extracted from this PDF.")
-            print("It may be a scanned/image-based PDF (OCR not supported).")
+            if password:
+                print("Possible reasons: incorrect password, or PDF is scanned/image-based.")
+            else:
+                print("Possible reasons: PDF is encrypted (needs password), or scanned/image-based.")
             sys.exit(1)
     except FileNotFoundError as e:
         print(f"Error: {e}")

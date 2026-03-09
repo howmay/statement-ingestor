@@ -1,7 +1,7 @@
 import os
 import sys
 import logging
-from src.config import TARGET_SENDERS, TARGET_KEYWORDS, DOWNLOAD_DIR
+from src.config import TARGET_SENDERS, TARGET_KEYWORDS, DOWNLOAD_DIR, get_bank_password
 from src.auth.gmail_auth import get_gmail_service
 from src.fetch.fetch_emails import search_emails, list_attachments
 from src.fetch.download_pdfs import batch_download_pdfs
@@ -98,23 +98,37 @@ def main():
             filepath = file_info['filepath']
             filename = file_info['filename']
             sender_tag = file_info.get('sender_tag', 'unknown')
+            sender = file_info.get('sender', '')
             
             try:
                 print(f"   Processing: {filename}...")
-                text = extract_text_from_pdf(filepath)
+                
+                # Get password for this bank/sender
+                password = get_bank_password(sender)
+                if password:
+                    print(f"   Using password for: {sender_tag}")
+                
+                text = extract_text_from_pdf(filepath, password)
                 
                 if text:
                     print(f"   ✓ Extracted {len(text)} characters")
                     extracted_texts.append({
                         'filepath': filepath,
                         'filename': filename,
-                        'sender': file_info['sender'],
+                        'sender': sender,
                         'sender_tag': sender_tag,
                         'text': text,
-                        'subject': file_info.get('subject', '')
+                        'subject': file_info.get('subject', ''),
+                        'password_used': bool(password)
                     })
                 else:
-                    print(f"   ⚠ No text extracted (may be scanned/image PDF)")
+                    print(f"   ⚠ No text extracted (may be scanned/image PDF or incorrect password)")
+            except ValueError as e:
+                if "Incorrect password" in str(e) or "password" in str(e).lower():
+                    print(f"   ✗ Extraction failed: {e}")
+                    print(f"   Please check BANK_PASSWORDS configuration for {sender_tag}")
+                else:
+                    print(f"   ✗ Extraction failed: {e}")
             except Exception as e:
                 print(f"   ✗ Extraction failed: {e}")
                 continue
