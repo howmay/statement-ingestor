@@ -1,7 +1,8 @@
 import os
 import logging
 import re
-from typing import List, Dict, Any
+import hashlib
+from typing import List, Dict, Any, Optional
 from src.config import DOWNLOAD_DIR
 
 logger = logging.getLogger(__name__)
@@ -99,6 +100,40 @@ def extract_sender_tag(sender: str) -> str:
     return tag[:30]  # Limit length but allow more for complex domains
 
 
+def compute_md5_hash(data: bytes) -> str:
+    """Compute MD5 hash of binary data."""
+    return hashlib.md5(data).hexdigest()
+
+
+def get_existing_file_by_md5(target_md5: str, directory: str = DOWNLOAD_DIR) -> Optional[str]:
+    """
+    Check if a file with the same MD5 hash already exists in directory.
+    
+    Args:
+        target_md5: MD5 hash to search for.
+        directory: Directory to search in.
+    
+    Returns:
+        Path to existing file with matching MD5, or None if not found.
+    """
+    if not os.path.exists(directory):
+        return None
+    
+    for filename in os.listdir(directory):
+        filepath = os.path.join(directory, filename)
+        if os.path.isfile(filepath):
+            try:
+                with open(filepath, 'rb') as f:
+                    file_md5 = hashlib.md5(f.read()).hexdigest()
+                    if file_md5 == target_md5:
+                        return filepath
+            except Exception as e:
+                logger.debug(f"Error reading file {filepath} for MD5 check: {e}")
+                continue
+    
+    return None
+
+
 def download_attachment(service, message_id: str, attachment_info: Dict[str, Any], sender_tag: str = None) -> str:
     """
     Download a single attachment from Gmail.
@@ -127,6 +162,16 @@ def download_attachment(service, message_id: str, attachment_info: Dict[str, Any
         import base64
         file_data = base64.urlsafe_b64decode(attachment['data'].encode('UTF-8'))
         
+        # Compute MD5 hash of file content
+        file_md5 = compute_md5_hash(file_data)
+        logger.debug(f"Attachment MD5: {file_md5}")
+        
+        # Check if file with same content already exists
+        existing_file = get_existing_file_by_md5(file_md5)
+        if existing_file:
+            logger.info(f"Skipping download: identical file already exists at {existing_file}")
+            return existing_file
+        
         # Ensure download directory exists
         os.makedirs(DOWNLOAD_DIR, exist_ok=True)
         
@@ -146,7 +191,7 @@ def download_attachment(service, message_id: str, attachment_info: Dict[str, Any
         
         filepath = os.path.join(DOWNLOAD_DIR, safe_filename)
         
-        # Handle duplicate filenames
+        # Handle duplicate filenames (by name, not content)
         base, ext = os.path.splitext(filepath)
         counter = 1
         while os.path.exists(filepath):
@@ -157,7 +202,7 @@ def download_attachment(service, message_id: str, attachment_info: Dict[str, Any
         with open(filepath, 'wb') as f:
             f.write(file_data)
         
-        logger.info(f"Downloaded: {filepath} ({len(file_data)} bytes)")
+        logger.info(f"Downloaded: {filepath} ({len(file_data)} bytes, MD5: {file_md5})")
         return filepath
         
     except Exception as e:
