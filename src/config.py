@@ -65,22 +65,25 @@ def get_bank_password(sender: str) -> str:
     
     domain = sender.split('@')[1].lower()
     
-    # Map domain patterns to bank keys
+    # Map domain patterns to bank keys (more precise for HSBC)
     domain_to_bank = {
-        # HSBC patterns
-        "hsbc.com.sg": "hsbc",
-        "hsbc.com.tw": "hsbc",
-        "mail.hsbc.com.sg": "hsbc",
-        "estatements.hsbc.com.tw": "hsbc",
+        # HSBC Singapore patterns
+        "mail.hsbc.com.sg": "hsbc_sg",
+        "hsbc.com.sg": "hsbc_sg",
+        
+        # HSBC Taiwan patterns
+        "estatements.hsbc.com.tw": "hsbc_tw",
+        "cards.estatements.hsbc.com.tw": "hsbc_tw",
+        "hsbc.com.tw": "hsbc_tw",
         
         # Fubon patterns
-        "taipeifubon.com.tw": "fubon",
         "bhu.taipeifubon.com.tw": "fubon",
+        "taipeifubon.com.tw": "fubon",
         
         # Esun Bank patterns
         "esunbank.com": "esunbank",
         
-        # Generic mapping by domain part
+        # Generic mapping by domain part (fallback)
         "hsbc": "hsbc",
         "fubon": "fubon",
         "esunbank": "esunbank",
@@ -101,10 +104,27 @@ def get_bank_password(sender: str) -> str:
                 bank_key = part
                 break
     
-    if bank_key and bank_key in BANK_PASSWORDS:
-        password = BANK_PASSWORDS[bank_key]
-        logger.debug(f"Found password for bank '{bank_key}' (sender: {sender})")
-        return password
+    # Try to get password with fallback logic
+    password_keys_to_try = []
+    
+    if bank_key:
+        # Add the specific bank key first
+        password_keys_to_try.append(bank_key)
+        
+        # Add fallback keys based on bank type
+        if bank_key in ['hsbc_sg', 'hsbc_tw']:
+            password_keys_to_try.append('hsbc')
+        elif bank_key in ['fubon_tw', 'fubon']:
+            password_keys_to_try.append('fubon')
+        elif bank_key in ['esunbank']:
+            password_keys_to_try.append('esunbank')
+    
+    # Try each key in order
+    for key in password_keys_to_try:
+        if key in BANK_PASSWORDS:
+            password = BANK_PASSWORDS[key]
+            logger.debug(f"Found password for bank '{key}' (sender: {sender})")
+            return password
     
     logger.debug(f"No password configured for sender: {sender}")
     return ""
