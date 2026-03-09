@@ -30,16 +30,24 @@ def extract_sender_tag(sender: str) -> str:
     # Bank/company domain mapping for better identification
     # Key patterns in domain -> preferred tag
     domain_patterns = {
-        # HSBC patterns
+        # HSBC Singapore patterns (more precise)
+        r'mail\.hsbc\.com\.sg$': 'hsbc_sg_mail',
         r'hsbc\.com\.sg$': 'hsbc_sg',
+        
+        # HSBC Taiwan patterns (more precise)
+        r'cards\.estatements\.hsbc\.com\.tw$': 'hsbc_tw_cards',
+        r'estatements\.hsbc\.com\.tw$': 'hsbc_tw_estatements',
         r'hsbc\.com\.tw$': 'hsbc_tw',
+        
+        # Generic HSBC patterns (fallback)
         r'hsbc\.': 'hsbc',
         
         # Fubon patterns
+        r'bhu\.taipeifubon\.com\.tw$': 'fubon_tw_bhu',
         r'taipeifubon\.com\.tw$': 'fubon_tw',
         r'fubon\.': 'fubon',
         
-        # Esun Bank
+        # Esun Bank patterns
         r'esunbank\.com$': 'esunbank',
         
         # Common financial patterns

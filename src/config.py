@@ -23,88 +23,64 @@ TARGET_KEYWORDS_STR = os.getenv("TARGET_KEYWORDS", "receipt,invoice,billing,æ”¶æ
 TARGET_KEYWORDS = [k.strip() for k in TARGET_KEYWORDS_STR.split(",") if k.strip()]
 
 # Bank passwords for encrypted PDFs
-# Format: JSON string or key=value pairs
-# Example JSON: {"hsbc": "A123456789", "fubon": "B987654321", "esunbank": "C111111111"}
-BANK_PASSWORDS_JSON = os.getenv("BANK_PASSWORDS", "{}")
-BANK_PASSWORDS = {}
+# Format: comma-separated list of passwords (simple mode)
+# Example: "password1,password2,password3"
+# Legacy format (key=value pairs) also supported for backward compatibility
+BANK_PASSWORDS_STR = os.getenv("BANK_PASSWORDS", "")
+BANK_PASSWORDS = []
 
-try:
-    BANK_PASSWORDS = json.loads(BANK_PASSWORDS_JSON)
-    if not isinstance(BANK_PASSWORDS, dict):
-        logger.warning("BANK_PASSWORDS should be a JSON dictionary, got %s", type(BANK_PASSWORDS))
-        BANK_PASSWORDS = {}
-except json.JSONDecodeError:
-    # Fallback: try parsing as key=value pairs separated by commas
-    logger.warning("BANK_PASSWORDS is not valid JSON, trying key=value format")
-    try:
-        pairs = BANK_PASSWORDS_JSON.split(",")
-        for pair in pairs:
-            if "=" in pair:
-                key, value = pair.split("=", 1)
-                BANK_PASSWORDS[key.strip()] = value.strip()
-    except Exception:
-        logger.warning("Failed to parse BANK_PASSWORDS, using empty dict")
-        BANK_PASSWORDS = {}
+if BANK_PASSWORDS_STR:
+    # Try to parse as simple comma-separated list first
+    if "=" not in BANK_PASSWORDS_STR:
+        # Simple list format: "pass1,pass2,pass3"
+        passwords = [p.strip() for p in BANK_PASSWORDS_STR.split(",") if p.strip()]
+        BANK_PASSWORDS = passwords
+        logger.info(f"Loaded {len(BANK_PASSWORDS)} passwords from simple list")
+    else:
+        # Legacy key=value format for backward compatibility
+        # Convert to list of passwords (ignoring keys)
+        try:
+            passwords = []
+            pairs = BANK_PASSWORDS_STR.split(",")
+            for pair in pairs:
+                if "=" in pair:
+                    key, value = pair.split("=", 1)
+                    passwords.append(value.strip())
+                else:
+                    # Handle edge case: password containing "="
+                    passwords.append(pair.strip())
+            BANK_PASSWORDS = passwords
+            logger.info(f"Loaded {len(BANK_PASSWORDS)} passwords from legacy key=value format")
+        except Exception:
+            logger.warning("Failed to parse BANK_PASSWORDS, using empty list")
+            BANK_PASSWORDS = []
+else:
+    logger.debug("No BANK_PASSWORDS configured")
 
 DOWNLOAD_DIR = os.path.join(os.path.dirname(__file__), "..", "downloads")
 os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 
 
-def get_bank_password(sender: str) -> str:
+def get_passwords() -> list[str]:
     """
-    Get password for a bank PDF based on sender email address.
-    
-    Args:
-        sender: Email address string.
+    Get list of passwords to try for encrypted PDFs.
     
     Returns:
-        Password string or empty string if no password configured.
+        List of password strings to try in order.
     """
-    if not sender or '@' not in sender:
-        return ""
+    return BANK_PASSWORDS.copy()
+
+
+def get_bank_password(sender: str) -> list[str]:
+    """
+    Get passwords for a bank PDF (legacy function for backward compatibility).
+    Now returns list of all passwords regardless of sender.
     
-    domain = sender.split('@')[1].lower()
+    Args:
+        sender: Email address string (ignored in new simple mode).
     
-    # Map domain patterns to bank keys
-    domain_to_bank = {
-        # HSBC patterns
-        "hsbc.com.sg": "hsbc",
-        "hsbc.com.tw": "hsbc",
-        "mail.hsbc.com.sg": "hsbc",
-        "estatements.hsbc.com.tw": "hsbc",
-        
-        # Fubon patterns
-        "taipeifubon.com.tw": "fubon",
-        "bhu.taipeifubon.com.tw": "fubon",
-        
-        # Esun Bank patterns
-        "esunbank.com": "esunbank",
-        
-        # Generic mapping by domain part
-        "hsbc": "hsbc",
-        "fubon": "fubon",
-        "esunbank": "esunbank",
-    }
-    
-    # Find matching bank key
-    bank_key = None
-    for pattern, key in domain_to_bank.items():
-        if pattern in domain:
-            bank_key = key
-            break
-    
-    if not bank_key:
-        # Try to extract bank name from domain
-        domain_parts = domain.split('.')
-        for part in domain_parts:
-            if part in BANK_PASSWORDS:
-                bank_key = part
-                break
-    
-    if bank_key and bank_key in BANK_PASSWORDS:
-        password = BANK_PASSWORDS[bank_key]
-        logger.debug(f"Found password for bank '{bank_key}' (sender: {sender})")
-        return password
-    
-    logger.debug(f"No password configured for sender: {sender}")
-    return ""
+    Returns:
+        List of password strings to try in order.
+    """
+    logger.debug(f"Getting passwords for sender: {sender}")
+    return get_passwords()

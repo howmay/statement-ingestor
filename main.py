@@ -6,6 +6,7 @@ from src.auth.gmail_auth import get_gmail_service
 from src.fetch.fetch_emails import search_emails, list_attachments
 from src.fetch.download_pdfs import batch_download_pdfs
 from src.pdf.pdf_to_text import extract_text_from_pdf
+from src.llm.parse_receipt import parse_receipt_text, parse_multiple_receipts, ReceiptParsingError
 # Temporarily keep imports for future steps (will be replaced in later steps)
 from src.parser_factory import get_parser
 from src.csv_exporter import CSVExporter
@@ -19,7 +20,7 @@ def main():
     logger = logging.getLogger(__name__)
     
     print("=" * 60)
-    print("Gmail Receipt & Invoice Extractor (MVP) - Step 3 Demo")
+    print("Gmail Receipt & Invoice Extractor (MVP) - Step 5 Demo")
     print("=" * 60)
     
     # Step 1: Authenticate using OAuth2
@@ -103,12 +104,33 @@ def main():
             try:
                 print(f"   Processing: {filename}...")
                 
-                # Get password for this bank/sender
-                password = get_bank_password(sender)
-                if password:
-                    print(f"   Using password for: {sender_tag}")
+                # Get passwords to try (now returns list)
+                passwords = get_bank_password(sender)
                 
-                text = extract_text_from_pdf(filepath, password)
+                text = None
+                password_used = None
+                
+                if passwords:
+                    print(f"   Trying {len(passwords)} password(s)...")
+                    for i, password in enumerate(passwords):
+                        try:
+                            masked_pw = password[:3] + "..." + password[-3:] if len(password) > 6 else "***"
+                            print(f"     Password {i+1}/{len(passwords)}: {masked_pw}")
+                            
+                            text = extract_text_from_pdf(filepath, password)
+                            if text:
+                                password_used = password
+                                break
+                        except ValueError as e:
+                            if "Incorrect password" in str(e) or "password" in str(e).lower():
+                                # Try next password
+                                continue
+                            else:
+                                # Other ValueError, re-raise
+                                raise
+                else:
+                    # No passwords configured
+                    text = extract_text_from_pdf(filepath)
                 
                 if text:
                     print(f"   ✓ Extracted {len(text)} characters")
@@ -119,10 +141,14 @@ def main():
                         'sender_tag': sender_tag,
                         'text': text,
                         'subject': file_info.get('subject', ''),
-                        'password_used': bool(password)
+                        'password_used': bool(password_used),
+                        'password_tried': len(passwords) if passwords else 0
                     })
                 else:
-                    print(f"   ⚠ No text extracted (may be scanned/image PDF or incorrect password)")
+                    if passwords:
+                        print(f"   ✗ All {len(passwords)} passwords failed")
+                    else:
+                        print(f"   ⚠ No text extracted (may be scanned/image PDF or no password)")
             except ValueError as e:
                 if "Incorrect password" in str(e) or "password" in str(e).lower():
                     print(f"   ✗ Extraction failed: {e}")
@@ -137,6 +163,46 @@ def main():
     else:
         print("   No PDFs to process")
     
+    # Step 5: LLM parsing
+    print("\n4. Parsing receipts with LLM (Step 5)...")
+    parsed_receipts = []
+    
+    if extracted_texts:
+        for i, item in enumerate(extracted_texts):
+            try:
+                print(f"   Parsing: {item['filename'][:40]}...")
+                
+                # Prepare source info for LLM
+                source_info = {
+                    'sender': item['sender'],
+                    'sender_tag': item['sender_tag'],
+                    'filename': item['filename'],
+                    'subject': item.get('subject', '')
+                }
+                
+                # Parse receipt text
+                parsed = parse_receipt_text(item['text'], source_info)
+                parsed['original_file'] = item['filename']
+                parsed['sender_tag'] = item['sender_tag']
+                parsed_receipts.append(parsed)
+                
+                # Show brief result
+                if parsed.get('amount') and parsed.get('currency'):
+                    print(f"   ✓ {parsed.get('expense_name')[:30]:<30} {parsed.get('amount')} {parsed.get('currency')}")
+                else:
+                    print(f"   ⚠ Limited info extracted")
+                    
+            except ReceiptParsingError as e:
+                print(f"   ✗ Parsing failed: {e}")
+                continue
+            except Exception as e:
+                print(f"   ✗ Unexpected error: {e}")
+                continue
+        
+        print(f"\n   Successfully parsed {len(parsed_receipts)}/{len(extracted_texts)} receipts")
+    else:
+        print("   No extracted text to parse")
+    
     # Summary
     print("\n" + "=" * 60)
     print("Summary")
@@ -145,11 +211,28 @@ def main():
     print(f"• Emails found: {len(emails)}")
     print(f"• PDFs downloaded: {len(downloaded_files)}")
     print(f"• Texts extracted: {len(extracted_texts)}")
+    print(f"• Receipts parsed: {len(parsed_receipts)}")
     if downloaded_files:
         print(f"• Download location: {DOWNLOAD_DIR}")
     
-    # Show preview of extracted text if available
-    if extracted_texts:
+    # Show preview of parsed receipts if available
+    if parsed_receipts:
+        print("\n" + "-" * 60)
+        print("Parsed Receipts Preview:")
+        print("-" * 60)
+        for i, receipt in enumerate(parsed_receipts[:3]):  # Show first 3
+            print(f"\n[{i+1}] {receipt.get('expense_name', 'Unknown')}")
+            if receipt.get('date'):
+                print(f"    Date: {receipt['date']}")
+            if receipt.get('amount') and receipt.get('currency'):
+                print(f"    Amount: {receipt['amount']} {receipt['currency']}")
+            if receipt.get('expense_type'):
+                print(f"    Type: {receipt['expense_type']}")
+            if receipt.get('source'):
+                print(f"    Source: {receipt['source']}")
+            if receipt.get('confidence'):
+                print(f"    Confidence: {receipt['confidence']:.2f}")
+    elif extracted_texts:
         print("\n" + "-" * 60)
         print("Extracted Text Preview (first 2 PDFs):")
         print("-" * 60)
@@ -162,8 +245,9 @@ def main():
     
     print("\n" + "=" * 60)
     print("Next steps:")
-    print("1. Step 5: LLM parsing (src/llm/parse_receipt.py)")
-    print("2. Step 6: CSV export (src/output/csv_writer.py)")
+    print("1. Step 6: CSV export (src/output/csv_writer.py)")
+    if not parsed_receipts:
+        print("2. Configure OPENAI_API_KEY in .env for better LLM parsing")
     print("=" * 60)
 
 if __name__ == "__main__":
