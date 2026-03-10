@@ -1,6 +1,7 @@
 import logging
 from typing import List, Dict, Any
 from src.config import TARGET_SENDERS, TARGET_KEYWORDS
+from src.utils.retry import retry_gmail
 
 logger = logging.getLogger(__name__)
 
@@ -41,9 +42,10 @@ def build_gmail_query(senders: List[str], keywords: List[str]) -> str:
     return final_query
 
 
+@retry_gmail
 def search_emails(service, senders=None, keywords=None, max_results=100) -> List[Dict[str, Any]]:
     """
-    Search emails using Gmail API.
+    Search emails using Gmail API with retry mechanism.
     
     Args:
         service: Authenticated Gmail API service object.

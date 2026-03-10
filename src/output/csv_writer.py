@@ -1,6 +1,7 @@
 import csv
 import os
 import json
+import re
 from datetime import datetime
 from typing import List, Dict, Any
 import logging
@@ -114,6 +115,87 @@ def export_receipts_to_csv(receipts: List[Dict[str, Any]], output_dir: str = "ou
         
     except Exception as e:
         logger.error(f"Failed to export CSV: {e}")
+        raise
+
+
+def export_extracted_texts_to_csv(extracted_texts: List[Dict[str, Any]], output_dir: str = "output") -> str:
+    """
+    Export extracted PDF text into a line-level CSV for debugging.
+
+    Args:
+        extracted_texts: List of extracted text items from Step 4.
+        output_dir: Directory to save CSV file.
+
+    Returns:
+        Path to the created CSV file, or empty string if no data.
+    """
+    if not extracted_texts:
+        logger.warning("No extracted texts to export")
+        return ""
+
+    os.makedirs(output_dir, exist_ok=True)
+
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    output_filename = f"pdf_text_lines_{timestamp}.csv"
+    filepath = os.path.join(output_dir, output_filename)
+
+    rows: List[Dict[str, Any]] = []
+
+    for item in extracted_texts:
+        source_filename = item.get('filename', 'unknown.pdf')
+        sender_tag = item.get('sender_tag', 'unknown')
+        subject = item.get('subject', '')
+        text = item.get('text', '') or ''
+        file_char_count = len(text)
+
+        current_page = 1
+        line_no = 0
+
+        for raw_line in text.splitlines():
+            page_match = re.match(r'^---\s*Page\s+(\d+)\s*---$', raw_line.strip(), re.IGNORECASE)
+            if page_match:
+                current_page = int(page_match.group(1))
+                line_no = 0
+                continue
+
+            clean_line = raw_line.strip()
+            if not clean_line:
+                continue
+
+            line_no += 1
+            rows.append({
+                'filename': source_filename,
+                'sender_tag': sender_tag,
+                'subject': subject,
+                'page': current_page,
+                'line_no': line_no,
+                'line_text': clean_line,
+                'line_char_count': len(clean_line),
+                'file_char_count': file_char_count,
+                'has_date_pattern': bool(re.search(r'\d{2,4}[-/]\d{1,2}[-/]\d{1,2}|\d{1,2}/\d{1,2}', clean_line)),
+                'has_currency_pattern': bool(re.search(r'NT\$|TWD|USD|US\$|SGD|S\$|HKD|HK\$|元', clean_line, re.IGNORECASE)),
+            })
+
+    if not rows:
+        logger.warning("Extracted texts are empty after line split")
+        return ""
+
+    fieldnames = [
+        'filename', 'sender_tag', 'subject', 'page', 'line_no',
+        'line_text', 'line_char_count', 'file_char_count',
+        'has_date_pattern', 'has_currency_pattern'
+    ]
+
+    try:
+        with open(filepath, 'w', newline='', encoding='utf-8-sig') as csvfile:
+            writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+            writer.writeheader()
+            writer.writerows(rows)
+
+        logger.info(f"Exported {len(rows)} text lines to CSV: {filepath}")
+        return filepath
+    except Exception as e:
+        logger.error(f"Failed to export extracted text CSV: {e}")
         raise
 
 

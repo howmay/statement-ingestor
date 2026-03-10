@@ -4,6 +4,7 @@ import re
 import hashlib
 from typing import List, Dict, Any, Optional
 from src.config import DOWNLOAD_DIR
+from src.utils.retry import retry_gmail
 
 logger = logging.getLogger(__name__)
 
@@ -142,9 +143,10 @@ def get_existing_file_by_md5(target_md5: str, directory: str = DOWNLOAD_DIR) -> 
     return None
 
 
+@retry_gmail
 def download_attachment(service, message_id: str, attachment_info: Dict[str, Any], sender_tag: str = None) -> str:
     """
-    Download a single attachment from Gmail.
+    Download a single attachment from Gmail with retry mechanism.
     
     Args:
         service: Authenticated Gmail API service object.

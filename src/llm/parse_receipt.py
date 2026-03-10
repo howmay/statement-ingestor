@@ -5,6 +5,9 @@ import re
 from typing import Dict, List, Any, Optional
 from datetime import datetime
 
+# Import enhanced utilities
+from src.utils.retry import retry_openai
+
 logger = logging.getLogger(__name__)
 
 
@@ -13,7 +16,7 @@ class ReceiptParsingError(Exception):
     pass
 
 
-def parse_receipt_text(text: str, source_info: Dict[str, Any] = None) -> Dict[str, Any]:
+def parse_receipt_text(text: str, source_info: Dict[str, Any] = None) -> List[Dict[str, Any]]:
     """
     Parse receipt/invoice text using LLM to extract structured data.
     
@@ -22,7 +25,7 @@ def parse_receipt_text(text: str, source_info: Dict[str, Any] = None) -> Dict[st
         source_info: Optional metadata about the source (sender, filename, etc.).
     
     Returns:
-        Dictionary with parsed structured data:
+        List of parsed transaction dictionaries. Each transaction includes:
         - 'date': Transaction date (YYYY-MM-DD)
         - 'amount': Transaction amount (float)
         - 'currency': Currency code (e.g., TWD, USD, SGD)
@@ -59,9 +62,10 @@ def parse_receipt_text(text: str, source_info: Dict[str, Any] = None) -> Dict[st
         return _parse_with_heuristics(text, source_info)
 
 
+@retry_openai
 def _parse_with_openai(text: str, source_info: Dict[str, Any]) -> List[Dict[str, Any]]:
     """
-    Parse receipt text using OpenAI API.
+    Parse receipt text using OpenAI API with retry mechanism.
     
     Args:
         text: Text content.
@@ -87,15 +91,15 @@ def _parse_with_openai(text: str, source_info: Dict[str, Any]) -> List[Dict[str,
     client = OpenAI(api_key=api_key)
     logger.info(f"Initialized OpenAI client for receipt parsing (model: gpt-4o-mini)")
     
-    # Truncate text to fit token limits (keep first 4000 chars for context)
-    truncated_text = text[:4000]
-    if len(text) > 4000:
-        logger.info(f"Truncated text from {len(text)} to 4000 characters for LLM")
-    
+    # Truncate text to fit token limits (keep first 6000 chars for context)
+    truncated_text = text[:6000]
+    if len(text) > 6000:
+        logger.info(f"Truncated text from {len(text)} to 6000 characters for LLM")
+
     # Get sender tag for context
     sender_tag = source_info.get('sender_tag', 'unknown')
     sender = source_info.get('sender', '')
-    
+
     # Determine likely source based on sender
     source = "unknown"
     if 'hsbc' in sender_tag:
@@ -110,25 +114,40 @@ def _parse_with_openai(text: str, source_info: Dict[str, Any]) -> List[Dict[str,
         source = "Uber"
     elif 'amazon' in sender_tag:
         source = "Amazon"
-    
+
     # Build system prompt
     system_prompt = """You are a financial data extraction expert. Extract structured information from receipt/invoice/bank statement text.
-    
-    If the text contains multiple transactions (like a bank statement), extract ALL transactions.
-    Each transaction should have the following fields:
-    1. date: Transaction date in YYYY-MM-DD format.
-    2. amount: Transaction amount as a float number.
-    3. currency: Currency code (TWD, USD, SGD, HKD, etc.).
-    4. expense_name: Short description of the expense (e.g., "Uber ride", "Amazon purchase", "Credit card payment").
-    5. expense_type: Category from: Food, Transportation, Shopping, Bills, Entertainment, Healthcare, Education, Travel, Other.
-    6. source: Merchant or bank name.
-    7. confidence: Your confidence in this extraction (0.0 to 1.0).
-    
-    Return a JSON array of transaction objects. Each object must have these exact field names.
-    If there is only one transaction, return an array with one object.
-    If a field cannot be determined for a transaction, use null for that field.
-    """
-    
+
+If the text contains multiple transactions (like a bank statement), extract ALL transactions.
+Each transaction should have the following fields:
+1. date: Transaction date in YYYY-MM-DD format.
+2. amount: Transaction amount as a float number.
+3. currency: Currency code (TWD, USD, SGD, HKD, etc.).
+4. expense_name: Short description of the expense.
+5. expense_type: Category from: Food, Transportation, Shopping, Bills, Entertainment, Healthcare, Education, Travel, Other.
+6. source: Merchant or bank name.
+7. confidence: Confidence score (0.0 to 1.0).
+
+Return ONLY a JSON object with this exact shape:
+{
+  "transactions": [
+    {
+      "date": "YYYY-MM-DD",
+      "amount": 123.45,
+      "currency": "TWD",
+      "expense_name": "...",
+      "expense_type": "Shopping",
+      "source": "...",
+      "confidence": 0.9
+    }
+  ]
+}
+
+If there is only one transaction, keep one object in the array.
+If nothing can be extracted, return {"transactions": []}.
+Do not include any extra keys.
+"""
+
     # Build user prompt
     user_prompt = f"""Extract financial data from this {source} transaction text:
 
@@ -140,8 +159,9 @@ Additional context:
 - Source tag: {sender_tag}
 - Original filename: {source_info.get('filename', 'unknown')}
 
-Return a JSON array of transaction objects with fields: date, amount, currency, expense_name, expense_type, source, confidence.
-If there are multiple transactions, include all of them. If only one, return an array with one object."""
+Return ONLY a JSON object with a `transactions` array.
+Each item must include: date, amount, currency, expense_name, expense_type, source, confidence.
+Ignore summary/header/footer rows when transaction detail rows exist."""
     
     try:
         response = client.chat.completions.create(
@@ -151,7 +171,7 @@ If there are multiple transactions, include all of them. If only one, return an 
                 {"role": "user", "content": user_prompt}
             ],
             temperature=0.1,  # Low temperature for consistent output
-            max_tokens=500,
+            max_tokens=2000,
             response_format={"type": "json_object"}
         )
         
@@ -165,44 +185,42 @@ If there are multiple transactions, include all of them. If only one, return an 
             logger.error(f"Failed to parse OpenAI JSON response: {e}, response: {result_text}")
             raise ReceiptParsingError(f"Invalid JSON response from OpenAI: {e}")
         
-        # Handle both single transaction object and array of transactions
-        transactions = []
+        # Normalize response payload into a transaction list
+        required_fields = ['date', 'amount', 'currency', 'expense_name', 'expense_type', 'source', 'confidence']
+        transactions_raw: List[Dict[str, Any]] = []
+
         if isinstance(parsed, list):
-            # LLM returned an array of transactions
-            for i, tx in enumerate(parsed):
-                if not isinstance(tx, dict):
-                    logger.warning(f"Transaction {i} is not a dictionary, skipping")
-                    continue
-                # Validate required fields
-                required_fields = ['date', 'amount', 'currency', 'expense_name', 'expense_type', 'source', 'confidence']
-                for field in required_fields:
-                    if field not in tx:
-                        tx[field] = None
-                # Validate and normalize each transaction
-                validated_tx = _validate_and_normalize_transaction(tx, source_info)
-                # Add metadata
-                validated_tx['raw_text_snippet'] = text[:200]
-                validated_tx['parsed_at'] = datetime.now().isoformat()
-                validated_tx['llm_model'] = 'gpt-4o-mini'
-                validated_tx['parsing_method'] = 'openai'
-                transactions.append(validated_tx)
+            transactions_raw = parsed
         elif isinstance(parsed, dict):
-            # LLM returned a single transaction object (old format)
-            # Validate required fields
-            required_fields = ['date', 'amount', 'currency', 'expense_name', 'expense_type', 'source', 'confidence']
+            for key in ('transactions', 'items', 'data', 'results'):
+                value = parsed.get(key)
+                if isinstance(value, list):
+                    transactions_raw = value
+                    break
+
+            # Backward compatibility: sometimes model returns a single transaction object
+            if not transactions_raw and any(field in parsed for field in required_fields):
+                transactions_raw = [parsed]
+        else:
+            raise ReceiptParsingError(f"Unexpected JSON response type: {type(parsed)}")
+
+        transactions = []
+        for i, tx in enumerate(transactions_raw):
+            if not isinstance(tx, dict):
+                logger.warning(f"Transaction {i} is not a dictionary, skipping")
+                continue
+
             for field in required_fields:
-                if field not in parsed:
-                    parsed[field] = None
-            # Validate and normalize
-            validated_tx = _validate_and_normalize_transaction(parsed, source_info)
-            # Add metadata
+                if field not in tx:
+                    tx[field] = None
+
+            validated_tx = _validate_and_normalize_transaction(tx, source_info)
+            _enrich_expense_name_from_text(validated_tx, text)
             validated_tx['raw_text_snippet'] = text[:200]
             validated_tx['parsed_at'] = datetime.now().isoformat()
             validated_tx['llm_model'] = 'gpt-4o-mini'
             validated_tx['parsing_method'] = 'openai'
             transactions.append(validated_tx)
-        else:
-            raise ReceiptParsingError(f"Unexpected JSON response type: {type(parsed)}")
         
         if not transactions:
             raise ReceiptParsingError("No valid transactions extracted from text")
@@ -261,20 +279,22 @@ def _extract_multiple_transactions_heuristic(text: str, source_info: Dict[str, A
     elif 'esunbank' in sender_tag:
         source = "Esun Bank"
     
-    # Common date patterns (simplified)
+    # Common date patterns (includes ROC year format 115/02/21)
     date_patterns = [
         r'(\d{4})[-/](\d{1,2})[-/](\d{1,2})',  # YYYY-MM-DD, YYYY/MM/DD
+        r'(\d{3})[-/](\d{1,2})[-/](\d{1,2})',  # ROC year format (e.g., 115/02/21)
         r'(\d{1,2})[-/](\d{1,2})[-/](\d{4})',  # DD-MM-YYYY, DD/MM/YYYY
         r'(\d{4})年(\d{1,2})月(\d{1,2})日',     # Chinese date format
         r'(\d{1,2})[/](\d{1,2})',               # MM/DD or DD/MM (ambiguous)
     ]
-    
-    # Amount patterns with currency
+
+    # Currency-specific amount patterns (stricter to reduce false positives)
     amount_patterns = [
-        r'[NT$US$S$HK$¥€£]?\s*([0-9,]+\.?[0-9]*)\s*[元美元新幣港幣]?',
-        r'([0-9,]+\.?[0-9]*)\s*(NTD|USD|SGD|HKD|TWD)',
-        r'金額[：:]\s*([0-9,]+\.?[0-9]*)',
-        r'Amount[：:]\s*([0-9,]+\.?[0-9]*)',
+        (r'(?:NT\$|TWD)\s*(-?[0-9,]+(?:\.[0-9]+)?)', 'TWD'),
+        (r'(?:US\$|USD)\s*(-?[0-9,]+(?:\.[0-9]+)?)', 'USD'),
+        (r'(?:S\$|SGD)\s*(-?[0-9,]+(?:\.[0-9]+)?)', 'SGD'),
+        (r'(?:HK\$|HKD)\s*(-?[0-9,]+(?:\.[0-9]+)?)', 'HKD'),
+        (r'(-?[0-9,]+(?:\.[0-9]+)?)\s*元', 'TWD'),
     ]
     
     # Split text into lines
@@ -285,70 +305,63 @@ def _extract_multiple_transactions_heuristic(text: str, source_info: Dict[str, A
         line = line.strip()
         if not line or len(line) < 10:
             continue
-        
-        # Skip lines that are obviously headers/footers
-        if any(keyword in line.lower() for keyword in ['statement', 'total', 'summary', 'balance', 'page', 'date', 'description', 'amount']):
+
+        # Skip lines that are obviously headers/footers or non-transaction indicators
+        lower_line = line.lower()
+        if any(keyword in lower_line for keyword in ['statement', 'total', 'summary', 'balance', 'page', 'description', 'amount', '帳戶總覽', '本月餘額']):
             continue
-        
-        # Look for date and amount in the same line
-        date_match = None
+        if '%' in line or re.search(r'\d+\s+/\s+\d+', line):
+            # Skip rate / installment-info style lines (e.g. "7.88%", "10,000 / 100,000")
+            continue
+
+        # Look for date
         date_str = None
         for pattern in date_patterns:
             match = re.search(pattern, line)
-            if match:
-                date_match = match
-                # Try to format date
-                try:
-                    if '年' in pattern:
-                        year, month, day = match.groups()
-                    elif len(match.group(1)) == 4:
-                        year, month, day = match.groups()
-                    elif len(match.group(1)) <= 2 and len(match.group(2)) <= 2:
-                        # MM/DD or DD/MM, assume current year? Use first two groups as month/day
-                        month, day = match.groups()[:2]
-                        year = str(datetime.now().year)
-                    else:
+            if not match:
+                continue
+
+            try:
+                if '年' in pattern:
+                    year, month, day = match.groups()
+                elif len(match.group(1)) == 4:
+                    year, month, day = match.groups()
+                elif len(match.group(1)) == 3:
+                    # ROC year, convert to Gregorian
+                    roc_year, month, day = match.groups()
+                    year = str(int(roc_year) + 1911)
+                else:
+                    # MM/DD fallback. Avoid matching inside ROC date like 115/02/21.
+                    if re.search(r'\d{3}[-/]\d{1,2}[-/]\d{1,2}', line):
                         continue
-                    date_str = f"{year}-{int(month):02d}-{int(day):02d}"
-                    break
-                except (ValueError, IndexError):
-                    continue
-        
-        amount_match = None
+                    month, day = match.groups()[:2]
+                    year = str(datetime.now().year)
+
+                date_str = f"{int(year):04d}-{int(month):02d}-{int(day):02d}"
+                break
+            except (ValueError, IndexError):
+                continue
+
+        # Look for amount with explicit currency first
         amount_val = None
         currency = None
-        for pattern in amount_patterns:
-            matches = re.findall(pattern, line)
-            if matches:
-                # Take the first amount that looks reasonable
-                for match in matches:
-                    if isinstance(match, tuple):
-                        match = match[0]
-                    clean = match.replace(',', '')
-                    if clean.replace('.', '', 1).isdigit():
-                        amount_val = float(clean)
-                        # Determine currency
-                        if 'NT$' in line or 'TWD' in line:
-                            currency = 'TWD'
-                        elif 'US$' in line or 'USD' in line:
-                            currency = 'USD'
-                        elif 'S$' in line or 'SGD' in line:
-                            currency = 'SGD'
-                        elif 'HK$' in line or 'HKD' in line:
-                            currency = 'HKD'
-                        else:
-                            # Default based on source
-                            if 'sg' in sender_tag:
-                                currency = 'SGD'
-                            elif 'tw' in sender_tag:
-                                currency = 'TWD'
-                            elif 'hk' in sender_tag:
-                                currency = 'HKD'
-                            else:
-                                currency = 'USD'
-                        break
-                if amount_val:
+        for pattern, detected_currency in amount_patterns:
+            match = re.search(pattern, line)
+            if not match:
+                continue
+
+            try:
+                clean = match.group(1).replace(',', '')
+                if clean.replace('.', '', 1).replace('-', '', 1).isdigit():
+                    amount_val = float(clean)
+                    currency = detected_currency
                     break
+            except (ValueError, IndexError):
+                continue
+
+        # Skip ambiguous lines with no clear currency amount
+        if amount_val is None:
+            continue
         
         # If we found both date and amount, consider it a transaction
         if date_str and amount_val:
@@ -512,14 +525,77 @@ def _extract_single_transaction_heuristic(text: str, source_info: Dict[str, Any]
     return result
 
 
+def _enrich_expense_name_from_text(parsed: Dict[str, Any], text: str) -> None:
+    """
+    Fill missing/generic expense_name using a best-match raw line from extracted text.
+    """
+    current_name = str(parsed.get('expense_name') or '').strip().lower()
+    if current_name and current_name not in {'transaction', 'bank statement transaction', 'null'}:
+        return
+
+    date_str = parsed.get('date')
+    amount = parsed.get('amount')
+    if not date_str or amount is None:
+        return
+
+    month_day = None
+    try:
+        month_day = datetime.strptime(str(date_str), '%Y-%m-%d').strftime('%m/%d')
+    except Exception:
+        pass
+
+    try:
+        amount_value = abs(float(amount))
+    except Exception:
+        return
+
+    best_line = None
+    best_score = -1
+
+    for raw_line in text.splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith('--- Page'):
+            continue
+
+        number_matches = re.findall(r'-?[0-9][0-9,]*(?:\.[0-9]+)?', line)
+        if not number_matches:
+            continue
+
+        has_amount = False
+        for token in number_matches:
+            try:
+                token_value = abs(float(token.replace(',', '')))
+                if abs(token_value - amount_value) < 0.01:
+                    has_amount = True
+                    break
+            except ValueError:
+                continue
+
+        if not has_amount:
+            continue
+
+        score = 1
+        if month_day and month_day in line:
+            score += 2
+        if re.search(r'\d{1,2}/\d{1,2}\s+\d{1,2}/\d{1,2}', line):
+            score += 1
+
+        if score > best_score:
+            best_score = score
+            best_line = line
+
+    if best_line:
+        parsed['expense_name'] = best_line[:100]
+
+
 def _validate_and_normalize_transaction(parsed: Dict[str, Any], source_info: Dict[str, Any]) -> Dict[str, Any]:
     """
     Validate and normalize parsed data.
-    
+
     Args:
         parsed: Raw parsed data.
         source_info: Source metadata.
-    
+
     Returns:
         Validated and normalized data.
     """
@@ -539,7 +615,7 @@ def _validate_and_normalize_transaction(parsed: Dict[str, Any], source_info: Dic
             parsed['date'] = None
             if parsed.get('confidence', 0) > 0:
                 parsed['confidence'] = max(parsed['confidence'] - 0.2, 0.1)
-    
+
     # Validate amount
     if parsed.get('amount') is not None:
         try:
@@ -550,7 +626,7 @@ def _validate_and_normalize_transaction(parsed: Dict[str, Any], source_info: Dic
                 parsed['amount'] = None
         except (ValueError, TypeError):
             parsed['amount'] = None
-    
+
     # Set default currency if missing
     if not parsed.get('currency'):
         # Default based on source
@@ -563,24 +639,24 @@ def _validate_and_normalize_transaction(parsed: Dict[str, Any], source_info: Dic
             parsed['currency'] = 'HKD'
         else:
             parsed['currency'] = 'USD'
-    
+
     # Validate expense name
     if not parsed.get('expense_name') or parsed['expense_name'] == 'null':
         parsed['expense_name'] = 'Transaction'
         if source_info.get('subject'):
             parsed['expense_name'] = f"Transaction: {source_info['subject'][:50]}"
-    
+
     # Validate expense type
-    valid_types = ['Food', 'Transportation', 'Shopping', 'Bills', 'Entertainment', 
+    valid_types = ['Food', 'Transportation', 'Shopping', 'Bills', 'Entertainment',
                    'Healthcare', 'Education', 'Travel', 'Other']
     if parsed.get('expense_type') not in valid_types:
         parsed['expense_type'] = 'Other'
-    
+
     # Validate confidence
     confidence = parsed.get('confidence', 0)
     if not isinstance(confidence, (int, float)) or confidence < 0 or confidence > 1:
         parsed['confidence'] = 0.5
-    
+
     return parsed
 
 

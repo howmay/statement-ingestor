@@ -6,6 +6,7 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 import logging
 from src.config import OAUTH_CLIENT_SECRETS_PATH, OAUTH_TOKEN_PATH, OAUTH_PORT
+from src.utils.retry import retry_gmail
 
 # Setup logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -38,9 +39,10 @@ def _test_token_usable(creds):
         return False
 
 
+@retry_gmail
 def get_gmail_service(client_secrets_path=None, token_path=None, port=None):
     """
-    Authenticate and return a Gmail API service object using OAuth2.
+    Authenticate and return a Gmail API service object using OAuth2 with retry mechanism.
     
     Args:
         client_secrets_path (str): Path to client_secrets.json file.
