@@ -4,7 +4,7 @@ import re
 import shutil
 import subprocess
 import tempfile
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Set
 
 logger = logging.getLogger(__name__)
 
@@ -21,6 +21,30 @@ OCR_ROW_PATTERN = re.compile(
     r'(?P<amount>-?[0-9,]+(?:\.[0-9]+)?)(?:\s*(?P<suffix>CR|DR))?$',
     re.IGNORECASE,
 )
+
+
+def _get_tesseract_langs() -> Set[str]:
+    """Return installed tesseract language codes."""
+    try:
+        proc = subprocess.run(
+            ['tesseract', '--list-langs'],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        if proc.returncode != 0:
+            return set()
+
+        langs = []
+        for line in (proc.stdout or '').splitlines():
+            line = line.strip()
+            if not line or line.startswith('List of available languages'):
+                continue
+            langs.append(line)
+
+        return set(langs)
+    except Exception:
+        return set()
 
 
 def enrich_hsbc_transactions_with_ocr(
@@ -45,6 +69,17 @@ def enrich_hsbc_transactions_with_ocr(
     if shutil.which('tesseract') is None:
         logger.warning('HSBC OCR skipped: `tesseract` not found in PATH')
         return 0
+
+    # Default: require chi_tra for HSBC TW statements to avoid severe OCR garbling.
+    require_chi_tra = os.getenv('HSBC_OCR_REQUIRE_CHI_TRA', 'true').strip().lower() in {'1', 'true', 'yes', 'on'}
+    if require_chi_tra:
+        langs = _get_tesseract_langs()
+        if 'chi_tra' not in langs:
+            logger.warning(
+                'HSBC OCR skipped: chi_tra language data not installed in tesseract '
+                f'(available={sorted(langs)})'
+            )
+            return 0
 
     candidates = []
     for idx, tx in enumerate(transactions):
