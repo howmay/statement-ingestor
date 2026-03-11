@@ -101,6 +101,107 @@ class FubonBankParser(BaseBankParser):
         )
 
 
+class FubonCreditCardParser(BaseBankParser):
+    SOURCE = 'Fubon Credit Card'
+    CURRENCY = 'TWD'
+
+    # Example rows:
+    # 12/27 12/30 特約商店 20,990
+    # 12/03 12/03 國外交易服務費 TWD 4
+    LINE_TWO_DATES = re.compile(
+        r'^(?P<tx_md>\d{1,2}/\d{1,2})\s+(?P<post_md>\d{1,2}/\d{1,2})\s+(?P<body>.+?)$'
+    )
+
+    LINE_ONE_DATE = re.compile(
+        r'^(?P<tx_md>\d{1,2}/\d{1,2})\s+(?P<body>.+?)$'
+    )
+
+    CURRENCY_AMOUNT_PATTERN = re.compile(
+        r'(?P<currency>TWD|NTD|USD|SGD|HKD|JPY)\s*(?P<amount>-?[0-9,]+(?:\.[0-9]+)?)'
+    )
+    TRAILING_AMOUNT_PATTERN = re.compile(r'(?P<amount>-?[0-9,]+(?:\.[0-9]+)?)$')
+
+    NON_TRANSACTION_KEYWORDS = [
+        '信用卡', '電子帳單', '本期應繳', '最低應繳', '信用額度', '循環利率', '帳單',
+        '到期日', '繳款', '回饋', '紅利', '客服', '電話', '頁', 'page',
+    ]
+
+    def parse(self) -> BankParseResult:
+        txs: List[Dict] = []
+        warnings: List[str] = []
+
+        for raw_line in self.text.splitlines():
+            line = raw_line.strip()
+            if not line or line.startswith('--- Page'):
+                continue
+
+            lower_line = line.lower()
+            if any(k.lower() in lower_line for k in self.NON_TRANSACTION_KEYWORDS):
+                continue
+
+            tx_md = None
+            body = None
+
+            m2 = self.LINE_TWO_DATES.match(line)
+            if m2:
+                tx_md = m2.group('tx_md')
+                body = m2.group('body').strip()
+            else:
+                m1 = self.LINE_ONE_DATE.match(line)
+                if m1:
+                    tx_md = m1.group('tx_md')
+                    body = m1.group('body').strip()
+
+            if not tx_md or not body:
+                continue
+
+            tx_date = self._month_day_to_iso(tx_md)
+
+            amount = None
+            currency = self.CURRENCY
+            desc = body
+
+            curr_matches = list(self.CURRENCY_AMOUNT_PATTERN.finditer(body))
+            if curr_matches:
+                chosen = curr_matches[-1]
+                raw_currency = chosen.group('currency')
+                currency = 'TWD' if raw_currency == 'NTD' else raw_currency
+                amount = self._parse_amount(chosen.group('amount'))
+                desc = body[:chosen.start()].strip() or body
+            else:
+                am = self.TRAILING_AMOUNT_PATTERN.search(body)
+                if am:
+                    amount = self._parse_amount(am.group('amount'))
+                    desc = body[:am.start()].strip() or body
+
+            if amount is None:
+                continue
+
+            if not desc or re.fullmatch(r'-?[0-9,]+(?:\.[0-9]+)?', desc):
+                desc = line
+                warnings.append(f'Missing or numeric-only description: {line}')
+
+            txs.append(self._build_transaction(
+                date=tx_date,
+                amount=amount,
+                expense_name=desc,
+                expense_type=_classify_expense_type(desc),
+                source=self.SOURCE,
+                currency=currency,
+                confidence=0.95 if desc != line else 0.85,
+                parsing_method='bank_parser_fubon_card',
+                raw_line=line,
+                parser_name='FubonCreditCardParser',
+            ))
+
+        return BankParseResult(
+            matched=True,
+            parser_name='FubonCreditCardParser',
+            transactions=txs,
+            warnings=warnings,
+        )
+
+
 def _date_slash_to_iso(date_str: str) -> str:
     m = re.match(r'^(\d{4})/(\d{1,2})/(\d{1,2})$', date_str)
     if not m:
@@ -111,8 +212,12 @@ def _date_slash_to_iso(date_str: str) -> str:
 
 def _classify_expense_type(desc: str) -> str:
     d = desc.lower()
-    if any(k in d for k in ['信用卡轉', '利息', '手續費']):
+    if any(k in d for k in ['信用卡轉', '利息', '手續費', 'fee']):
         return 'Bills'
-    if any(k in d for k in ['uber', '交通', '計程車']):
+    if any(k in d for k in ['uber', '交通', '計程車', '高鐵', '台鐵']):
         return 'Transportation'
+    if any(k in d for k in ['spotify', 'netflix', 'youtube']):
+        return 'Entertainment'
+    if any(k in d for k in ['amazon', 'pchome', 'momo', '購物']):
+        return 'Shopping'
     return 'Other'

@@ -112,10 +112,33 @@ def test_fubon_transaction_detail_section_only():
     assert result.transactions[1]['expense_name'] == '信用卡轉'
 
 
+def test_fubon_credit_card_statement():
+    text = """
+台北富邦銀行信用卡電子帳單
+12/30 12/30 -1,061
+12/27 12/30 特約商店消費 20,990
+01/01 01/06 國外交易服務費 TWD 45
+"""
+    source = {
+        'sender_tag': 'fubon',
+        'sender': 'creditcard@taipeifubon.com.tw',
+        'subject': '台北富邦銀行2026年1月 信用卡電子帳單',
+    }
+
+    result = parse_with_bank_factory(text, source)
+    assert result.matched
+    assert result.parser_name == 'FubonCreditCardParser'
+    assert len(result.transactions) == 3
+
+    target = [t for t in result.transactions if abs(float(t['amount']) - 20990.0) < 0.01][0]
+    assert target['date'] == '2025-12-27'
+
+
 if __name__ == '__main__':
     test_hsbc_parse()
     test_hsbc_tw_statement_table_style()
     test_esun_parse()
     test_fubon_parse()
     test_fubon_transaction_detail_section_only()
+    test_fubon_credit_card_statement()
     print('All parser tests passed ✅')
