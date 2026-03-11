@@ -53,6 +53,34 @@ def test_hsbc_tw_statement_table_style():
     assert jan_tx['date'] == '2026-01-01'
 
 
+def test_hsbc_sg_credit_card_statement_style():
+    """HSBC SG statement style: 27Dec 30Dec DESCRIPTION 18.98 / 15.00CR."""
+    text = """
+27Dec 30Dec NETFLIX.COM SINGAPORE 18.98
+31Dec 02Jan AMAZON SG 15.00CR
+01Jan 03Jan UBER *TRIP SINGAPORE SGD 12.30
+"""
+    source = {
+        'sender_tag': 'hsbc',
+        'sender': 'cardstatements@hsbc.com.sg',
+        'subject': 'HSBC Singapore Credit Card eStatement 2026/01',
+    }
+
+    result = parse_with_bank_factory(text, source)
+    assert result.matched
+    assert result.parser_name == 'HsbcTwCardParser'
+    assert len(result.transactions) == 3
+
+    # Cross-year date inference from Jan statement: Dec -> previous year
+    dec_tx = [t for t in result.transactions if abs(float(t['amount']) - 18.98) < 0.01][0]
+    assert dec_tx['date'] == '2025-12-27'
+    assert dec_tx['currency'] == 'SGD'
+
+    # CR should be treated as negative
+    credit_tx = [t for t in result.transactions if 'amazon' in t['expense_name'].lower()][0]
+    assert abs(float(credit_tx['amount']) + 15.00) < 0.01
+
+
 def test_esun_parse():
     text = """
 01/06 感謝您辦理本行自動轉帳繳款！ TWD -8,668
@@ -137,6 +165,7 @@ def test_fubon_credit_card_statement():
 if __name__ == '__main__':
     test_hsbc_parse()
     test_hsbc_tw_statement_table_style()
+    test_hsbc_sg_credit_card_statement_style()
     test_esun_parse()
     test_fubon_parse()
     test_fubon_transaction_detail_section_only()
