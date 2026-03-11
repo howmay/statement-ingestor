@@ -2,6 +2,8 @@ import os
 import logging
 import re
 import hashlib
+import base64
+from email.utils import parseaddr
 from typing import List, Dict, Any, Optional
 from src.config import DOWNLOAD_DIR
 from src.utils.retry import retry_gmail
@@ -109,6 +111,61 @@ def extract_sender_tag(sender: str) -> str:
     return tag[:30]  # Limit length but allow more for complex domains
 
 
+def extract_sender_display_name(sender: str) -> str:
+    """
+    Extract sender display name for filename use.
+
+    Examples:
+    - '"台北富邦銀行" <service@bhu.taipeifubon.com.tw>' -> '台北富邦銀行'
+    - 'cards@estatements.hsbc.com.tw' -> 'cards'
+    """
+    display_name, email_addr = parseaddr(sender or "")
+    name = (display_name or "").strip().strip('"')
+
+    if not name:
+        if '@' in email_addr:
+            name = email_addr.split('@', 1)[0]
+        else:
+            name = (sender or 'unknown').strip()
+
+    # Keep CJK, latin, number, underscore, dash. Replace others with underscore.
+    safe = re.sub(r'[^\w\-\u4e00-\u9fff]', '_', name)
+    safe = re.sub(r'_+', '_', safe).strip('_')
+    return (safe or 'unknown')[:40]
+
+
+def build_sender_base64_suffix(sender_name: str) -> str:
+    """
+    Create base64 suffix using sender name and return last 8 chars.
+
+    Note: Keep '=' padding as requested.
+    """
+    encoded = base64.urlsafe_b64encode((sender_name or 'unknown').encode('utf-8')).decode('ascii')
+    if not encoded:
+        encoded = 'unknown'
+    return encoded[-8:]
+
+
+def build_pdf_filename_by_sender(sender: str, original_filename: str) -> str:
+    """
+    Build filename as: <sender_name>_<base64_tail8><ext>
+    """
+    sender_name_safe = extract_sender_display_name(sender)
+
+    raw_display_name, raw_email = parseaddr(sender or "")
+    sender_name_raw = (raw_display_name or '').strip().strip('"')
+    if not sender_name_raw:
+        sender_name_raw = raw_email.split('@', 1)[0] if '@' in raw_email else sender_name_safe
+
+    suffix = build_sender_base64_suffix(sender_name_raw)
+
+    ext = os.path.splitext(os.path.basename(original_filename or ''))[1].lower()
+    if not ext:
+        ext = '.pdf'
+
+    return f"{sender_name_safe}_{suffix}{ext}"
+
+
 def compute_md5_hash(data: bytes) -> str:
     """Compute MD5 hash of binary data."""
     return hashlib.md5(data).hexdigest()
@@ -144,7 +201,7 @@ def get_existing_file_by_md5(target_md5: str, directory: str = DOWNLOAD_DIR) -> 
 
 
 @retry_gmail
-def download_attachment(service, message_id: str, attachment_info: Dict[str, Any], sender_tag: str = None) -> str:
+def download_attachment(service, message_id: str, attachment_info: Dict[str, Any], sender: str = None) -> str:
     """
     Download a single attachment from Gmail with retry mechanism.
     
@@ -152,7 +209,7 @@ def download_attachment(service, message_id: str, attachment_info: Dict[str, Any
         service: Authenticated Gmail API service object.
         message_id: Gmail message ID.
         attachment_info: Attachment metadata from list_attachments().
-        sender_tag: Optional tag to prefix filename with (e.g., "apple").
+        sender: Sender header string; used to generate filename.
     
     Returns:
         Path to the downloaded file.
@@ -169,7 +226,6 @@ def download_attachment(service, message_id: str, attachment_info: Dict[str, Any
         ).execute()
         
         # Decode from base64
-        import base64
         file_data = base64.urlsafe_b64decode(attachment['data'].encode('UTF-8'))
         
         # Compute MD5 hash of file content
@@ -185,19 +241,9 @@ def download_attachment(service, message_id: str, attachment_info: Dict[str, Any
         # Ensure download directory exists
         os.makedirs(DOWNLOAD_DIR, exist_ok=True)
         
-        # Generate safe filename
+        # Generate filename by user rule: sender_name + base64_tail8
         original_filename = attachment_info['filename']
-        # Clean filename: remove path components, limit length
-        import re
-        safe_filename = re.sub(r'[^\w\-_.]', '_', os.path.basename(original_filename))
-        safe_filename = safe_filename[:200]  # Limit length
-        
-        # Add sender tag prefix if provided
-        if sender_tag:
-            # Remove any existing extension temporarily
-            name_without_ext, ext = os.path.splitext(safe_filename)
-            # Add tag prefix
-            safe_filename = f"{sender_tag}_{name_without_ext}{ext}"
+        safe_filename = build_pdf_filename_by_sender(sender or 'unknown', original_filename)
         
         filepath = os.path.join(DOWNLOAD_DIR, safe_filename)
         
@@ -254,7 +300,7 @@ def download_pdf_attachments(service, message_id: str, email_metadata: Dict[str,
     
     for att in attachments:
         try:
-            filepath = download_attachment(service, message_id, att, sender_tag)
+            filepath = download_attachment(service, message_id, att, sender)
             downloaded_files.append({
                 'filepath': filepath,
                 'filename': att['filename'],
