@@ -98,6 +98,36 @@ def test_esun_parse():
     assert len(result.transactions) == 2
 
 
+def test_esun_statement_page_style():
+    """Esun statement style with ROC header noise and page markers."""
+    text = """
+115/03/09 7.88%
+1,000 元 至 115/03
+115/02/21 10,000 / 100,000 元
+1/3
+02/06 感謝您辦理本行自動轉帳繳款！ TWD -6,185
+02/21 02/21 ＵＢｅａｒ卡一般消費１％現金回饋 TWD -2
+02/05 02/10 Ｐｉ－寶島眼鏡 TWD 2,503
+02/10 02/13 Ｐｉ－寶島眼鏡 退貨 TWD -3,100
+02/03 02/03 Spotify P3EFC3AD4D SWE Stockholm 02/03 TWD 298 TWD 298
+02/03 02/03 國外交易服務費 TWD 4
+2/3
+"""
+    source = {
+        'sender_tag': '_bank',
+        'sender': 'estatement@esunbank.com',
+        'subject': '玉山銀行2026年2月信用卡電子帳單',
+    }
+
+    result = parse_with_bank_factory(text, source)
+    assert result.matched
+    assert result.parser_name == 'EsunCardParser'
+    assert len(result.transactions) == 6
+
+    refund = [t for t in result.transactions if '退貨' in t['expense_name']][0]
+    assert abs(float(refund['amount']) + 3100.0) < 0.01
+
+
 def test_fubon_parse():
     text = """
 00766168****65 2026/02/01 承轉結餘 3,580.00
@@ -167,6 +197,7 @@ if __name__ == '__main__':
     test_hsbc_tw_statement_table_style()
     test_hsbc_sg_credit_card_statement_style()
     test_esun_parse()
+    test_esun_statement_page_style()
     test_fubon_parse()
     test_fubon_transaction_detail_section_only()
     test_fubon_credit_card_statement()
