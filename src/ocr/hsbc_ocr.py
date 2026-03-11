@@ -270,7 +270,7 @@ def _extract_rows_from_ocr_text(text: str) -> List[Dict]:
         if not m:
             continue
 
-        desc = m.group('desc').strip()
+        desc = _clean_ocr_desc(m.group('desc'))
         if not desc or len(desc) < 2:
             continue
 
@@ -297,6 +297,27 @@ def _extract_rows_from_ocr_text(text: str) -> List[Dict]:
         })
 
     return rows
+
+
+def _clean_ocr_desc(desc: str) -> str:
+    """Clean common OCR artifacts from merchant description text."""
+    if not desc:
+        return ''
+
+    # Normalize whitespace first
+    s = ' '.join(desc.strip().split())
+
+    # Remove quote/box-like artifacts often introduced by OCR in statement tables
+    s = s.replace('“', '').replace('”', '').replace('「', '').replace('」', '')
+    s = s.replace('『', '').replace('』', '').replace('【', '').replace('】', '')
+
+    # Strip leading table/line garbage symbols
+    s = re.sub(r'^[\|¦‖\[\]\(\){}<>~`!@#$%^&*_=+\-:;,.\/\\\s]+', '', s)
+
+    # Keep channel tag if present (APE/FP/etc.) but ensure no leading punctuation before it
+    s = s.strip()
+
+    return s
 
 
 def _normalize_md(md: str) -> str:

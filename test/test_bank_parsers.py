@@ -8,7 +8,7 @@ project_root = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(project_root))
 
 from src.bank_parsers.factory import parse_with_bank_factory
-from src.ocr.hsbc_ocr import _extract_rows_from_ocr_text
+from src.ocr.hsbc_ocr import _extract_rows_from_ocr_text, _clean_ocr_desc
 
 
 def test_hsbc_parse():
@@ -99,6 +99,11 @@ def test_hsbc_ocr_row_extraction_parser():
     assert rows[0]['tx_md'] == '03/03'
     assert abs(rows[0]['amount'] - 2880.0) < 0.01
     assert abs(rows[2]['amount'] + 15.0) < 0.01
+
+
+def test_hsbc_ocr_desc_cleanup():
+    assert _clean_ocr_desc(' |「APE綠界-中華民國人TaipeiCi') == 'APE綠界-中華民國人TaipeiCi'
+    assert _clean_ocr_desc('“|匯豐銀行自動扣款') == '匯豐銀行自動扣款'
 
 
 def test_esun_parse():
@@ -217,6 +222,7 @@ if __name__ == '__main__':
     test_hsbc_tw_statement_table_style()
     test_hsbc_sg_credit_card_statement_style()
     test_hsbc_ocr_row_extraction_parser()
+    test_hsbc_ocr_desc_cleanup()
     test_esun_parse()
     test_esun_statement_page_style()
     test_fubon_parse()
