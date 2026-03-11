@@ -8,6 +8,7 @@ from datetime import datetime
 
 # Import enhanced utilities
 from src.utils.retry import retry_openai
+from src.bank_parsers.factory import parse_with_bank_factory
 
 logger = logging.getLogger(__name__)
 
@@ -40,14 +41,29 @@ def parse_receipt_text(text: str, source_info: Dict[str, Any] = None) -> List[Di
         source_info = {}
     
     logger.info(f"Parsing receipt text ({len(text)} chars), source: {source_info.get('sender_tag', 'unknown')}")
-    
-    # Check if OpenAI API key is available
+
+    # 1) Deterministic bank parser first (accuracy-first path)
+    strict_bank_parser = os.getenv('STRICT_BANK_PARSER', 'true').lower() in {'1', 'true', 'yes', 'on'}
+    bank_result = parse_with_bank_factory(text, source_info)
+    if bank_result.matched:
+        if bank_result.transactions:
+            logger.info(
+                f"Deterministic parser matched: {bank_result.parser_name}, "
+                f"transactions={len(bank_result.transactions)}"
+            )
+            return bank_result.transactions
+
+        msg = f"Deterministic parser matched ({bank_result.parser_name}) but extracted 0 transactions"
+        if strict_bank_parser:
+            raise ReceiptParsingError(msg)
+        logger.warning(msg)
+
+    # 2) LLM path for non-bank or when strict mode disabled
     api_key = os.getenv("OPENAI_API_KEY")
     if not api_key or api_key == "your_openai_api_key_here":
         logger.info("No OpenAI API key configured, using heuristic parsing")
         return _parse_with_heuristics(text, source_info)
-    
-    # Try OpenAI first, fallback to heuristic parsing
+
     try:
         logger.info("Attempting OpenAI API parsing...")
         return _parse_with_openai_enhanced(text, source_info)

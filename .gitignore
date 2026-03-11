@@ -6,3 +6,4 @@ config/client_secrets.json
 *.pyc
 .DS_Store
 venv/
+output/
