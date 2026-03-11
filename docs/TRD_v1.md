@@ -39,6 +39,11 @@ This document describes the technical requirements for the **Gmail Receipt & Inv
 
 ### 3.4 Data Extraction (LLM‑Based)
 - **Parser Approach**: Because receipt formats vary widely, an LLM (OpenAI GPT‑4/GPT‑3.5 or compatible) will be used to parse extracted text into structured JSON.
+- **Adaptive Handling for Large Documents**: 
+  - **JSON Repair**: Enhanced stack-based mechanism to fix truncated JSON responses when LLM output exceeds token limits.
+  - **Intelligent Chunking**: Large documents (e.g., bank statements with 30+ transactions) are automatically split into smaller chunks based on transaction boundaries (dates) to stay within context windows and token limits.
+  - **Dynamic Parameter Tuning**: Automatically adjusts `max_tokens` based on input text length.
+  - **Result Merging**: Merges transactions from multiple chunks while deduplicating entries.
 - **Extracted Fields**:
   - `Date` (日期)
   - `Amount` (金額)

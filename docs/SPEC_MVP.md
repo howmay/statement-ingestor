@@ -16,7 +16,9 @@ A single-run utility script designed to scan specified Gmail accounts, filter fo
 ### 2.3 Processing & Parsing
 - Download PDF attachments from matching emails.
 - Convert PDF content to text.
-- **Parser Logic (No LLM):** Use code-based parsing (regex/custom logic per bank/vendor) to extract the following fields to minimize API costs:
+- **Parser Logic:** Primary parsing is handled by an LLM (e.g., OpenAI) to handle diverse formats with high accuracy. A heuristic/regex fallback is used when LLM is unavailable.
+- **Large Document Handling:** Supports intelligent chunking and JSON repair for large transaction lists to overcome LLM output limits.
+- **Fields:**
   - Date (日期)
   - Amount (金額)
   - Expense Name / Item (消費名目)

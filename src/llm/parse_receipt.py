@@ -2,7 +2,8 @@ import os
 import json
 import logging
 import re
-from typing import Dict, List, Any, Optional
+import time
+from typing import Dict, List, Any, Optional, Tuple
 from datetime import datetime
 
 # Import enhanced utilities
@@ -16,6 +17,11 @@ class ReceiptParsingError(Exception):
     pass
 
 
+class JSONTruncationError(Exception):
+    """Exception for truncated JSON responses."""
+    pass
+
+
 def parse_receipt_text(text: str, source_info: Dict[str, Any] = None) -> List[Dict[str, Any]]:
     """
     Parse receipt/invoice text using LLM to extract structured data.
@@ -25,19 +31,7 @@ def parse_receipt_text(text: str, source_info: Dict[str, Any] = None) -> List[Di
         source_info: Optional metadata about the source (sender, filename, etc.).
     
     Returns:
-        List of parsed transaction dictionaries. Each transaction includes:
-        - 'date': Transaction date (YYYY-MM-DD)
-        - 'amount': Transaction amount (float)
-        - 'currency': Currency code (e.g., TWD, USD, SGD)
-        - 'expense_name': Description of expense
-        - 'expense_type': Category (e.g., Food, Transportation, Shopping, Bills)
-        - 'source': Source identifier (bank name, merchant, etc.)
-        - 'confidence': Confidence score (0.0-1.0)
-        - 'raw_text_snippet': First 200 chars of text for reference
-        - 'parsed_at': Timestamp of parsing
-    
-    Raises:
-        ReceiptParsingError: If parsing fails or no valid data found.
+        List of parsed transaction dictionaries.
     """
     if not text or not text.strip():
         raise ReceiptParsingError("Empty text provided for parsing")
@@ -56,684 +50,398 @@ def parse_receipt_text(text: str, source_info: Dict[str, Any] = None) -> List[Di
     # Try OpenAI first, fallback to heuristic parsing
     try:
         logger.info("Attempting OpenAI API parsing...")
-        return _parse_with_openai(text, source_info)
+        return _parse_with_openai_enhanced(text, source_info)
     except Exception as e:
         logger.warning(f"OpenAI parsing failed: {e}, trying heuristic fallback")
         return _parse_with_heuristics(text, source_info)
 
 
+def _fix_truncated_json(json_str: str) -> Optional[str]:
+    """
+    Attempt to fix truncated JSON strings using a stack-based approach.
+    """
+    return _fix_truncated_json_enhanced(json_str)
+
+
+def _finalize_fixed_json(parsed: Any, fixed_str: str, context: Dict[str, Any] = None) -> str:
+    """Helper to apply context and return JSON string."""
+    if context and isinstance(parsed, dict):
+        if 'expected_keys' in context:
+            for key in context['expected_keys']:
+                if key not in parsed:
+                    parsed[key] = []
+        
+        if 'transactions' in parsed and isinstance(parsed['transactions'], list):
+            required_fields = ['date', 'amount', 'currency', 'expense_name', 'expense_type', 'source', 'confidence']
+            for tx in parsed['transactions']:
+                if isinstance(tx, dict):
+                    for field in required_fields:
+                        if field not in tx:
+                            tx[field] = None
+            return json.dumps(parsed, ensure_ascii=False)
+            
+    return fixed_str
+
+
+def _fix_truncated_json_enhanced(json_str: str, context: Dict[str, Any] = None) -> Optional[str]:
+    """
+    Enhanced function to fix truncated JSON strings.
+    """
+    if not json_str:
+        return None
+    
+    try:
+        json.loads(json_str)
+        return json_str
+    except json.JSONDecodeError:
+        pass
+    
+    json_str = json_str.strip()
+    if not json_str.startswith(('{', '[')):
+        return None
+    
+    def try_fix(s):
+        stack = []
+        in_string = False
+        escaped = False
+        for char in s:
+            if escaped:
+                escaped = False
+                continue
+            if char == '\\':
+                escaped = True
+                continue
+            if char == '"':
+                in_string = not in_string
+                continue
+            if in_string:
+                continue
+            if char == '{':
+                stack.append('}')
+            elif char == '[':
+                stack.append(']')
+            elif char == '}':
+                if stack and stack[-1] == '}': stack.pop()
+            elif char == ']':
+                if stack and stack[-1] == ']': stack.pop()
+        
+        fixed = s
+        if in_string:
+            fixed += '"'
+        
+        temp = fixed.strip()
+        if temp.endswith(':'):
+            fixed += ' null'
+        elif temp.endswith(','):
+            fixed = temp[:-1]
+            
+        while stack:
+            fixed += stack.pop()
+        
+        try:
+            return json.loads(fixed), fixed
+        except json.JSONDecodeError:
+            return None, None
+
+    parsed, fixed = try_fix(json_str)
+    if parsed:
+        return _finalize_fixed_json(parsed, fixed, context)
+        
+    for i in range(len(json_str) - 1, 0, -1):
+        if json_str[i] in ('}', ']', ',', '"', ':'):
+            parsed, fixed = try_fix(json_str[:i+1])
+            if parsed:
+                return _finalize_fixed_json(parsed, fixed, context)
+                
+    return None
+
+
+def _chunk_text_by_transactions(text: str, max_chunk_size: int = 3500, 
+                               min_transactions_per_chunk: int = 5) -> List[Tuple[str, List[int]]]:
+    """
+    Split text into chunks based on transaction boundaries.
+    """
+    if len(text) <= max_chunk_size:
+        return [(text, [0])]
+    
+    lines = text.split('\n')
+    transaction_starts = []
+    
+    date_patterns = [
+        r'\d{4}[-/]\d{1,2}[-/]\d{1,2}',
+        r'\d{1,2}[-/]\d{1,2}[-/]\d{4}',
+        r'\d{3}[-/]\d{1,2}[-/]\d{1,2}',
+        r'\d{4}年\d{1,2}月\d{1,2}日',
+    ]
+    
+    for i, line in enumerate(lines):
+        for pattern in date_patterns:
+            if re.search(pattern, line):
+                transaction_starts.append(i)
+                break
+    
+    if len(transaction_starts) < 2:
+        return [(text[i:i + max_chunk_size], [i]) for i in range(0, len(text), max_chunk_size)]
+    
+    chunks = []
+    current_chunk_lines = []
+    current_chunk_indices = []
+    current_size = 0
+    
+    for i, line in enumerate(lines):
+        line_size = len(line) + 1
+        is_transaction_start = i in transaction_starts
+        
+        if (current_size + line_size > max_chunk_size and 
+            len(current_chunk_indices) >= min_transactions_per_chunk and
+            is_transaction_start):
+            
+            if current_chunk_lines:
+                chunks.append(('\n'.join(current_chunk_lines), current_chunk_indices.copy()))
+            
+            current_chunk_lines = [line]
+            current_chunk_indices = [i] if is_transaction_start else []
+            current_size = line_size
+        else:
+            current_chunk_lines.append(line)
+            if is_transaction_start:
+                current_chunk_indices.append(i)
+            current_size += line_size
+    
+    if current_chunk_lines:
+        chunks.append(('\n'.join(current_chunk_lines), current_chunk_indices))
+    
+    logger.info(f"Split text into {len(chunks)} chunks")
+    return chunks
+
+
+def _should_enable_chunking(text: str, source_info: Dict[str, Any]) -> bool:
+    """Determine whether to enable chunking."""
+    if len(text) > 8000:
+        return True
+    sender_tag = source_info.get('sender_tag', '').lower()
+    if 'hsbc' in sender_tag and len(text) > 5000:
+        return True
+    date_count = len(re.findall(r'\d{4}[-/]\d{1,2}[-/]\d{1,2}', text))
+    if date_count > 25:
+        return True
+    return False
+
+
+def _calculate_max_tokens(text_length: int) -> int:
+    """Calculate max_tokens."""
+    return min(4000, 1000 + (text_length // 2))
+
+
+def _merge_transaction_results(all_transactions: List[List[Dict[str, Any]]]) -> List[Dict[str, Any]]:
+    """Merge and deduplicate results."""
+    if not all_transactions:
+        return []
+    flat_transactions = []
+    for chunk_transactions in all_transactions:
+        flat_transactions.extend(chunk_transactions)
+    seen = set()
+    unique_transactions = []
+    for tx in flat_transactions:
+        key = (tx.get('date'), f"{float(tx.get('amount', 0)):.2f}" if tx.get('amount') is not None else "0.00", tx.get('expense_name', '')[:50])
+        if key not in seen:
+            seen.add(key)
+            unique_transactions.append(tx)
+    return unique_transactions
+
+
 @retry_openai
-def _parse_with_openai(text: str, source_info: Dict[str, Any]) -> List[Dict[str, Any]]:
-    """
-    Parse receipt text using OpenAI API with retry mechanism.
-    
-    Args:
-        text: Text content.
-        source_info: Source metadata.
-    
-    Returns:
-        Parsed structured data.
-    
-    Raises:
-        ReceiptParsingError: If parsing fails.
-    """
+def _parse_with_openai_enhanced(text: str, source_info: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Enhanced OpenAI parsing."""
     try:
         from openai import OpenAI
     except ImportError:
-        raise ReceiptParsingError("OpenAI Python package not installed. Install with: pip install openai")
+        raise ReceiptParsingError("OpenAI Python package not installed")
     
-    # Get API key from environment
     api_key = os.getenv("OPENAI_API_KEY")
     if not api_key or api_key == "your_openai_api_key_here":
-        raise ReceiptParsingError("OPENAI_API_KEY not configured in .env file")
+        raise ReceiptParsingError("OPENAI_API_KEY not configured")
     
-    # Initialize OpenAI client
     client = OpenAI(api_key=api_key)
-    logger.info(f"Initialized OpenAI client for receipt parsing (model: gpt-4o-mini)")
-    
-    # Truncate text to fit token limits (keep first 6000 chars for context)
-    truncated_text = text[:6000]
-    if len(text) > 6000:
-        logger.info(f"Truncated text from {len(text)} to 6000 characters for LLM")
-
-    # Get sender tag for context
     sender_tag = source_info.get('sender_tag', 'unknown')
-    sender = source_info.get('sender', '')
-
-    # Determine likely source based on sender
     source = "unknown"
-    if 'hsbc' in sender_tag:
-        source = "HSBC Bank"
-    elif 'fubon' in sender_tag:
-        source = "Fubon Bank"
-    elif 'esunbank' in sender_tag:
-        source = "Esun Bank"
-    elif 'apple' in sender_tag:
-        source = "Apple"
-    elif 'uber' in sender_tag:
-        source = "Uber"
-    elif 'amazon' in sender_tag:
-        source = "Amazon"
-
-    # Build system prompt
-    system_prompt = """You are a financial data extraction expert. Extract structured information from receipt/invoice/bank statement text.
-
-If the text contains multiple transactions (like a bank statement), extract ALL transactions.
-Each transaction should have the following fields:
-1. date: Transaction date in YYYY-MM-DD format.
-2. amount: Transaction amount as a float number.
-3. currency: Currency code (TWD, USD, SGD, HKD, etc.).
-4. expense_name: Short description of the expense.
-5. expense_type: Category from: Food, Transportation, Shopping, Bills, Entertainment, Healthcare, Education, Travel, Other.
-6. source: Merchant or bank name.
-7. confidence: Confidence score (0.0 to 1.0).
-
-Return ONLY a JSON object with this exact shape:
-{
-  "transactions": [
-    {
-      "date": "YYYY-MM-DD",
-      "amount": 123.45,
-      "currency": "TWD",
-      "expense_name": "...",
-      "expense_type": "Shopping",
-      "source": "...",
-      "confidence": 0.9
-    }
-  ]
-}
-
-If there is only one transaction, keep one object in the array.
-If nothing can be extracted, return {"transactions": []}.
-Do not include any extra keys.
-"""
-
-    # Build user prompt
-    user_prompt = f"""Extract financial data from this {source} transaction text:
-
-Text content:
-{truncated_text}
-
-Additional context:
-- Sender: {sender}
-- Source tag: {sender_tag}
-- Original filename: {source_info.get('filename', 'unknown')}
-
-Return ONLY a JSON object with a `transactions` array.
-Each item must include: date, amount, currency, expense_name, expense_type, source, confidence.
-Ignore summary/header/footer rows when transaction detail rows exist."""
+    if 'hsbc' in sender_tag: source = "HSBC Bank"
+    elif 'fubon' in sender_tag: source = "Fubon Bank"
+    elif 'esunbank' in sender_tag: source = "Esun Bank"
+    elif 'apple' in sender_tag: source = "Apple"
+    elif 'uber' in sender_tag: source = "Uber"
+    elif 'amazon' in sender_tag: source = "Amazon"
     
-    try:
+    system_prompt = "You are a financial data extraction expert. Extract ALL transactions. Return JSON only."
+    user_prompt_template = "Extract transactions from {source} text:\n{text}"
+
+    if _should_enable_chunking(text, source_info):
+        chunks = _chunk_text_by_transactions(text)
+        all_transactions = []
+        for i, (chunk_text, _) in enumerate(chunks):
+            user_prompt = user_prompt_template.format(text=chunk_text, source=source)
+            try:
+                response = client.chat.completions.create(
+                    model="gpt-4o-mini",
+                    messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}],
+                    temperature=0.1,
+                    max_tokens=_calculate_max_tokens(len(chunk_text)),
+                    response_format={"type": "json_object"}
+                )
+                result_text = response.choices[0].message.content
+                fixed_json = _fix_truncated_json_enhanced(result_text, {'expected_keys': ['transactions']})
+                parsed = json.loads(fixed_json or result_text)
+                all_transactions.append(_extract_and_validate_transactions(parsed, source_info, chunk_text))
+            except Exception as e:
+                logger.warning(f"Chunk {i+1} failed: {e}")
+        return _merge_transaction_results(all_transactions)
+    else:
+        user_prompt = user_prompt_template.format(text=text, source=source)
         response = client.chat.completions.create(
-            model="gpt-4o-mini",  # Use cost-effective model
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt}
-            ],
-            temperature=0.1,  # Low temperature for consistent output
-            max_tokens=2000,
+            model="gpt-4o-mini",
+            messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}],
+            temperature=0.1,
+            max_tokens=4000,
             response_format={"type": "json_object"}
         )
-        
         result_text = response.choices[0].message.content
-        logger.info(f"OpenAI response received ({len(result_text)} chars): {result_text[:200]}...")
-        
-        # Parse JSON response
-        try:
-            parsed = json.loads(result_text)
-        except json.JSONDecodeError as e:
-            logger.error(f"Failed to parse OpenAI JSON response: {e}, response: {result_text}")
-            raise ReceiptParsingError(f"Invalid JSON response from OpenAI: {e}")
-        
-        # Normalize response payload into a transaction list
-        required_fields = ['date', 'amount', 'currency', 'expense_name', 'expense_type', 'source', 'confidence']
-        transactions_raw: List[Dict[str, Any]] = []
+        fixed_json = _fix_truncated_json_enhanced(result_text, {'expected_keys': ['transactions']})
+        parsed = json.loads(fixed_json or result_text)
+        return _extract_and_validate_transactions(parsed, source_info, text)
 
-        if isinstance(parsed, list):
-            transactions_raw = parsed
-        elif isinstance(parsed, dict):
-            for key in ('transactions', 'items', 'data', 'results'):
-                value = parsed.get(key)
-                if isinstance(value, list):
-                    transactions_raw = value
-                    break
 
-            # Backward compatibility: sometimes model returns a single transaction object
-            if not transactions_raw and any(field in parsed for field in required_fields):
-                transactions_raw = [parsed]
-        else:
-            raise ReceiptParsingError(f"Unexpected JSON response type: {type(parsed)}")
-
-        transactions = []
-        for i, tx in enumerate(transactions_raw):
-            if not isinstance(tx, dict):
-                logger.warning(f"Transaction {i} is not a dictionary, skipping")
-                continue
-
-            for field in required_fields:
-                if field not in tx:
-                    tx[field] = None
-
-            validated_tx = _validate_and_normalize_transaction(tx, source_info)
-            _enrich_expense_name_from_text(validated_tx, text)
-            validated_tx['raw_text_snippet'] = text[:200]
-            validated_tx['parsed_at'] = datetime.now().isoformat()
-            validated_tx['llm_model'] = 'gpt-4o-mini'
-            validated_tx['parsing_method'] = 'openai'
-            transactions.append(validated_tx)
-        
-        if not transactions:
-            raise ReceiptParsingError("No valid transactions extracted from text")
-        
-        logger.info(f"Successfully parsed {len(transactions)} transaction(s)")
-        return transactions
-        
-    except Exception as e:
-        raise ReceiptParsingError(f"OpenAI API error: {e}")
+def _extract_and_validate_transactions(parsed: Any, source_info: Dict[str, Any], original_text: str) -> List[Dict[str, Any]]:
+    """Common extraction logic."""
+    required_fields = ['date', 'amount', 'currency', 'expense_name', 'expense_type', 'source', 'confidence']
+    transactions_raw = []
+    if isinstance(parsed, list): transactions_raw = parsed
+    elif isinstance(parsed, dict):
+        for key in ('transactions', 'items', 'data', 'results'):
+            if isinstance(parsed.get(key), list):
+                transactions_raw = parsed[key]
+                break
+        if not transactions_raw and any(f in parsed for f in required_fields): transactions_raw = [parsed]
+    
+    transactions = []
+    for tx in transactions_raw:
+        if not isinstance(tx, dict): continue
+        for field in required_fields:
+            if field not in tx: tx[field] = None
+        validated_tx = _validate_and_normalize_transaction(tx, source_info)
+        _enrich_expense_name_from_text(validated_tx, original_text)
+        validated_tx['raw_text_snippet'] = original_text[:200]
+        validated_tx['parsed_at'] = datetime.now().isoformat()
+        validated_tx['llm_model'] = 'gpt-4o-mini'
+        validated_tx['parsing_method'] = 'openai'
+        transactions.append(validated_tx)
+    if not transactions: raise ReceiptParsingError("No transactions extracted")
+    return transactions
 
 
 def _parse_with_heuristics(text: str, source_info: Dict[str, Any]) -> List[Dict[str, Any]]:
-    """
-    Fallback heuristic parsing when LLM is unavailable.
-    
-    Args:
-        text: Text content.
-        source_info: Source metadata.
-    
-    Returns:
-        List of parsed structured data (multiple transactions if possible).
-    """
-    logger.info("Using heuristic fallback parsing")
-    
-    # First attempt to extract multiple transactions
+    """Heuristic fallback."""
+    logger.info("Using heuristics")
     transactions = _extract_multiple_transactions_heuristic(text, source_info)
-    if transactions:
-        logger.info(f"Heuristic multi-transaction extraction found {len(transactions)} transaction(s)")
-        # Validate and normalize each transaction
-        validated_transactions = []
-        for tx in transactions:
-            validated = _validate_and_normalize_transaction(tx, source_info)
-            validated_transactions.append(validated)
-        return validated_transactions
-    
-    # Fallback to single transaction extraction
-    logger.info("No multiple transactions found, falling back to single transaction extraction")
-    single_tx = _extract_single_transaction_heuristic(text, source_info)
-    validated = _validate_and_normalize_transaction(single_tx, source_info)
-    logger.info(f"Heuristic parsing result: {validated.get('expense_name')} - {validated.get('amount')}")
-    return [validated]
+    if not transactions:
+        transactions = [_extract_single_transaction_heuristic(text, source_info)]
+    return [_validate_and_normalize_transaction(tx, source_info) for tx in transactions]
 
 
 def _extract_multiple_transactions_heuristic(text: str, source_info: Dict[str, Any]) -> List[Dict[str, Any]]:
-    """
-    Attempt to extract multiple transactions from text using heuristic patterns.
-    Returns empty list if no transaction patterns found.
-    """
-    # Determine source
+    """Extract multiple via regex."""
     sender_tag = source_info.get('sender_tag', 'unknown')
     source = "unknown"
-    if 'hsbc' in sender_tag:
-        source = "HSBC Bank"
-    elif 'fubon' in sender_tag:
-        source = "Fubon Bank"
-    elif 'esunbank' in sender_tag:
-        source = "Esun Bank"
+    if 'hsbc' in sender_tag: source = "HSBC Bank"
+    elif 'fubon' in sender_tag: source = "Fubon Bank"
+    elif 'esunbank' in sender_tag: source = "Esun Bank"
     
-    # Common date patterns (includes ROC year format 115/02/21)
-    date_patterns = [
-        r'(\d{4})[-/](\d{1,2})[-/](\d{1,2})',  # YYYY-MM-DD, YYYY/MM/DD
-        r'(\d{3})[-/](\d{1,2})[-/](\d{1,2})',  # ROC year format (e.g., 115/02/21)
-        r'(\d{1,2})[-/](\d{1,2})[-/](\d{4})',  # DD-MM-YYYY, DD/MM/YYYY
-        r'(\d{4})年(\d{1,2})月(\d{1,2})日',     # Chinese date format
-        r'(\d{1,2})[/](\d{1,2})',               # MM/DD or DD/MM (ambiguous)
-    ]
-
-    # Currency-specific amount patterns (stricter to reduce false positives)
-    amount_patterns = [
-        (r'(?:NT\$|TWD)\s*(-?[0-9,]+(?:\.[0-9]+)?)', 'TWD'),
-        (r'(?:US\$|USD)\s*(-?[0-9,]+(?:\.[0-9]+)?)', 'USD'),
-        (r'(?:S\$|SGD)\s*(-?[0-9,]+(?:\.[0-9]+)?)', 'SGD'),
-        (r'(?:HK\$|HKD)\s*(-?[0-9,]+(?:\.[0-9]+)?)', 'HKD'),
-        (r'(-?[0-9,]+(?:\.[0-9]+)?)\s*元', 'TWD'),
-    ]
+    date_patterns = [r'(\d{4})[-/](\d{1,2})[-/](\d{1,2})', r'(\d{3})[-/](\d{1,2})[-/](\d{1,2})', r'(\d{1,2})[-/](\d{1,2})[-/](\d{4})', r'(\d{4})年(\d{1,2})月(\d{1,2})日']
+    amount_patterns = [(r'(?:NT\$|TWD)\s*(-?[0-9,]+(?:\.[0-9]+)?)', 'TWD'), (r'(?:US\$|USD)\s*(-?[0-9,]+(?:\.[0-9]+)?)', 'USD')]
     
-    # Split text into lines
     lines = text.split('\n')
     transactions = []
-    
-    for line_num, line in enumerate(lines):
+    for line in lines:
         line = line.strip()
-        if not line or len(line) < 10:
-            continue
-
-        # Skip lines that are obviously headers/footers or non-transaction indicators
-        lower_line = line.lower()
-        if any(keyword in lower_line for keyword in ['statement', 'total', 'summary', 'balance', 'page', 'description', 'amount', '帳戶總覽', '本月餘額']):
-            continue
-        if '%' in line or re.search(r'\d+\s+/\s+\d+', line):
-            # Skip rate / installment-info style lines (e.g. "7.88%", "10,000 / 100,000")
-            continue
-
-        # Look for date
+        if not line or len(line) < 10: continue
+        if any(kw in line.lower() for kw in ['statement', 'total', 'summary']): continue
         date_str = None
         for pattern in date_patterns:
             match = re.search(pattern, line)
-            if not match:
-                continue
-
-            try:
-                if '年' in pattern:
-                    year, month, day = match.groups()
-                elif len(match.group(1)) == 4:
-                    year, month, day = match.groups()
-                elif len(match.group(1)) == 3:
-                    # ROC year, convert to Gregorian
-                    roc_year, month, day = match.groups()
-                    year = str(int(roc_year) + 1911)
-                else:
-                    # MM/DD fallback. Avoid matching inside ROC date like 115/02/21.
-                    if re.search(r'\d{3}[-/]\d{1,2}[-/]\d{1,2}', line):
-                        continue
-                    month, day = match.groups()[:2]
-                    year = str(datetime.now().year)
-
-                date_str = f"{int(year):04d}-{int(month):02d}-{int(day):02d}"
-                break
-            except (ValueError, IndexError):
-                continue
-
-        # Look for amount with explicit currency first
-        amount_val = None
-        currency = None
-        for pattern, detected_currency in amount_patterns:
+            if match:
+                try:
+                    if '年' in pattern: y, m, d = match.groups()
+                    elif len(match.group(1)) == 4: y, m, d = match.groups()
+                    elif len(match.group(1)) == 3: y, m, d = str(int(match.group(1))+1911), match.group(2), match.group(3)
+                    else: m, d, y = match.groups()
+                    date_str = f"{int(y):04d}-{int(m):02d}-{int(d):02d}"
+                    break
+                except: continue
+        amount_val, currency = None, None
+        for pattern, curr in amount_patterns:
             match = re.search(pattern, line)
-            if not match:
-                continue
-
-            try:
-                clean = match.group(1).replace(',', '')
-                if clean.replace('.', '', 1).replace('-', '', 1).isdigit():
-                    amount_val = float(clean)
-                    currency = detected_currency
+            if match:
+                try:
+                    amount_val = float(match.group(1).replace(',', ''))
+                    currency = curr
                     break
-            except (ValueError, IndexError):
-                continue
-
-        # Skip ambiguous lines with no clear currency amount
-        if amount_val is None:
-            continue
-        
-        # If we found both date and amount, consider it a transaction
+                except: continue
         if date_str and amount_val:
-            # Extract description: the line itself, maybe remove date and amount parts
-            desc = line
-            # Optional: clean up date and amount patterns from desc
-            # For now keep as is
-            
-            # Determine expense type based on keywords
-            expense_type = 'Other'
-            text_lower = line.lower()
-            expense_keywords = {
-                'Food': ['food', 'restaurant', 'meal', '咖啡', '餐廳', '小吃', '早餐', '午餐', '晚餐'],
-                'Transportation': ['transport', 'uber', 'taxi', 'metro', 'mrt', 'bus', 'gas', 'fuel', '加油', '交通'],
-                'Shopping': ['shopping', 'store', 'market', 'purchase', 'buy', 'amazon', 'shop', '購物', '商城'],
-                'Bills': ['bill', 'payment', 'utility', 'electric', 'water', 'phone', 'internet', '信用卡', '帳單', '繳費'],
-                'Entertainment': ['movie', 'cinema', 'concert', 'game', 'netflix', 'spotify', '娛樂', '電影', '音樂'],
-                'Healthcare': ['medical', 'hospital', 'clinic', 'pharmacy', 'doctor', 'health', '醫療', '醫院', '藥局'],
-                'Travel': ['travel', 'flight', 'hotel', 'airbnb', 'vacation', 'trip', '旅遊', '飯店', '機票'],
-            }
-            for cat, keywords in expense_keywords.items():
-                if any(keyword in text_lower for keyword in keywords):
-                    expense_type = cat
-                    break
-            
-            transaction = {
-                'date': date_str,
-                'amount': amount_val,
-                'currency': currency,
-                'expense_name': desc[:100],  # truncate
-                'expense_type': expense_type,
-                'source': source,
-                'confidence': 0.5,  # moderate confidence for heuristic multi
-                'raw_text_snippet': line[:200],
-                'parsed_at': datetime.now().isoformat(),
-                'llm_model': None,
-                'parsing_method': 'heuristic'
-            }
-            transactions.append(transaction)
-    
+            transactions.append({'date': date_str, 'amount': amount_val, 'currency': currency, 'expense_name': line[:100], 'expense_type': 'Other', 'source': source, 'confidence': 0.5})
     return transactions
 
 
 def _extract_single_transaction_heuristic(text: str, source_info: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Original single transaction heuristic extraction.
-    Returns a single transaction dict (not list).
-    """
+    """Single transaction regex."""
     sender_tag = source_info.get('sender_tag', 'unknown')
     source = "unknown"
-    if 'hsbc' in sender_tag:
-        source = "HSBC Bank"
-    elif 'fubon' in sender_tag:
-        source = "Fubon Bank"
-    elif 'esunbank' in sender_tag:
-        source = "Esun Bank"
-    
-    result = {
-        'date': None,
-        'amount': None,
-        'currency': None,
-        'expense_name': 'Bank Statement Transaction',
-        'expense_type': 'Bills',
-        'source': source,
-        'confidence': 0.3,
-        'raw_text_snippet': text[:200],
-        'parsed_at': datetime.now().isoformat(),
-        'llm_model': None,
-        'parsing_method': 'heuristic'
-    }
-    
-    # Date extraction (simplified)
-    date_patterns = [
-        r'(\d{4})[-/](\d{1,2})[-/](\d{1,2})',
-        r'(\d{1,2})[-/](\d{1,2})[-/](\d{4})',
-        r'(\d{4})年(\d{1,2})月(\d{1,2})日',
-    ]
-    for pattern in date_patterns:
-        match = re.search(pattern, text[:1000])
-        if match:
-            try:
-                if '年' in pattern:
-                    year, month, day = match.groups()
-                elif len(match.group(1)) == 4:
-                    year, month, day = match.groups()
-                else:
-                    day, month, year = match.groups()
-                result['date'] = f"{year}-{int(month):02d}-{int(day):02d}"
-                result['confidence'] = min(result['confidence'] + 0.2, 0.8)
-                break
-            except (ValueError, IndexError):
-                continue
-    
-    # Amount extraction (simplified)
-    amount_patterns = [
-        r'[NT$US$S$HK$¥€£]?\s*([0-9,]+\.?[0-9]*)\s*[元美元新幣港幣]?',
-        r'([0-9,]+\.?[0-9]*)\s*[NTD|USD|SGD|HKD|TWD]',
-    ]
-    for pattern in amount_patterns:
-        matches = re.findall(pattern, text[:2000])
-        if matches:
-            try:
-                amounts = []
-                for match in matches:
-                    if isinstance(match, tuple):
-                        match = match[0]
-                    clean = match.replace(',', '')
-                    if clean.replace('.', '', 1).isdigit():
-                        amounts.append(float(clean))
-                if amounts:
-                    result['amount'] = max(amounts)
-                    result['confidence'] = min(result['confidence'] + 0.2, 0.8)
-                    if 'NT$' in text or 'TWD' in text:
-                        result['currency'] = 'TWD'
-                    elif 'US$' in text or 'USD' in text:
-                        result['currency'] = 'USD'
-                    elif 'S$' in text or 'SGD' in text:
-                        result['currency'] = 'SGD'
-                    elif 'HK$' in text or 'HKD' in text:
-                        result['currency'] = 'HKD'
-                    break
-            except (ValueError, TypeError):
-                continue
-    
-    if result['amount'] is None:
-        decimal_pattern = r'\b([0-9,]+\.?[0-9]{2})\b'
-        matches = re.findall(decimal_pattern, text[:1500])
-        if matches:
-            try:
-                amounts = []
-                for match in matches:
-                    clean = match.replace(',', '')
-                    if clean.replace('.', '', 1).isdigit():
-                        amount = float(clean)
-                        if 10 <= amount <= 100000:
-                            amounts.append(amount)
-                if amounts:
-                    result['amount'] = max(amounts)
-                    result['confidence'] = min(result['confidence'] + 0.1, 0.7)
-                    result['currency'] = 'TWD'
-            except (ValueError, TypeError):
-                pass
-    
-    # Expense type
-    text_lower = text.lower()
-    expense_keywords = {
-        'Food': ['food', 'restaurant', 'meal', '咖啡', '餐廳', '小吃', '早餐', '午餐', '晚餐'],
-        'Transportation': ['transport', 'uber', 'taxi', 'metro', 'mrt', 'bus', 'gas', 'fuel', '加油', '交通'],
-        'Shopping': ['shopping', 'store', 'market', 'purchase', 'buy', 'amazon', 'shop', '購物', '商城'],
-        'Bills': ['bill', 'payment', 'utility', 'electric', 'water', 'phone', 'internet', '信用卡', '帳單', '繳費'],
-        'Entertainment': ['movie', 'cinema', 'concert', 'game', 'netflix', 'spotify', '娛樂', '電影', '音樂'],
-        'Healthcare': ['medical', 'hospital', 'clinic', 'pharmacy', 'doctor', 'health', '醫療', '醫院', '藥局'],
-        'Travel': ['travel', 'flight', 'hotel', 'airbnb', 'vacation', 'trip', '旅遊', '飯店', '機票'],
-    }
-    for expense_type, keywords in expense_keywords.items():
-        if any(keyword in text_lower for keyword in keywords):
-            result['expense_type'] = expense_type
-            result['confidence'] = min(result['confidence'] + 0.1, 0.9)
-            break
-    
+    if 'hsbc' in sender_tag: source = "HSBC Bank"
+    elif 'fubon' in sender_tag: source = "Fubon Bank"
+    elif 'esunbank' in sender_tag: source = "Esun Bank"
+    result = {'date': None, 'amount': None, 'currency': 'TWD', 'expense_name': 'Bank Transaction', 'expense_type': 'Bills', 'source': source, 'confidence': 0.3}
+    match = re.search(r'(\d{4})[-/](\d{1,2})[-/](\d{1,2})', text[:1000])
+    if match: result['date'] = f"{match.group(1)}-{int(match.group(2)):02d}-{int(match.group(3)):02d}"
+    match = re.search(r'NT\$?\s*([0-9,]+\.[0-9]{2})', text[:2000])
+    if match: result['amount'] = float(match.group(1).replace(',', ''))
     return result
 
 
 def _enrich_expense_name_from_text(parsed: Dict[str, Any], text: str) -> None:
-    """
-    Fill missing/generic expense_name using a best-match raw line from extracted text.
-    """
-    current_name = str(parsed.get('expense_name') or '').strip().lower()
-    if current_name and current_name not in {'transaction', 'bank statement transaction', 'null'}:
-        return
-
-    date_str = parsed.get('date')
+    """Enrich description."""
+    if parsed.get('expense_name') and parsed['expense_name'] != 'Bank Transaction': return
     amount = parsed.get('amount')
-    if not date_str or amount is None:
-        return
-
-    month_day = None
-    try:
-        month_day = datetime.strptime(str(date_str), '%Y-%m-%d').strftime('%m/%d')
-    except Exception:
-        pass
-
-    try:
-        amount_value = abs(float(amount))
-    except Exception:
-        return
-
-    best_line = None
-    best_score = -1
-
-    for raw_line in text.splitlines():
-        line = raw_line.strip()
-        if not line or line.startswith('--- Page'):
-            continue
-
-        number_matches = re.findall(r'-?[0-9][0-9,]*(?:\.[0-9]+)?', line)
-        if not number_matches:
-            continue
-
-        has_amount = False
-        for token in number_matches:
-            try:
-                token_value = abs(float(token.replace(',', '')))
-                if abs(token_value - amount_value) < 0.01:
-                    has_amount = True
-                    break
-            except ValueError:
-                continue
-
-        if not has_amount:
-            continue
-
-        score = 1
-        if month_day and month_day in line:
-            score += 2
-        if re.search(r'\d{1,2}/\d{1,2}\s+\d{1,2}/\d{1,2}', line):
-            score += 1
-
-        if score > best_score:
-            best_score = score
-            best_line = line
-
-    if best_line:
-        parsed['expense_name'] = best_line[:100]
+    if amount is None: return
+    amt_str = f"{abs(float(amount)):,.2f}"
+    for line in text.splitlines():
+        if amt_str in line:
+            parsed['expense_name'] = line.strip()[:100]
+            break
 
 
 def _validate_and_normalize_transaction(parsed: Dict[str, Any], source_info: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Validate and normalize parsed data.
-
-    Args:
-        parsed: Raw parsed data.
-        source_info: Source metadata.
-
-    Returns:
-        Validated and normalized data.
-    """
-    # Validate date format
+    """Validate data."""
     if parsed.get('date'):
-        date_str = str(parsed['date'])
-        try:
-            # Try to parse and reformat date
-            for fmt in ['%Y-%m-%d', '%Y/%m/%d', '%d/%m/%Y', '%d-%m-%Y', '%Y年%m月%d日']:
-                try:
-                    dt = datetime.strptime(date_str, fmt)
-                    parsed['date'] = dt.strftime('%Y-%m-%d')
-                    break
-                except ValueError:
-                    continue
-        except (ValueError, TypeError):
-            parsed['date'] = None
-            if parsed.get('confidence', 0) > 0:
-                parsed['confidence'] = max(parsed['confidence'] - 0.2, 0.1)
-
-    # Validate amount
+        try: datetime.strptime(str(parsed['date']), '%Y-%m-%d')
+        except: parsed['date'] = None
     if parsed.get('amount') is not None:
-        try:
-            # Convert to float if it's a string
-            if isinstance(parsed['amount'], str):
-                parsed['amount'] = float(parsed['amount'].replace(',', ''))
-            elif not isinstance(parsed['amount'], (int, float)):
-                parsed['amount'] = None
-        except (ValueError, TypeError):
-            parsed['amount'] = None
-
-    # Set default currency if missing
-    if not parsed.get('currency'):
-        # Default based on source
-        sender_tag = source_info.get('sender_tag', '')
-        if 'sg' in sender_tag:
-            parsed['currency'] = 'SGD'
-        elif 'tw' in sender_tag:
-            parsed['currency'] = 'TWD'
-        elif 'hk' in sender_tag:
-            parsed['currency'] = 'HKD'
-        else:
-            parsed['currency'] = 'USD'
-
-    # Validate expense name
-    if not parsed.get('expense_name') or parsed['expense_name'] == 'null':
-        parsed['expense_name'] = 'Transaction'
-        if source_info.get('subject'):
-            parsed['expense_name'] = f"Transaction: {source_info['subject'][:50]}"
-
-    # Validate expense type
-    valid_types = ['Food', 'Transportation', 'Shopping', 'Bills', 'Entertainment',
-                   'Healthcare', 'Education', 'Travel', 'Other']
-    if parsed.get('expense_type') not in valid_types:
+        try: parsed['amount'] = float(str(parsed['amount']).replace(',', ''))
+        except: parsed['amount'] = None
+    if not parsed.get('currency'): parsed['currency'] = 'TWD'
+    if parsed.get('expense_type') not in ['Food', 'Transportation', 'Shopping', 'Bills', 'Entertainment', 'Healthcare', 'Education', 'Travel', 'Other']:
         parsed['expense_type'] = 'Other'
-
-    # Validate confidence
-    confidence = parsed.get('confidence', 0)
-    if not isinstance(confidence, (int, float)) or confidence < 0 or confidence > 1:
-        parsed['confidence'] = 0.5
-
+    parsed['confidence'] = float(parsed.get('confidence', 0.5))
     return parsed
 
 
 def parse_multiple_receipts(texts: List[str], source_infos: List[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
-    """
-    Parse multiple receipt texts.
-    
-    Args:
-        texts: List of text contents.
-        source_infos: Optional list of source metadata.
-    
-    Returns:
-        List of parsed transactions (flattened from all texts).
-    """
-    if source_infos is None:
-        source_infos = [{} for _ in range(len(texts))]
-    
-    if len(texts) != len(source_infos):
-        raise ValueError("Number of texts must match number of source_infos")
-    
-    all_transactions = []
-    for i, (text, source_info) in enumerate(zip(texts, source_infos)):
-        try:
-            transactions = parse_receipt_text(text, source_info)
-            all_transactions.extend(transactions)
-            logger.info(f"Parsed {i+1}/{len(texts)} receipts ({len(transactions)} transactions)")
-        except ReceiptParsingError as e:
-            logger.error(f"Failed to parse receipt {i+1}: {e}")
-            # Add error entry as a transaction-like object with error flag
-            all_transactions.append({
-                'error': str(e),
-                'text_index': i,
-                'parsed_at': datetime.now().isoformat(),
-                'expense_name': f'Error parsing receipt {i+1}',
-                'expense_type': 'Other',
-                'confidence': 0.0
-            })
-    
-    return all_transactions
+    """Parse list."""
+    if source_infos is None: source_infos = [{} for _ in range(len(texts))]
+    all_results = []
+    for t, s in zip(texts, source_infos):
+        try: all_results.extend(parse_receipt_text(t, s))
+        except Exception as e: logger.error(f"Error: {e}")
+    return all_results
 
 
 if __name__ == '__main__':
-    # Test with sample text
-    import sys
     logging.basicConfig(level=logging.INFO)
-    
-    test_text = """
-    HSBC Credit Card Statement
-    Statement Date: 2024-12-31
-    Card Number: **** **** **** 1234
-    
-    Transaction Date: 2024-12-25
-    Merchant: Uber Technologies Inc.
-    Amount: NT$350.00
-    Description: Uber ride from Taipei Main Station to Xinyi District
-    
-    Transaction Date: 2024-12-24
-    Merchant: Amazon.com
-    Amount: NT$1,250.00
-    Description: Online shopping - Electronics
-    
-    Total Amount Due: NT$1,600.00
-    Due Date: 2025-01-15
-    """
-    
-    test_source = {
-        'sender': 'HSBC@mail.hsbc.com.sg',
-        'sender_tag': 'hsbc_sg',
-        'filename': 'hsbc_statement.pdf',
-        'subject': 'Your HSBC Credit Card Statement - December 2024'
-    }
-    
-    try:
-        print("Testing receipt parsing...")
-        result = parse_receipt_text(test_text, test_source)
-        print(f"\nParsed result:")
-        print(json.dumps(result, indent=2, ensure_ascii=False))
-    except Exception as e:
-        print(f"Error: {e}")
-        sys.exit(1)
+    print(json.dumps(parse_receipt_text("2024-12-25 Uber NT$350.00", {'sender_tag': 'hsbc'}), indent=2))

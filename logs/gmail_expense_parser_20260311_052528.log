@@ -1,0 +1,1697 @@
+2026-03-11 05:25:28 - src.utils.logger - INFO - Logging initialized with level: INFO
+2026-03-11 05:25:28 - src.utils.logger - INFO - Log directory: /var/home/zh/Documents/gmail-expense-parser/logs
+2026-03-11 05:25:28 - src.utils.logger - INFO - Log to file: True, Log to console: True
+2026-03-11 05:25:28 - __main__ - INFO - Starting Gmail Expense Parser
+2026-03-11 05:25:28 - __main__ - INFO - Validating configuration...
+2026-03-11 05:25:28 - __main__ - INFO - Configuration validation passed
+2026-03-11 05:25:28 - __main__ - INFO - Starting Gmail authentication...
+2026-03-11 05:25:28 - src.auth.gmail_auth - INFO - Loading credentials from config/token.json
+2026-03-11 05:25:28 - src.auth.gmail_auth - INFO - Refreshing expired credentials
+2026-03-11 05:25:29 - googleapiclient.discovery_cache - INFO - file_cache is only supported with oauth2client<4.0.0
+2026-03-11 05:25:29 - googleapiclient.discovery_cache - INFO - file_cache is only supported with oauth2client<4.0.0
+2026-03-11 05:25:29 - src.auth.gmail_auth - INFO - Gmail API service created successfully
+2026-03-11 05:25:30 - __main__ - INFO - Authenticated as: harvey.chen.0425@gmail.com
+2026-03-11 05:25:30 - __main__ - INFO - Searching for emails... [senders=['HSBC@mail.hsbc.com.sg', 'service@bhu.taipeifubon.com.tw', 'estatement@esunbank.com', 'cards@estatements.hsbc.com.tw'] keywords=['信用卡', '電子帳單', '銀行'] max_results=50]
+2026-03-11 05:25:30 - src.fetch.fetch_emails - INFO - Starting email search with:
+2026-03-11 05:25:30 - src.fetch.fetch_emails - INFO -   - Senders: ['HSBC@mail.hsbc.com.sg', 'service@bhu.taipeifubon.com.tw', 'estatement@esunbank.com', 'cards@estatements.hsbc.com.tw']
+2026-03-11 05:25:30 - src.fetch.fetch_emails - INFO -   - Keywords: ['信用卡', '電子帳單', '銀行']
+2026-03-11 05:25:30 - src.fetch.fetch_emails - INFO -   - Max results: 50
+2026-03-11 05:25:30 - src.fetch.fetch_emails - INFO - Searching emails with query: (from:"HSBC@mail.hsbc.com.sg" OR from:"service@bhu.taipeifubon.com.tw" OR from:"estatement@esunbank.com" OR from:"cards@estatements.hsbc.com.tw") ("信用卡" OR "電子帳單" OR "銀行") has:attachment filename:pdf
+2026-03-11 05:25:31 - src.fetch.fetch_emails - INFO - Page 1: Found 50 messages
+2026-03-11 05:25:56 - src.fetch.fetch_emails - INFO - Reached maximum results limit: 50
+2026-03-11 05:25:56 - src.fetch.fetch_emails - INFO - Email search completed. Total emails found: 50
+2026-03-11 05:25:56 - __main__ - INFO - Found 50 matching email(s) [senders=['HSBC@mail.hsbc.com.sg', 'service@bhu.taipeifubon.com.tw', 'estatement@esunbank.com', 'cards@estatements.hsbc.com.tw'] keywords=['信用卡', '電子帳單', '銀行'] max_results=50]
+2026-03-11 05:25:56 - __main__ - INFO - Downloading PDF attachments... [senders=['HSBC@mail.hsbc.com.sg', 'service@bhu.taipeifubon.com.tw', 'estatement@esunbank.com', 'cards@estatements.hsbc.com.tw'] keywords=['信用卡', '電子帳單', '銀行'] max_results=50]
+2026-03-11 05:25:56 - src.fetch.download_pdfs - INFO - Processing attachments from: HSBC Card Services  <cards@estatements.hsbc.com.tw> (hsbc) - 115年03月滙豐Live+現金回饋卡信用卡帳單
+2026-03-11 05:25:57 - src.fetch.fetch_emails - INFO - Found 1 PDF attachments in message 19cd9119d909517a
+2026-03-11 05:25:58 - src.fetch.download_pdfs - INFO - Downloaded: /var/home/zh/Documents/gmail-expense-parser/src/../downloads/hsbc_eStatement_202603.pdf (866931 bytes, MD5: 34bd88a70d1ead16d237fb665f34b89c)
+2026-03-11 05:25:58 - src.fetch.download_pdfs - INFO - Downloaded 1 PDF(s) from message 19cd9119d909517a
+2026-03-11 05:25:58 - src.fetch.download_pdfs - INFO - Processing attachments from: "台北富邦銀行" <service@bhu.taipeifubon.com.tw> (fubon) - 台北富邦銀行2026年2月 銀行對帳單
+2026-03-11 05:25:58 - src.fetch.fetch_emails - INFO - Found 1 PDF attachments in message 19cc109973c78a21
+2026-03-11 05:26:00 - src.fetch.download_pdfs - INFO - Skipping download: identical file already exists at /var/home/zh/Documents/gmail-expense-parser/src/../downloads/fubon_銀行對帳單.PDF
+2026-03-11 05:26:00 - src.fetch.download_pdfs - INFO - Downloaded 1 PDF(s) from message 19cc109973c78a21
+2026-03-11 05:26:00 - src.fetch.download_pdfs - INFO - Processing attachments from: "玉山信用卡 " <estatement@esunbank.com> (_bank) - 玉山銀行2026年01月信用卡電子帳單
+2026-03-11 05:26:00 - src.fetch.fetch_emails - INFO - Found 1 PDF attachments in message 19c8b87787d822e8
+2026-03-11 05:26:01 - src.fetch.download_pdfs - INFO - Skipping download: identical file already exists at /var/home/zh/Documents/gmail-expense-parser/src/../downloads/_bank_ESUN_Estatement_11501.pdf
+2026-03-11 05:26:01 - src.fetch.download_pdfs - INFO - Downloaded 1 PDF(s) from message 19c8b87787d822e8
+2026-03-11 05:26:01 - src.fetch.download_pdfs - INFO - Processing attachments from: HSBC Card Services  <cards@estatements.hsbc.com.tw> (hsbc) - 115年02月滙豐Live+現金回饋卡信用卡帳單
+2026-03-11 05:26:02 - src.fetch.fetch_emails - INFO - Found 1 PDF attachments in message 19c491372c9f466a
+2026-03-11 05:26:03 - src.fetch.download_pdfs - INFO - Skipping download: identical file already exists at /var/home/zh/Documents/gmail-expense-parser/src/../downloads/hsbc_eStatement_202602.pdf
+2026-03-11 05:26:03 - src.fetch.download_pdfs - INFO - Downloaded 1 PDF(s) from message 19c491372c9f466a
+2026-03-11 05:26:03 - src.fetch.download_pdfs - INFO - Processing attachments from: "台北富邦銀行" <service@bhu.taipeifubon.com.tw> (fubon) - 台北富邦銀行2026年1月 銀行對帳單
+2026-03-11 05:26:04 - src.fetch.fetch_emails - INFO - Found 1 PDF attachments in message 19c305072a57a44c
+2026-03-11 05:26:05 - src.fetch.download_pdfs - INFO - Skipping download: identical file already exists at /var/home/zh/Documents/gmail-expense-parser/src/../downloads/fubon_銀行對帳單_1.PDF
+2026-03-11 05:26:05 - src.fetch.download_pdfs - INFO - Downloaded 1 PDF(s) from message 19c305072a57a44c
+2026-03-11 05:26:05 - src.fetch.download_pdfs - INFO - Processing attachments from: "玉山信用卡 " <estatement@esunbank.com> (_bank) - 玉山銀行2025年12月信用卡電子帳單
+2026-03-11 05:26:05 - src.fetch.fetch_emails - INFO - Found 1 PDF attachments in message 19be6d9efc66e95d
+2026-03-11 05:26:07 - src.fetch.download_pdfs - INFO - Skipping download: identical file already exists at /var/home/zh/Documents/gmail-expense-parser/src/../downloads/_bank_ESUN_Estatement_11412.pdf
+2026-03-11 05:26:07 - src.fetch.download_pdfs - INFO - Downloaded 1 PDF(s) from message 19be6d9efc66e95d
+2026-03-11 05:26:07 - src.fetch.download_pdfs - INFO - Processing attachments from: HSBC Card Services  <cards@estatements.hsbc.com.tw> (hsbc) - 115年01月滙豐Live+現金回饋卡信用卡帳單
+2026-03-11 05:26:07 - src.fetch.fetch_emails - INFO - Found 1 PDF attachments in message 19ba93c3575a1c7c
+2026-03-11 05:26:09 - src.fetch.download_pdfs - INFO - Skipping download: identical file already exists at /var/home/zh/Documents/gmail-expense-parser/src/../downloads/hsbc_eStatement_202601.pdf
+2026-03-11 05:26:09 - src.fetch.download_pdfs - INFO - Downloaded 1 PDF(s) from message 19ba93c3575a1c7c
+2026-03-11 05:26:09 - src.fetch.download_pdfs - INFO - Processing attachments from: "台北富邦銀行" <service@bhu.taipeifubon.com.tw> (fubon) - 台北富邦銀行2025年12月 銀行對帳單
+2026-03-11 05:26:09 - src.fetch.fetch_emails - INFO - Found 1 PDF attachments in message 19b9b237ba4e57f9
+2026-03-11 05:26:11 - src.fetch.download_pdfs - INFO - Skipping download: identical file already exists at /var/home/zh/Documents/gmail-expense-parser/src/../downloads/fubon_銀行對帳單_2.PDF
+2026-03-11 05:26:11 - src.fetch.download_pdfs - INFO - Downloaded 1 PDF(s) from message 19b9b237ba4e57f9
+2026-03-11 05:26:11 - src.fetch.download_pdfs - INFO - Processing attachments from: "玉山信用卡 " <estatement@esunbank.com> (_bank) - 玉山銀行2025年11月信用卡電子帳單
+2026-03-11 05:26:11 - src.fetch.fetch_emails - INFO - Found 1 PDF attachments in message 19b4731343645edf
+2026-03-11 05:26:12 - src.fetch.download_pdfs - INFO - Skipping download: identical file already exists at /var/home/zh/Documents/gmail-expense-parser/src/../downloads/_bank_ESUN_Estatement_11411.pdf
+2026-03-11 05:26:12 - src.fetch.download_pdfs - INFO - Downloaded 1 PDF(s) from message 19b4731343645edf
+2026-03-11 05:26:12 - src.fetch.download_pdfs - INFO - Processing attachments from: HSBC Card Services  <cards@estatements.hsbc.com.tw> (hsbc) - 114年12月滙豐Live+現金回饋卡信用卡帳單
+2026-03-11 05:26:13 - src.fetch.fetch_emails - INFO - Found 1 PDF attachments in message 19b09bf53a87bb99
+2026-03-11 05:26:14 - src.fetch.download_pdfs - INFO - Skipping download: identical file already exists at /var/home/zh/Documents/gmail-expense-parser/src/../downloads/hsbc_eStatement_202512.pdf
+2026-03-11 05:26:14 - src.fetch.download_pdfs - INFO - Downloaded 1 PDF(s) from message 19b09bf53a87bb99
+2026-03-11 05:26:14 - src.fetch.download_pdfs - INFO - Processing attachments from: "台北富邦銀行" <service@bhu.taipeifubon.com.tw> (fubon) - 台北富邦銀行2025年11月 銀行對帳單
+2026-03-11 05:26:15 - src.fetch.fetch_emails - INFO - Found 1 PDF attachments in message 19aeb86f42103ef7
+2026-03-11 05:26:15 - src.fetch.download_pdfs - INFO - Skipping download: identical file already exists at /var/home/zh/Documents/gmail-expense-parser/src/../downloads/fubon_銀行對帳單_3.PDF
+2026-03-11 05:26:15 - src.fetch.download_pdfs - INFO - Downloaded 1 PDF(s) from message 19aeb86f42103ef7
+2026-03-11 05:26:15 - src.fetch.download_pdfs - INFO - Processing attachments from: "玉山信用卡 " <estatement@esunbank.com> (_bank) - 玉山銀行2025年10月信用卡電子帳單
+2026-03-11 05:26:16 - src.fetch.fetch_emails - INFO - Found 1 PDF attachments in message 19ab76e1af730884
+2026-03-11 05:26:17 - src.fetch.download_pdfs - INFO - Downloaded: /var/home/zh/Documents/gmail-expense-parser/src/../downloads/_bank_ESUN_Estatement_11410.pdf (775146 bytes, MD5: af5c6b70b5429d54c0b16deb7750ee12)
+2026-03-11 05:26:17 - src.fetch.download_pdfs - INFO - Downloaded 1 PDF(s) from message 19ab76e1af730884
+2026-03-11 05:26:17 - src.fetch.download_pdfs - INFO - Processing attachments from: HSBC Card Services  <cards@estatements.hsbc.com.tw> (hsbc) - 114年11月滙豐Live+現金回饋卡信用卡帳單
+2026-03-11 05:26:18 - src.fetch.fetch_emails - INFO - Found 1 PDF attachments in message 19a6ea8af42a42e1
+2026-03-11 05:26:19 - src.fetch.download_pdfs - INFO - Downloaded: /var/home/zh/Documents/gmail-expense-parser/src/../downloads/hsbc_eStatement_202511.pdf (639617 bytes, MD5: e56402052067fb9d1a344a16a0d40b87)
+2026-03-11 05:26:19 - src.fetch.download_pdfs - INFO - Downloaded 1 PDF(s) from message 19a6ea8af42a42e1
+2026-03-11 05:26:19 - src.fetch.download_pdfs - INFO - Processing attachments from: "台北富邦銀行" <service@bhu.taipeifubon.com.tw> (fubon) - 台北富邦銀行2025年10月 銀行對帳單
+2026-03-11 05:26:19 - src.fetch.fetch_emails - INFO - Found 1 PDF attachments in message 19a602ff3c8b01db
+2026-03-11 05:26:20 - src.fetch.download_pdfs - INFO - Downloaded: /var/home/zh/Documents/gmail-expense-parser/src/../downloads/fubon_銀行對帳單_4.PDF (695913 bytes, MD5: 5bce0466890481f301743046fe416d50)
+2026-03-11 05:26:20 - src.fetch.download_pdfs - INFO - Downloaded 1 PDF(s) from message 19a602ff3c8b01db
+2026-03-11 05:26:20 - src.fetch.download_pdfs - INFO - Processing attachments from: "玉山信用卡 " <estatement@esunbank.com> (_bank) - 玉山銀行2025年09月信用卡電子帳單
+2026-03-11 05:26:21 - src.fetch.fetch_emails - INFO - Found 1 PDF attachments in message 19a0d82f5b526ab8
+2026-03-11 05:26:22 - src.fetch.download_pdfs - INFO - Downloaded: /var/home/zh/Documents/gmail-expense-parser/src/../downloads/_bank_ESUN_Estatement_11409.pdf (692532 bytes, MD5: 047815a86ad73d5d6211997cf50afcba)
+2026-03-11 05:26:22 - src.fetch.download_pdfs - INFO - Downloaded 1 PDF(s) from message 19a0d82f5b526ab8
+2026-03-11 05:26:22 - src.fetch.download_pdfs - INFO - Processing attachments from: HSBC Card Services  <cards@estatements.hsbc.com.tw> (hsbc) - 114年10月滙豐Live+現金回饋卡信用卡帳單
+2026-03-11 05:26:22 - src.fetch.fetch_emails - INFO - Found 1 PDF attachments in message 199cf59d16dc7e0d
+2026-03-11 05:26:23 - src.fetch.download_pdfs - INFO - Downloaded: /var/home/zh/Documents/gmail-expense-parser/src/../downloads/hsbc_eStatement_202510.pdf (641693 bytes, MD5: d5e52d417837a7627b1e00d47b84d82e)
+2026-03-11 05:26:23 - src.fetch.download_pdfs - INFO - Downloaded 1 PDF(s) from message 199cf59d16dc7e0d
+2026-03-11 05:26:23 - src.fetch.download_pdfs - INFO - Processing attachments from: "台北富邦銀行" <service@bhu.taipeifubon.com.tw> (fubon) - 台北富邦銀行2025年9月 銀行對帳單
+2026-03-11 05:26:24 - src.fetch.fetch_emails - INFO - Found 1 PDF attachments in message 199c0d27fc7ca616
+2026-03-11 05:26:25 - src.fetch.download_pdfs - INFO - Downloaded: /var/home/zh/Documents/gmail-expense-parser/src/../downloads/fubon_銀行對帳單_5.PDF (757815 bytes, MD5: 43db7e17d75e38d3d98f5120766ef84d)
+2026-03-11 05:26:25 - src.fetch.download_pdfs - INFO - Downloaded 1 PDF(s) from message 199c0d27fc7ca616
+2026-03-11 05:26:25 - src.fetch.download_pdfs - INFO - Processing attachments from: "玉山信用卡 " <estatement@esunbank.com> (_bank) - 玉山銀行2025年08月信用卡電子帳單
+2026-03-11 05:26:26 - src.fetch.fetch_emails - INFO - Found 1 PDF attachments in message 199734b4d67120e9
+2026-03-11 05:26:27 - src.fetch.download_pdfs - INFO - Downloaded: /var/home/zh/Documents/gmail-expense-parser/src/../downloads/_bank_ESUN_Estatement_11408.pdf (732244 bytes, MD5: a79e6d928da1cd09e57727d1caa2b900)
+2026-03-11 05:26:27 - src.fetch.download_pdfs - INFO - Downloaded 1 PDF(s) from message 199734b4d67120e9
+2026-03-11 05:26:27 - src.fetch.download_pdfs - INFO - Processing attachments from: "玉山銀行 " <estatement@esunbank.com> (_bank) - 玉山銀行2025年08月綜合對帳單
+2026-03-11 05:26:27 - src.fetch.fetch_emails - INFO - Found 1 PDF attachments in message 1993af9f3d38a484
+2026-03-11 05:26:29 - src.fetch.download_pdfs - INFO - Downloaded: /var/home/zh/Documents/gmail-expense-parser/src/../downloads/_bank_玉山銀行綜合對帳單.pdf (253861 bytes, MD5: c27974a0c6b78bc8d2d771c662ae0687)
+2026-03-11 05:26:29 - src.fetch.download_pdfs - INFO - Downloaded 1 PDF(s) from message 1993af9f3d38a484
+2026-03-11 05:26:29 - src.fetch.download_pdfs - INFO - Processing attachments from: HSBC Card Services  <cards@estatements.hsbc.com.tw> (hsbc) - 114年09月滙豐Live+現金回饋卡信用卡帳單
+2026-03-11 05:26:29 - src.fetch.fetch_emails - INFO - Found 1 PDF attachments in message 19934ea4fdb23ee7
+2026-03-11 05:26:30 - src.fetch.download_pdfs - INFO - Downloaded: /var/home/zh/Documents/gmail-expense-parser/src/../downloads/hsbc_eStatement_202509.pdf (367004 bytes, MD5: 42e9b68b92d66968e7e0943e70938bb7)
+2026-03-11 05:26:30 - src.fetch.download_pdfs - INFO - Downloaded 1 PDF(s) from message 19934ea4fdb23ee7
+2026-03-11 05:26:30 - src.fetch.download_pdfs - INFO - Processing attachments from: "台北富邦銀行" <service@bhu.taipeifubon.com.tw> (fubon) - 台北富邦銀行2025年8月 銀行對帳單
+2026-03-11 05:26:30 - src.fetch.fetch_emails - INFO - Found 1 PDF attachments in message 1991c2a75c58f84f
+2026-03-11 05:26:31 - src.fetch.download_pdfs - INFO - Downloaded: /var/home/zh/Documents/gmail-expense-parser/src/../downloads/fubon_銀行對帳單_6.PDF (734618 bytes, MD5: 4db304ec0ea249f3846aa86f9d551b06)
+2026-03-11 05:26:31 - src.fetch.download_pdfs - INFO - Downloaded 1 PDF(s) from message 1991c2a75c58f84f
+2026-03-11 05:26:31 - src.fetch.download_pdfs - INFO - Processing attachments from: "玉山信用卡 " <estatement@esunbank.com> (_bank) - 玉山銀行2025年07月信用卡電子帳單
+2026-03-11 05:26:32 - src.fetch.fetch_emails - INFO - Found 1 PDF attachments in message 198d367149d24adb
+2026-03-11 05:26:33 - src.fetch.download_pdfs - INFO - Downloaded: /var/home/zh/Documents/gmail-expense-parser/src/../downloads/_bank_ESUN_Estatement_11407.pdf (745344 bytes, MD5: 48b81342e6b8ca8addea8fed2c86bd40)
+2026-03-11 05:26:33 - src.fetch.download_pdfs - INFO - Downloaded 1 PDF(s) from message 198d367149d24adb
+2026-03-11 05:26:33 - src.fetch.download_pdfs - INFO - Processing attachments from: HSBC Card Services  <cards@estatements.hsbc.com.tw> (hsbc) - 114年08月滙豐Live+現金回饋卡信用卡帳單
+2026-03-11 05:26:34 - src.fetch.fetch_emails - INFO - Found 1 PDF attachments in message 19894c825014e5f7
+2026-03-11 05:26:34 - src.fetch.download_pdfs - INFO - Downloaded: /var/home/zh/Documents/gmail-expense-parser/src/../downloads/hsbc_eStatement_202508.pdf (383499 bytes, MD5: a252771ff344b440f9ee3d5939c547a7)
+2026-03-11 05:26:34 - src.fetch.download_pdfs - INFO - Downloaded 1 PDF(s) from message 19894c825014e5f7
+2026-03-11 05:26:34 - src.fetch.download_pdfs - INFO - Processing attachments from: "台北富邦銀行" <service@bhu.taipeifubon.com.tw> (fubon) - 台北富邦銀行2025年7月 銀行對帳單
+2026-03-11 05:26:35 - src.fetch.fetch_emails - INFO - Found 1 PDF attachments in message 19881c360fb79873
+2026-03-11 05:26:36 - src.fetch.download_pdfs - INFO - Downloaded: /var/home/zh/Documents/gmail-expense-parser/src/../downloads/fubon_銀行對帳單_7.PDF (760213 bytes, MD5: 77bd89f604139ebbc87aa9ea6a93fef9)
+2026-03-11 05:26:36 - src.fetch.download_pdfs - INFO - Downloaded 1 PDF(s) from message 19881c360fb79873
+2026-03-11 05:26:36 - src.fetch.download_pdfs - INFO - Processing attachments from: "玉山信用卡 " <estatement@esunbank.com> (_bank) - 玉山銀行2025年06月信用卡電子帳單
+2026-03-11 05:26:36 - src.fetch.fetch_emails - INFO - Found 1 PDF attachments in message 198335a5c928ad62
+2026-03-11 05:26:38 - src.fetch.download_pdfs - INFO - Downloaded: /var/home/zh/Documents/gmail-expense-parser/src/../downloads/_bank_ESUN_Estatement_11406.pdf (763036 bytes, MD5: 59508fb559c5db6a00f63fbd11d3b75a)
+2026-03-11 05:26:38 - src.fetch.download_pdfs - INFO - Downloaded 1 PDF(s) from message 198335a5c928ad62
+2026-03-11 05:26:38 - src.fetch.download_pdfs - INFO - Processing attachments from: HSBC Card Services  <cards@estatements.hsbc.com.tw> (hsbc) - 114年07月滙豐Live+現金回饋卡信用卡帳單
+2026-03-11 05:26:38 - src.fetch.fetch_emails - INFO - Found 1 PDF attachments in message 197f527285474025
+2026-03-11 05:26:39 - src.fetch.download_pdfs - INFO - Downloaded: /var/home/zh/Documents/gmail-expense-parser/src/../downloads/hsbc_eStatement_202507.pdf (892861 bytes, MD5: e7d30b7da17fea7069f24296fc7ec990)
+2026-03-11 05:26:39 - src.fetch.download_pdfs - INFO - Downloaded 1 PDF(s) from message 197f527285474025
+2026-03-11 05:26:39 - src.fetch.download_pdfs - INFO - Processing attachments from: "台北富邦銀行" <service@bhu.taipeifubon.com.tw> (fubon) - 台北富邦銀行2025年6月 銀行對帳單
+2026-03-11 05:26:39 - src.fetch.fetch_emails - INFO - Found 1 PDF attachments in message 197e6cb87931ad4f
+2026-03-11 05:26:41 - src.fetch.download_pdfs - INFO - Downloaded: /var/home/zh/Documents/gmail-expense-parser/src/../downloads/fubon_銀行對帳單_8.PDF (805601 bytes, MD5: 79330b274c5c145e061e72bdd487937d)
+2026-03-11 05:26:41 - src.fetch.download_pdfs - INFO - Downloaded 1 PDF(s) from message 197e6cb87931ad4f
+2026-03-11 05:26:41 - src.fetch.download_pdfs - INFO - Processing attachments from: "玉山信用卡 " <estatement@esunbank.com> (_bank) - 玉山銀行2025年05月信用卡電子帳單
+2026-03-11 05:26:41 - src.fetch.fetch_emails - INFO - Found 1 PDF attachments in message 1979e7791cf04074
+2026-03-11 05:26:42 - src.fetch.download_pdfs - INFO - Downloaded: /var/home/zh/Documents/gmail-expense-parser/src/../downloads/_bank_ESUN_Estatement_11405.pdf (955050 bytes, MD5: d5613c7a2371f632aadc9dae2ac4139b)
+2026-03-11 05:26:42 - src.fetch.download_pdfs - INFO - Downloaded 1 PDF(s) from message 1979e7791cf04074
+2026-03-11 05:26:42 - src.fetch.download_pdfs - INFO - Processing attachments from: "台北富邦銀行" <service@bhu.taipeifubon.com.tw> (fubon) - 台北富邦銀行2025年5月 銀行對帳單
+2026-03-11 05:26:43 - src.fetch.fetch_emails - INFO - Found 1 PDF attachments in message 197451dbe8c1a87f
+2026-03-11 05:26:45 - src.fetch.download_pdfs - INFO - Downloaded: /var/home/zh/Documents/gmail-expense-parser/src/../downloads/fubon_銀行對帳單_9.PDF (1327581 bytes, MD5: 7f4fe2f7ac76b71afb8831c01d3623f9)
+2026-03-11 05:26:45 - src.fetch.download_pdfs - INFO - Downloaded 1 PDF(s) from message 197451dbe8c1a87f
+2026-03-11 05:26:45 - src.fetch.download_pdfs - INFO - Processing attachments from: "玉山信用卡 " <estatement@esunbank.com> (_bank) - 玉山銀行2025年04月信用卡電子帳單
+2026-03-11 05:26:45 - src.fetch.fetch_emails - INFO - Found 1 PDF attachments in message 196f929ee04cb722
+2026-03-11 05:26:46 - src.fetch.download_pdfs - INFO - Downloaded: /var/home/zh/Documents/gmail-expense-parser/src/../downloads/_bank_ESUN_Estatement_11404.pdf (914692 bytes, MD5: f302469828be4d59546495bee4aad841)
+2026-03-11 05:26:46 - src.fetch.download_pdfs - INFO - Downloaded 1 PDF(s) from message 196f929ee04cb722
+2026-03-11 05:26:46 - src.fetch.download_pdfs - INFO - Processing attachments from: "台北富邦銀行" <service@bhu.taipeifubon.com.tw> (fubon) - 台北富邦銀行2025年4月 銀行對帳單
+2026-03-11 05:26:47 - src.fetch.fetch_emails - INFO - Found 1 PDF attachments in message 196b28a3cb42dded
+2026-03-11 05:26:49 - src.fetch.download_pdfs - INFO - Downloaded: /var/home/zh/Documents/gmail-expense-parser/src/../downloads/fubon_銀行對帳單_10.PDF (1355056 bytes, MD5: 3fc74a02ba6b9a77378ea7cdf3bb5856)
+2026-03-11 05:26:49 - src.fetch.download_pdfs - INFO - Downloaded 1 PDF(s) from message 196b28a3cb42dded
+2026-03-11 05:26:49 - src.fetch.download_pdfs - INFO - Processing attachments from: "玉山信用卡 " <estatement@esunbank.com> (_bank) - 玉山銀行2025年03月信用卡電子帳單
+2026-03-11 05:26:49 - src.fetch.fetch_emails - INFO - Found 1 PDF attachments in message 1965f011e9e4e9eb
+2026-03-11 05:26:50 - src.fetch.download_pdfs - INFO - Downloaded: /var/home/zh/Documents/gmail-expense-parser/src/../downloads/_bank_ESUN_Estatement_11403.pdf (919545 bytes, MD5: 20c5f8a46267b7d01305852573e34f5e)
+2026-03-11 05:26:50 - src.fetch.download_pdfs - INFO - Downloaded 1 PDF(s) from message 1965f011e9e4e9eb
+2026-03-11 05:26:50 - src.fetch.download_pdfs - INFO - Processing attachments from: "台北富邦銀行" <service@bhu.taipeifubon.com.tw> (fubon) - 台北富邦銀行2025年3月 銀行對帳單
+2026-03-11 05:26:51 - src.fetch.fetch_emails - INFO - Found 1 PDF attachments in message 196165d85043ae9c
+2026-03-11 05:26:52 - src.fetch.download_pdfs - INFO - Downloaded: /var/home/zh/Documents/gmail-expense-parser/src/../downloads/fubon_銀行對帳單_11.PDF (713356 bytes, MD5: 2bfe5e09a6732ef25907a30897c1ace0)
+2026-03-11 05:26:52 - src.fetch.download_pdfs - INFO - Downloaded 1 PDF(s) from message 196165d85043ae9c
+2026-03-11 05:26:52 - src.fetch.download_pdfs - INFO - Processing attachments from: "玉山信用卡 " <estatement@esunbank.com> (_bank) - 玉山銀行2025年02月信用卡電子帳單
+2026-03-11 05:26:52 - src.fetch.fetch_emails - INFO - Found 1 PDF attachments in message 195c9c6aa2f75532
+2026-03-11 05:26:54 - src.fetch.download_pdfs - INFO - Downloaded: /var/home/zh/Documents/gmail-expense-parser/src/../downloads/_bank_ESUN_Estatement_11402.pdf (917400 bytes, MD5: f9a413bde7afa67f166bb4daad21889e)
+2026-03-11 05:26:54 - src.fetch.download_pdfs - INFO - Downloaded 1 PDF(s) from message 195c9c6aa2f75532
+2026-03-11 05:26:54 - src.fetch.download_pdfs - INFO - Processing attachments from: "台北富邦銀行" <service@bhu.taipeifubon.com.tw> (fubon) - 台北富邦銀行2025年2月 銀行對帳單
+2026-03-11 05:26:54 - src.fetch.fetch_emails - INFO - Found 1 PDF attachments in message 1956e226cd4132ce
+2026-03-11 05:26:55 - src.fetch.download_pdfs - INFO - Downloaded: /var/home/zh/Documents/gmail-expense-parser/src/../downloads/fubon_銀行對帳單_12.PDF (744600 bytes, MD5: bb53df8f21e61af29ae3db56a39545eb)
+2026-03-11 05:26:55 - src.fetch.download_pdfs - INFO - Downloaded 1 PDF(s) from message 1956e226cd4132ce
+2026-03-11 05:26:55 - src.fetch.download_pdfs - INFO - Processing attachments from: "台北富邦銀行" <service@bhu.taipeifubon.com.tw> (fubon) - 台北富邦銀行2025年1月 銀行對帳單
+2026-03-11 05:26:56 - src.fetch.fetch_emails - INFO - Found 1 PDF attachments in message 194d8680731dd4cf
+2026-03-11 05:26:57 - src.fetch.download_pdfs - INFO - Downloaded: /var/home/zh/Documents/gmail-expense-parser/src/../downloads/fubon_銀行對帳單_13.PDF (746893 bytes, MD5: 821851a55029cd11b26f056a8afbe975)
+2026-03-11 05:26:57 - src.fetch.download_pdfs - INFO - Downloaded 1 PDF(s) from message 194d8680731dd4cf
+2026-03-11 05:26:57 - src.fetch.download_pdfs - INFO - Processing attachments from: "台北富邦銀行" <service@bhu.taipeifubon.com.tw> (fubon) - 台北富邦銀行2024年12月 銀行對帳單
+2026-03-11 05:26:58 - src.fetch.fetch_emails - INFO - Found 1 PDF attachments in message 1943ee51653c2e40
+2026-03-11 05:26:58 - src.fetch.download_pdfs - INFO - Downloaded: /var/home/zh/Documents/gmail-expense-parser/src/../downloads/fubon_銀行對帳單_14.PDF (683907 bytes, MD5: d95fae9649536ec2aebd6f48103b9d89)
+2026-03-11 05:26:58 - src.fetch.download_pdfs - INFO - Downloaded 1 PDF(s) from message 1943ee51653c2e40
+2026-03-11 05:26:58 - src.fetch.download_pdfs - INFO - Processing attachments from: "台北富邦銀行" <service@bhu.taipeifubon.com.tw> (fubon) - 台北富邦銀行2024年11月 銀行對帳單
+2026-03-11 05:26:59 - src.fetch.fetch_emails - INFO - Found 1 PDF attachments in message 1939a25bc01a77b9
+2026-03-11 05:27:00 - src.fetch.download_pdfs - INFO - Downloaded: /var/home/zh/Documents/gmail-expense-parser/src/../downloads/fubon_銀行對帳單_15.PDF (733194 bytes, MD5: f9f61e6cd4fc1d36796987541fb8119f)
+2026-03-11 05:27:00 - src.fetch.download_pdfs - INFO - Downloaded 1 PDF(s) from message 1939a25bc01a77b9
+2026-03-11 05:27:00 - src.fetch.download_pdfs - INFO - Processing attachments from: "台北富邦銀行" <service@bhu.taipeifubon.com.tw> (fubon) - 台北富邦銀行2024年10月 銀行對帳單
+2026-03-11 05:27:01 - src.fetch.fetch_emails - INFO - Found 1 PDF attachments in message 1930714a52fa711c
+2026-03-11 05:27:02 - src.fetch.download_pdfs - INFO - Downloaded: /var/home/zh/Documents/gmail-expense-parser/src/../downloads/fubon_銀行對帳單_16.PDF (768093 bytes, MD5: 66d4c59ea22550496d71cf446aad5470)
+2026-03-11 05:27:02 - src.fetch.download_pdfs - INFO - Downloaded 1 PDF(s) from message 1930714a52fa711c
+2026-03-11 05:27:02 - src.fetch.download_pdfs - INFO - Processing attachments from: "台北富邦銀行" <service@bhu.taipeifubon.com.tw> (fubon) - 台北富邦銀行2024年9月 銀行對帳單
+2026-03-11 05:27:02 - src.fetch.fetch_emails - INFO - Found 1 PDF attachments in message 19271f1c02ffd7c3
+2026-03-11 05:27:03 - src.fetch.download_pdfs - INFO - Downloaded: /var/home/zh/Documents/gmail-expense-parser/src/../downloads/fubon_銀行對帳單_17.PDF (745302 bytes, MD5: 351a8ffaf9865a4516cab18663a064fe)
+2026-03-11 05:27:03 - src.fetch.download_pdfs - INFO - Downloaded 1 PDF(s) from message 19271f1c02ffd7c3
+2026-03-11 05:27:03 - src.fetch.download_pdfs - INFO - Processing attachments from: "台北富邦銀行" <service@bhu.taipeifubon.com.tw> (fubon) - 台北富邦銀行2024年8月 銀行對帳單
+2026-03-11 05:27:04 - src.fetch.fetch_emails - INFO - Found 1 PDF attachments in message 191c7597f24df0e4
+2026-03-11 05:27:05 - src.fetch.download_pdfs - INFO - Downloaded: /var/home/zh/Documents/gmail-expense-parser/src/../downloads/fubon_銀行對帳單_18.PDF (747001 bytes, MD5: ace1177ac6069f5a397396feca7494a7)
+2026-03-11 05:27:05 - src.fetch.download_pdfs - INFO - Downloaded 1 PDF(s) from message 191c7597f24df0e4
+2026-03-11 05:27:05 - src.fetch.download_pdfs - INFO - Processing attachments from: "台北富邦銀行" <service@bhu.taipeifubon.com.tw> (fubon) - 台北富邦銀行2024年7月 銀行對帳單
+2026-03-11 05:27:05 - src.fetch.fetch_emails - INFO - Found 1 PDF attachments in message 19127d60e9e8c6d7
+2026-03-11 05:27:06 - src.fetch.download_pdfs - INFO - Downloaded: /var/home/zh/Documents/gmail-expense-parser/src/../downloads/fubon_銀行對帳單_19.PDF (752855 bytes, MD5: 3df900217453d2f68539acabd13c3571)
+2026-03-11 05:27:06 - src.fetch.download_pdfs - INFO - Downloaded 1 PDF(s) from message 19127d60e9e8c6d7
+2026-03-11 05:27:06 - src.fetch.download_pdfs - INFO - Processing attachments from: "台北富邦銀行" <service@bhu.taipeifubon.com.tw> (fubon) - 台北富邦銀行2024年6月 銀行對帳單
+2026-03-11 05:27:06 - src.fetch.fetch_emails - INFO - Found 1 PDF attachments in message 19082177fee78385
+2026-03-11 05:27:08 - src.fetch.download_pdfs - INFO - Downloaded: /var/home/zh/Documents/gmail-expense-parser/src/../downloads/fubon_銀行對帳單_20.PDF (731482 bytes, MD5: 13f72b6f0556824efb3ad92746c1d9a0)
+2026-03-11 05:27:08 - src.fetch.download_pdfs - INFO - Downloaded 1 PDF(s) from message 19082177fee78385
+2026-03-11 05:27:08 - src.fetch.download_pdfs - INFO - Processing attachments from: "台北富邦銀行" <service@bhu.taipeifubon.com.tw> (fubon) - 台北富邦銀行2024年5月 銀行對帳單
+2026-03-11 05:27:09 - src.fetch.fetch_emails - INFO - Found 1 PDF attachments in message 18feff37458bdc83
+2026-03-11 05:27:09 - src.fetch.download_pdfs - INFO - Downloaded: /var/home/zh/Documents/gmail-expense-parser/src/../downloads/fubon_銀行對帳單_21.PDF (695709 bytes, MD5: b6c3d3e1d5570e761d915894cf2817bf)
+2026-03-11 05:27:09 - src.fetch.download_pdfs - INFO - Downloaded 1 PDF(s) from message 18feff37458bdc83
+2026-03-11 05:27:09 - src.fetch.download_pdfs - INFO - Processing attachments from: "台北富邦銀行" <service@bhu.taipeifubon.com.tw> (fubon) - 台北富邦銀行2024年4月 銀行對帳單
+2026-03-11 05:27:10 - src.fetch.fetch_emails - INFO - Found 1 PDF attachments in message 18f57763defdb672
+2026-03-11 05:27:11 - src.fetch.download_pdfs - INFO - Downloaded: /var/home/zh/Documents/gmail-expense-parser/src/../downloads/fubon_銀行對帳單_22.PDF (682187 bytes, MD5: 647225e2569b962356d8c6553f7ed81d)
+2026-03-11 05:27:11 - src.fetch.download_pdfs - INFO - Downloaded 1 PDF(s) from message 18f57763defdb672
+2026-03-11 05:27:11 - src.fetch.download_pdfs - INFO - Processing attachments from: "台北富邦銀行" <service@bhu.taipeifubon.com.tw> (fubon) - 台北富邦銀行2024年3月 銀行對帳單
+2026-03-11 05:27:11 - src.fetch.fetch_emails - INFO - Found 1 PDF attachments in message 18ea97438b939250
+2026-03-11 05:27:12 - src.fetch.download_pdfs - INFO - Downloaded: /var/home/zh/Documents/gmail-expense-parser/src/../downloads/fubon_銀行對帳單_23.PDF (714189 bytes, MD5: dae4bf57ee069a2aaa301f5f64328f6f)
+2026-03-11 05:27:12 - src.fetch.download_pdfs - INFO - Downloaded 1 PDF(s) from message 18ea97438b939250
+2026-03-11 05:27:12 - src.fetch.download_pdfs - INFO - Processing attachments from: "台北富邦銀行" <service@bhu.taipeifubon.com.tw> (fubon) - 台北富邦銀行2024年2月 銀行對帳單
+2026-03-11 05:27:13 - src.fetch.fetch_emails - INFO - Found 1 PDF attachments in message 18e1abd044dd1993
+2026-03-11 05:27:14 - src.fetch.download_pdfs - INFO - Downloaded: /var/home/zh/Documents/gmail-expense-parser/src/../downloads/fubon_銀行對帳單_24.PDF (759290 bytes, MD5: 282d847149898eb9de3b920c3f5a0ae0)
+2026-03-11 05:27:14 - src.fetch.download_pdfs - INFO - Downloaded 1 PDF(s) from message 18e1abd044dd1993
+2026-03-11 05:27:14 - src.fetch.download_pdfs - INFO - Processing attachments from: "台北富邦銀行" <service@bhu.taipeifubon.com.tw> (fubon) - 台北富邦銀行所得稅扣繳憑單(存款及其他類)
+2026-03-11 05:27:15 - src.fetch.fetch_emails - INFO - Found 1 PDF attachments in message 18df87380ee457a6
+2026-03-11 05:27:15 - src.fetch.download_pdfs - INFO - Downloaded: /var/home/zh/Documents/gmail-expense-parser/src/../downloads/fubon_台北富邦銀行所得稅扣繳憑單_存款及其他類__.PDF (129130 bytes, MD5: a2cc12f123decccabb521193add10bb5)
+2026-03-11 05:27:15 - src.fetch.download_pdfs - INFO - Downloaded 1 PDF(s) from message 18df87380ee457a6
+2026-03-11 05:27:15 - src.fetch.download_pdfs - INFO - Processing attachments from: "台北富邦銀行" <service@bhu.taipeifubon.com.tw> (fubon) - 台北富邦銀行2024年1月 銀行對帳單
+2026-03-11 05:27:16 - src.fetch.fetch_emails - INFO - Found 1 PDF attachments in message 18d8091127063cab
+2026-03-11 05:27:17 - src.fetch.download_pdfs - INFO - Downloaded: /var/home/zh/Documents/gmail-expense-parser/src/../downloads/fubon_銀行對帳單_25.PDF (726617 bytes, MD5: f1f621a0b337534ecaf7321764be79e3)
+2026-03-11 05:27:17 - src.fetch.download_pdfs - INFO - Downloaded 1 PDF(s) from message 18d8091127063cab
+2026-03-11 05:27:17 - src.fetch.download_pdfs - INFO - Processing attachments from: "台北富邦銀行" <service@bhu.taipeifubon.com.tw> (fubon) - 台北富邦銀行2023年12月 銀行對帳單
+2026-03-11 05:27:18 - src.fetch.fetch_emails - INFO - Found 1 PDF attachments in message 18cf08c8fb04804e
+2026-03-11 05:27:19 - src.fetch.download_pdfs - INFO - Downloaded: /var/home/zh/Documents/gmail-expense-parser/src/../downloads/fubon_銀行對帳單_26.PDF (729236 bytes, MD5: 5a4038446f8ed31f3717a7a309227433)
+2026-03-11 05:27:19 - src.fetch.download_pdfs - INFO - Downloaded 1 PDF(s) from message 18cf08c8fb04804e
+2026-03-11 05:27:19 - __main__ - INFO - Downloaded 50 PDF file(s) [senders=['HSBC@mail.hsbc.com.sg', 'service@bhu.taipeifubon.com.tw', 'estatement@esunbank.com', 'cards@estatements.hsbc.com.tw'] keywords=['信用卡', '電子帳單', '銀行'] max_results=50]
+2026-03-11 05:27:19 - __main__ - INFO - Extracting text from PDFs... [senders=['HSBC@mail.hsbc.com.sg', 'service@bhu.taipeifubon.com.tw', 'estatement@esunbank.com', 'cards@estatements.hsbc.com.tw'] keywords=['信用卡', '電子帳單', '銀行'] max_results=50]
+2026-03-11 05:27:19 - src.pdf.pdf_to_text - INFO - Extracting text from encrypted PDF: /var/home/zh/Documents/gmail-expense-parser/src/../downloads/hsbc_eStatement_202603.pdf (866931 bytes)
+2026-03-11 05:27:19 - src.pdf.pdf_to_text - INFO - Successfully extracted 1726 characters using pdfplumber
+2026-03-11 05:27:19 - src.pdf.pdf_to_text - INFO - Extracting text from encrypted PDF: /var/home/zh/Documents/gmail-expense-parser/src/../downloads/fubon_銀行對帳單.PDF (748777 bytes)
+2026-03-11 05:27:21 - src.pdf.pdf_to_text - INFO - Successfully extracted 6862 characters using pdfplumber
+2026-03-11 05:27:21 - src.pdf.pdf_to_text - INFO - Extracting text from encrypted PDF: /var/home/zh/Documents/gmail-expense-parser/src/../downloads/_bank_ESUN_Estatement_11501.pdf (725400 bytes)
+2026-03-11 05:27:21 - src.pdf.pdf_to_text - INFO - Successfully extracted 2688 characters using pdfplumber
+2026-03-11 05:27:21 - src.pdf.pdf_to_text - INFO - Extracting text from encrypted PDF: /var/home/zh/Documents/gmail-expense-parser/src/../downloads/hsbc_eStatement_202602.pdf (638641 bytes)
+2026-03-11 05:27:22 - src.pdf.pdf_to_text - INFO - Successfully extracted 751 characters using pdfplumber
+2026-03-11 05:27:22 - src.pdf.pdf_to_text - INFO - Extracting text from encrypted PDF: /var/home/zh/Documents/gmail-expense-parser/src/../downloads/fubon_銀行對帳單_1.PDF (753535 bytes)
+2026-03-11 05:27:24 - src.pdf.pdf_to_text - INFO - Successfully extracted 7020 characters using pdfplumber
+2026-03-11 05:27:24 - src.pdf.pdf_to_text - INFO - Extracting text from encrypted PDF: /var/home/zh/Documents/gmail-expense-parser/src/../downloads/_bank_ESUN_Estatement_11412.pdf (825347 bytes)
+2026-03-11 05:27:24 - src.pdf.pdf_to_text - INFO - Successfully extracted 2611 characters using pdfplumber
+2026-03-11 05:27:24 - src.pdf.pdf_to_text - INFO - Extracting text from encrypted PDF: /var/home/zh/Documents/gmail-expense-parser/src/../downloads/hsbc_eStatement_202601.pdf (808346 bytes)
+2026-03-11 05:27:24 - src.pdf.pdf_to_text - INFO - Successfully extracted 840 characters using pdfplumber
+2026-03-11 05:27:24 - src.pdf.pdf_to_text - INFO - Extracting text from encrypted PDF: /var/home/zh/Documents/gmail-expense-parser/src/../downloads/fubon_銀行對帳單_2.PDF (709767 bytes)
+2026-03-11 05:27:26 - src.pdf.pdf_to_text - INFO - Successfully extracted 6931 characters using pdfplumber
+2026-03-11 05:27:26 - src.pdf.pdf_to_text - INFO - Extracting text from encrypted PDF: /var/home/zh/Documents/gmail-expense-parser/src/../downloads/_bank_ESUN_Estatement_11411.pdf (734138 bytes)
+2026-03-11 05:27:26 - src.pdf.pdf_to_text - INFO - Successfully extracted 2814 characters using pdfplumber
+2026-03-11 05:27:26 - src.pdf.pdf_to_text - INFO - Extracting text from encrypted PDF: /var/home/zh/Documents/gmail-expense-parser/src/../downloads/hsbc_eStatement_202512.pdf (644196 bytes)
+2026-03-11 05:27:26 - src.pdf.pdf_to_text - INFO - Successfully extracted 692 characters using pdfplumber
+2026-03-11 05:27:26 - src.pdf.pdf_to_text - INFO - Extracting text from encrypted PDF: /var/home/zh/Documents/gmail-expense-parser/src/../downloads/fubon_銀行對帳單_3.PDF (713603 bytes)
+2026-03-11 05:27:28 - src.pdf.pdf_to_text - INFO - Successfully extracted 7031 characters using pdfplumber
+2026-03-11 05:27:28 - src.pdf.pdf_to_text - INFO - Extracting text from encrypted PDF: /var/home/zh/Documents/gmail-expense-parser/src/../downloads/_bank_ESUN_Estatement_11410.pdf (775146 bytes)
+2026-03-11 05:27:28 - src.pdf.pdf_to_text - INFO - Successfully extracted 2561 characters using pdfplumber
+2026-03-11 05:27:28 - src.pdf.pdf_to_text - INFO - Extracting text from encrypted PDF: /var/home/zh/Documents/gmail-expense-parser/src/../downloads/hsbc_eStatement_202511.pdf (639617 bytes)
+2026-03-11 05:27:28 - src.pdf.pdf_to_text - INFO - Successfully extracted 620 characters using pdfplumber
+2026-03-11 05:27:28 - src.pdf.pdf_to_text - INFO - Extracting text from encrypted PDF: /var/home/zh/Documents/gmail-expense-parser/src/../downloads/fubon_銀行對帳單_4.PDF (695913 bytes)
+2026-03-11 05:27:30 - src.pdf.pdf_to_text - INFO - Successfully extracted 6642 characters using pdfplumber
+2026-03-11 05:27:30 - src.pdf.pdf_to_text - INFO - Extracting text from encrypted PDF: /var/home/zh/Documents/gmail-expense-parser/src/../downloads/_bank_ESUN_Estatement_11409.pdf (692532 bytes)
+2026-03-11 05:27:30 - src.pdf.pdf_to_text - INFO - Successfully extracted 2394 characters using pdfplumber
+2026-03-11 05:27:30 - src.pdf.pdf_to_text - INFO - Extracting text from encrypted PDF: /var/home/zh/Documents/gmail-expense-parser/src/../downloads/hsbc_eStatement_202510.pdf (641693 bytes)
+2026-03-11 05:27:31 - src.pdf.pdf_to_text - INFO - Successfully extracted 961 characters using pdfplumber
+2026-03-11 05:27:31 - src.pdf.pdf_to_text - INFO - Extracting text from encrypted PDF: /var/home/zh/Documents/gmail-expense-parser/src/../downloads/fubon_銀行對帳單_5.PDF (757815 bytes)
+2026-03-11 05:27:32 - src.pdf.pdf_to_text - INFO - Successfully extracted 6277 characters using pdfplumber
+2026-03-11 05:27:32 - src.pdf.pdf_to_text - INFO - Extracting text from encrypted PDF: /var/home/zh/Documents/gmail-expense-parser/src/../downloads/_bank_ESUN_Estatement_11408.pdf (732244 bytes)
+2026-03-11 05:27:32 - src.pdf.pdf_to_text - INFO - Successfully extracted 2418 characters using pdfplumber
+2026-03-11 05:27:32 - src.pdf.pdf_to_text - INFO - Extracting text from encrypted PDF: /var/home/zh/Documents/gmail-expense-parser/src/../downloads/_bank_玉山銀行綜合對帳單.pdf (253861 bytes)
+2026-03-11 05:27:33 - src.pdf.pdf_to_text - INFO - Successfully extracted 2756 characters using pdfplumber
+2026-03-11 05:27:33 - src.pdf.pdf_to_text - INFO - Extracting text from encrypted PDF: /var/home/zh/Documents/gmail-expense-parser/src/../downloads/hsbc_eStatement_202509.pdf (367004 bytes)
+2026-03-11 05:27:33 - src.pdf.pdf_to_text - INFO - Successfully extracted 349 characters using pdfplumber
+2026-03-11 05:27:33 - src.pdf.pdf_to_text - INFO - Extracting text from encrypted PDF: /var/home/zh/Documents/gmail-expense-parser/src/../downloads/fubon_銀行對帳單_6.PDF (734618 bytes)
+2026-03-11 05:27:35 - src.pdf.pdf_to_text - INFO - Successfully extracted 6400 characters using pdfplumber
+2026-03-11 05:27:35 - src.pdf.pdf_to_text - INFO - Extracting text from encrypted PDF: /var/home/zh/Documents/gmail-expense-parser/src/../downloads/_bank_ESUN_Estatement_11407.pdf (745344 bytes)
+2026-03-11 05:27:35 - src.pdf.pdf_to_text - INFO - Successfully extracted 2480 characters using pdfplumber
+2026-03-11 05:27:35 - src.pdf.pdf_to_text - INFO - Extracting text from encrypted PDF: /var/home/zh/Documents/gmail-expense-parser/src/../downloads/hsbc_eStatement_202508.pdf (383499 bytes)
+2026-03-11 05:27:35 - src.pdf.pdf_to_text - INFO - Successfully extracted 407 characters using pdfplumber
+2026-03-11 05:27:35 - src.pdf.pdf_to_text - INFO - Extracting text from encrypted PDF: /var/home/zh/Documents/gmail-expense-parser/src/../downloads/fubon_銀行對帳單_7.PDF (760213 bytes)
+2026-03-11 05:27:37 - src.pdf.pdf_to_text - INFO - Successfully extracted 6714 characters using pdfplumber
+2026-03-11 05:27:37 - src.pdf.pdf_to_text - INFO - Extracting text from encrypted PDF: /var/home/zh/Documents/gmail-expense-parser/src/../downloads/_bank_ESUN_Estatement_11406.pdf (763036 bytes)
+2026-03-11 05:27:37 - src.pdf.pdf_to_text - INFO - Successfully extracted 2707 characters using pdfplumber
+2026-03-11 05:27:37 - src.pdf.pdf_to_text - INFO - Extracting text from encrypted PDF: /var/home/zh/Documents/gmail-expense-parser/src/../downloads/hsbc_eStatement_202507.pdf (892861 bytes)
+2026-03-11 05:27:37 - src.pdf.pdf_to_text - INFO - Successfully extracted 1810 characters using pdfplumber
+2026-03-11 05:27:37 - src.pdf.pdf_to_text - INFO - Extracting text from encrypted PDF: /var/home/zh/Documents/gmail-expense-parser/src/../downloads/fubon_銀行對帳單_8.PDF (805601 bytes)
+2026-03-11 05:27:39 - src.pdf.pdf_to_text - INFO - Successfully extracted 6725 characters using pdfplumber
+2026-03-11 05:27:39 - src.pdf.pdf_to_text - INFO - Extracting text from encrypted PDF: /var/home/zh/Documents/gmail-expense-parser/src/../downloads/_bank_ESUN_Estatement_11405.pdf (955050 bytes)
+2026-03-11 05:27:39 - src.pdf.pdf_to_text - INFO - Successfully extracted 2766 characters using pdfplumber
+2026-03-11 05:27:39 - src.pdf.pdf_to_text - INFO - Extracting text from encrypted PDF: /var/home/zh/Documents/gmail-expense-parser/src/../downloads/fubon_銀行對帳單_9.PDF (1327581 bytes)
+2026-03-11 05:27:41 - src.pdf.pdf_to_text - INFO - Successfully extracted 6409 characters using pdfplumber
+2026-03-11 05:27:41 - src.pdf.pdf_to_text - INFO - Extracting text from encrypted PDF: /var/home/zh/Documents/gmail-expense-parser/src/../downloads/_bank_ESUN_Estatement_11404.pdf (914692 bytes)
+2026-03-11 05:27:41 - src.pdf.pdf_to_text - INFO - Successfully extracted 2571 characters using pdfplumber
+2026-03-11 05:27:41 - src.pdf.pdf_to_text - INFO - Extracting text from encrypted PDF: /var/home/zh/Documents/gmail-expense-parser/src/../downloads/fubon_銀行對帳單_10.PDF (1355056 bytes)
+2026-03-11 05:27:43 - src.pdf.pdf_to_text - INFO - Successfully extracted 6206 characters using pdfplumber
+2026-03-11 05:27:43 - src.pdf.pdf_to_text - INFO - Extracting text from encrypted PDF: /var/home/zh/Documents/gmail-expense-parser/src/../downloads/_bank_ESUN_Estatement_11403.pdf (919545 bytes)
+2026-03-11 05:27:43 - src.pdf.pdf_to_text - INFO - Successfully extracted 2649 characters using pdfplumber
+2026-03-11 05:27:43 - src.pdf.pdf_to_text - INFO - Extracting text from encrypted PDF: /var/home/zh/Documents/gmail-expense-parser/src/../downloads/fubon_銀行對帳單_11.PDF (713356 bytes)
+2026-03-11 05:27:45 - src.pdf.pdf_to_text - INFO - Successfully extracted 6152 characters using pdfplumber
+2026-03-11 05:27:45 - src.pdf.pdf_to_text - INFO - Extracting text from encrypted PDF: /var/home/zh/Documents/gmail-expense-parser/src/../downloads/_bank_ESUN_Estatement_11402.pdf (917400 bytes)
+2026-03-11 05:27:45 - src.pdf.pdf_to_text - INFO - Successfully extracted 2545 characters using pdfplumber
+2026-03-11 05:27:45 - src.pdf.pdf_to_text - INFO - Extracting text from encrypted PDF: /var/home/zh/Documents/gmail-expense-parser/src/../downloads/fubon_銀行對帳單_12.PDF (744600 bytes)
+2026-03-11 05:27:47 - src.pdf.pdf_to_text - INFO - Successfully extracted 6179 characters using pdfplumber
+2026-03-11 05:27:47 - src.pdf.pdf_to_text - INFO - Extracting text from encrypted PDF: /var/home/zh/Documents/gmail-expense-parser/src/../downloads/fubon_銀行對帳單_13.PDF (746893 bytes)
+2026-03-11 05:27:48 - src.pdf.pdf_to_text - INFO - Successfully extracted 6525 characters using pdfplumber
+2026-03-11 05:27:48 - src.pdf.pdf_to_text - INFO - Extracting text from encrypted PDF: /var/home/zh/Documents/gmail-expense-parser/src/../downloads/fubon_銀行對帳單_14.PDF (683907 bytes)
+2026-03-11 05:27:50 - src.pdf.pdf_to_text - INFO - Successfully extracted 6486 characters using pdfplumber
+2026-03-11 05:27:50 - src.pdf.pdf_to_text - INFO - Extracting text from encrypted PDF: /var/home/zh/Documents/gmail-expense-parser/src/../downloads/fubon_銀行對帳單_15.PDF (733194 bytes)
+2026-03-11 05:27:52 - src.pdf.pdf_to_text - INFO - Successfully extracted 6452 characters using pdfplumber
+2026-03-11 05:27:52 - src.pdf.pdf_to_text - INFO - Extracting text from encrypted PDF: /var/home/zh/Documents/gmail-expense-parser/src/../downloads/fubon_銀行對帳單_16.PDF (768093 bytes)
+2026-03-11 05:27:54 - src.pdf.pdf_to_text - INFO - Successfully extracted 6333 characters using pdfplumber
+2026-03-11 05:27:54 - src.pdf.pdf_to_text - INFO - Extracting text from encrypted PDF: /var/home/zh/Documents/gmail-expense-parser/src/../downloads/fubon_銀行對帳單_17.PDF (745302 bytes)
+2026-03-11 05:27:56 - src.pdf.pdf_to_text - INFO - Successfully extracted 6407 characters using pdfplumber
+2026-03-11 05:27:56 - src.pdf.pdf_to_text - INFO - Extracting text from encrypted PDF: /var/home/zh/Documents/gmail-expense-parser/src/../downloads/fubon_銀行對帳單_18.PDF (747001 bytes)
+2026-03-11 05:27:58 - src.pdf.pdf_to_text - INFO - Successfully extracted 6410 characters using pdfplumber
+2026-03-11 05:27:58 - src.pdf.pdf_to_text - INFO - Extracting text from encrypted PDF: /var/home/zh/Documents/gmail-expense-parser/src/../downloads/fubon_銀行對帳單_19.PDF (752855 bytes)
+2026-03-11 05:28:00 - src.pdf.pdf_to_text - INFO - Successfully extracted 6857 characters using pdfplumber
+2026-03-11 05:28:00 - src.pdf.pdf_to_text - INFO - Extracting text from encrypted PDF: /var/home/zh/Documents/gmail-expense-parser/src/../downloads/fubon_銀行對帳單_20.PDF (731482 bytes)
+2026-03-11 05:28:01 - src.pdf.pdf_to_text - INFO - Successfully extracted 6778 characters using pdfplumber
+2026-03-11 05:28:01 - src.pdf.pdf_to_text - INFO - Extracting text from encrypted PDF: /var/home/zh/Documents/gmail-expense-parser/src/../downloads/fubon_銀行對帳單_21.PDF (695709 bytes)
+2026-03-11 05:28:03 - src.pdf.pdf_to_text - INFO - Successfully extracted 6581 characters using pdfplumber
+2026-03-11 05:28:03 - src.pdf.pdf_to_text - INFO - Extracting text from encrypted PDF: /var/home/zh/Documents/gmail-expense-parser/src/../downloads/fubon_銀行對帳單_22.PDF (682187 bytes)
+2026-03-11 05:28:05 - src.pdf.pdf_to_text - INFO - Successfully extracted 6286 characters using pdfplumber
+2026-03-11 05:28:05 - src.pdf.pdf_to_text - INFO - Extracting text from encrypted PDF: /var/home/zh/Documents/gmail-expense-parser/src/../downloads/fubon_銀行對帳單_23.PDF (714189 bytes)
+2026-03-11 05:28:07 - src.pdf.pdf_to_text - INFO - Successfully extracted 6303 characters using pdfplumber
+2026-03-11 05:28:07 - src.pdf.pdf_to_text - INFO - Extracting text from encrypted PDF: /var/home/zh/Documents/gmail-expense-parser/src/../downloads/fubon_銀行對帳單_24.PDF (759290 bytes)
+2026-03-11 05:28:09 - src.pdf.pdf_to_text - INFO - Successfully extracted 6524 characters using pdfplumber
+2026-03-11 05:28:09 - src.pdf.pdf_to_text - INFO - Extracting text from encrypted PDF: /var/home/zh/Documents/gmail-expense-parser/src/../downloads/fubon_台北富邦銀行所得稅扣繳憑單_存款及其他類__.PDF (129130 bytes)
+2026-03-11 05:28:09 - src.pdf.pdf_to_text - INFO - Successfully extracted 1264 characters using pdfplumber
+2026-03-11 05:28:09 - src.pdf.pdf_to_text - INFO - Extracting text from encrypted PDF: /var/home/zh/Documents/gmail-expense-parser/src/../downloads/fubon_銀行對帳單_25.PDF (726617 bytes)
+2026-03-11 05:28:11 - src.pdf.pdf_to_text - INFO - Successfully extracted 6552 characters using pdfplumber
+2026-03-11 05:28:11 - src.pdf.pdf_to_text - INFO - Extracting text from encrypted PDF: /var/home/zh/Documents/gmail-expense-parser/src/../downloads/fubon_銀行對帳單_26.PDF (729236 bytes)
+2026-03-11 05:28:13 - src.pdf.pdf_to_text - INFO - Successfully extracted 6411 characters using pdfplumber
+2026-03-11 05:28:13 - __main__ - INFO - Text extraction: 50 succeeded, 0 failed [senders=['HSBC@mail.hsbc.com.sg', 'service@bhu.taipeifubon.com.tw', 'estatement@esunbank.com', 'cards@estatements.hsbc.com.tw'] keywords=['信用卡', '電子帳單', '銀行'] max_results=50]
+2026-03-11 05:28:13 - __main__ - INFO - Parsing receipts with LLM... [senders=['HSBC@mail.hsbc.com.sg', 'service@bhu.taipeifubon.com.tw', 'estatement@esunbank.com', 'cards@estatements.hsbc.com.tw'] keywords=['信用卡', '電子帳單', '銀行'] max_results=50]
+2026-03-11 05:28:13 - src.llm.parse_receipt - INFO - Parsing receipt text (1726 chars), source: hsbc
+2026-03-11 05:28:13 - src.llm.parse_receipt - INFO - Attempting OpenAI API parsing...
+2026-03-11 05:28:13 - src.llm.parse_receipt - INFO - Initialized OpenAI client for receipt parsing (model: gpt-4o-mini)
+2026-03-11 05:28:46 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-11 05:28:46 - src.llm.parse_receipt - INFO - OpenAI response received (6192 chars): {
+  "transactions": [
+    {
+      "date": "2026-03-03",
+      "amount": 2880.0,
+      "currency": "TWD",
+      "expense_name": "Transaction",
+      "expense_type": "Other",
+      "source": "HSBC",
+   ...
+2026-03-11 05:28:46 - src.llm.parse_receipt - ERROR - Failed to parse OpenAI JSON response: Expecting value: line 274 column 14 (char 6192), response: {
+  "transactions": [
+    {
+      "date": "2026-03-03",
+      "amount": 2880.0,
+      "currency": "TWD",
+      "expense_name": "Transaction",
+      "expense_type": "Other",
+      "source": "HSBC",
+      "confidence": 0.9
+    },
+    {
+      "date": "2026-02-11",
+      "amount": 100.0,
+      "currency": "TWD",
+      "expense_name": "Transaction",
+      "expense_type": "Other",
+      "source": "HSBC",
+      "confidence": 0.9
+    },
+    {
+      "date": "2026-02-14",
+      "amount": 103.0,
+      "currency": "TWD",
+      "expense_name": "Transaction",
+      "expense_type": "Other",
+      "source": "HSBC",
+      "confidence": 0.9
+    },
+    {
+      "date": "2026-02-14",
+      "amount": 405.0,
+      "currency": "TWD",
+      "expense_name": "Transaction",
+      "expense_type": "Other",
+      "source": "HSBC",
+      "confidence": 0.9
+    },
+    {
+      "date": "2026-02-14",
+      "amount": 520.0,
+      "currency": "TWD",
+      "expense_name": "Transaction",
+      "expense_type": "Other",
+      "source": "HSBC",
+      "confidence": 0.9
+    },
+    {
+      "date": "2026-02-14",
+      "amount": 700.0,
+      "currency": "TWD",
+      "expense_name": "Transaction",
+      "expense_type": "Other",
+      "source": "HSBC",
+      "confidence": 0.9
+    },
+    {
+      "date": "2026-02-15",
+      "amount": 35.0,
+      "currency": "TWD",
+      "expense_name": "Transaction",
+      "expense_type": "Other",
+      "source": "HSBC",
+      "confidence": 0.9
+    },
+    {
+      "date": "2026-02-15",
+      "amount": 75.0,
+      "currency": "TWD",
+      "expense_name": "Transaction",
+      "expense_type": "Other",
+      "source": "HSBC",
+      "confidence": 0.9
+    },
+    {
+      "date": "2026-02-15",
+      "amount": 244.0,
+      "currency": "TWD",
+      "expense_name": "Transaction",
+      "expense_type": "Other",
+      "source": "HSBC",
+      "confidence": 0.9
+    },
+    {
+      "date": "2026-02-16",
+      "amount": 174.0,
+      "currency": "TWD",
+      "expense_name": "Transaction",
+      "expense_type": "Other",
+      "source": "HSBC",
+      "confidence": 0.9
+    },
+    {
+      "date": "2026-02-17",
+      "amount": 8729.0,
+      "currency": "TWD",
+      "expense_name": "Transaction",
+      "expense_type": "Other",
+      "source": "HSBC",
+      "confidence": 0.9
+    },
+    {
+      "date": "2026-02-19",
+      "amount": 220.0,
+      "currency": "TWD",
+      "expense_name": "Transaction",
+      "expense_type": "Other",
+      "source": "HSBC",
+      "confidence": 0.9
+    },
+    {
+      "date": "2026-02-19",
+      "amount": 220.0,
+      "currency": "TWD",
+      "expense_name": "Transaction",
+      "expense_type": "Other",
+      "source": "HSBC",
+      "confidence": 0.9
+    },
+    {
+      "date": "2026-02-19",
+      "amount": 244.0,
+      "currency": "TWD",
+      "expense_name": "Transaction",
+      "expense_type": "Other",
+      "source": "HSBC",
+      "confidence": 0.9
+    },
+    {
+      "date": "2026-02-20",
+      "amount": 2398.0,
+      "currency": "TWD",
+      "expense_name": "Transaction",
+      "expense_type": "Other",
+      "source": "HSBC",
+      "confidence": 0.9
+    },
+    {
+      "date": "2026-02-21",
+      "amount": 69.0,
+      "currency": "TWD",
+      "expense_name": "Transaction",
+      "expense_type": "Other",
+      "source": "HSBC",
+      "confidence": 0.9
+    },
+    {
+      "date": "2026-02-21",
+      "amount": 373.0,
+      "currency": "TWD",
+      "expense_name": "Transaction",
+      "expense_type": "Other",
+      "source": "HSBC",
+      "confidence": 0.9
+    },
+    {
+      "date": "2026-02-22",
+      "amount": 55.0,
+      "currency": "TWD",
+      "expense_name": "Transaction",
+      "expense_type": "Other",
+      "source": "HSBC",
+      "confidence": 0.9
+    },
+    {
+      "date": "2026-02-23",
+      "amount": 1040.0,
+      "currency": "TWD",
+      "expense_name": "Transaction",
+      "expense_type": "Other",
+      "source": "HSBC",
+      "confidence": 0.9
+    },
+    {
+      "date": "2026-02-24",
+      "amount": 210.0,
+      "currency": "TWD",
+      "expense_name": "Transaction",
+      "expense_type": "Other",
+      "source": "HSBC",
+      "confidence": 0.9
+    },
+    {
+      "date": "2026-02-24",
+      "amount": 1966.0,
+      "currency": "TWD",
+      "expense_name": "Transaction",
+      "expense_type": "Other",
+      "source": "HSBC",
+      "confidence": 0.9
+    },
+    {
+      "date": "2026-02-25",
+      "amount": 20.0,
+      "currency": "TWD",
+      "expense_name": "Transaction",
+      "expense_type": "Other",
+      "source": "HSBC",
+      "confidence": 0.9
+    },
+    {
+      "date": "2026-02-25",
+      "amount": 20.0,
+      "currency": "TWD",
+      "expense_name": "Transaction",
+      "expense_type": "Other",
+      "source": "HSBC",
+      "confidence": 0.9
+    },
+    {
+      "date": "2026-02-25",
+      "amount": 211.0,
+      "currency": "TWD",
+      "expense_name": "Transaction",
+      "expense_type": "Other",
+      "source": "HSBC",
+      "confidence": 0.9
+    },
+    {
+      "date": "2026-02-25",
+      "amount": 1150.0,
+      "currency": "TWD",
+      "expense_name": "Transaction",
+      "expense_type": "Other",
+      "source": "HSBC",
+      "confidence": 0.9
+    },
+    {
+      "date": "2026-02-25",
+      "amount": 1192.0,
+      "currency": "TWD",
+      "expense_name": "Transaction",
+      "expense_type": "Other",
+      "source": "HSBC",
+      "confidence": 0.9
+    },
+    {
+      "date": "2026-02-26",
+      "amount": 99.0,
+      "currency": "TWD",
+      "expense_name": "Transaction",
+      "expense_type": "Other",
+      "source": "HSBC",
+      "confidence": 0.9
+    },
+    {
+      "date": "2026-02-27",
+      "amount": 4300.0,
+      "currency": "TWD",
+      "expense_name": "Transaction",
+      "expense_type": "Other",
+      "source": "HSBC",
+      "confidence": 0.9
+    },
+    {
+      "date": "2026-02-28",
+      "amount": 100.0,
+      "currency": "TWD",
+      "expense_name": "Transaction",
+      "expense_type": "Other",
+      "source": "HSBC",
+      "confidence": 0.9
+    },
+    {
+      "date": "2026-02-28",
+      "amount": 437.0,
+      "currency": "TWD",
+      "expense_name": "Transaction",
+      "expense_type": "Other",
+      "source": "HSBC",
+      "confidence": 0.9
+    },
+    {
+      "date":
+2026-03-11 05:28:46 - src.utils.retry - WARNING - Attempt 1/3 failed: OpenAI API error: Invalid JSON response from OpenAI: Expecting value: line 274 column 14 (char 6192). Will retry.
+2026-03-11 05:28:46 - src.utils.retry - INFO - Waiting 2.48 seconds before retry...
+2026-03-11 05:28:48 - src.llm.parse_receipt - INFO - Initialized OpenAI client for receipt parsing (model: gpt-4o-mini)
+2026-03-11 05:29:25 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-11 05:29:25 - src.llm.parse_receipt - INFO - OpenAI response received (6194 chars): {
+  "transactions": [
+    {
+      "date": "2026-03-03",
+      "amount": 2880.0,
+      "currency": "TWD",
+      "expense_name": "Credit Card Payment",
+      "expense_type": "Other",
+      "source": "HS...
+2026-03-11 05:29:25 - src.llm.parse_receipt - ERROR - Failed to parse OpenAI JSON response: Unterminated string starting at: line 274 column 7 (char 6193), response: {
+  "transactions": [
+    {
+      "date": "2026-03-03",
+      "amount": 2880.0,
+      "currency": "TWD",
+      "expense_name": "Credit Card Payment",
+      "expense_type": "Other",
+      "source": "HSBC",
+      "confidence": 0.9
+    },
+    {
+      "date": "2026-02-11",
+      "amount": 100.0,
+      "currency": "TWD",
+      "expense_name": "Transaction",
+      "expense_type": "Other",
+      "source": "HSBC",
+      "confidence": 0.8
+    },
+    {
+      "date": "2026-02-14",
+      "amount": 103.0,
+      "currency": "TWD",
+      "expense_name": "Transaction",
+      "expense_type": "Other",
+      "source": "HSBC",
+      "confidence": 0.8
+    },
+    {
+      "date": "2026-02-14",
+      "amount": 405.0,
+      "currency": "TWD",
+      "expense_name": "Transaction",
+      "expense_type": "Other",
+      "source": "HSBC",
+      "confidence": 0.8
+    },
+    {
+      "date": "2026-02-14",
+      "amount": 520.0,
+      "currency": "TWD",
+      "expense_name": "Transaction",
+      "expense_type": "Other",
+      "source": "HSBC",
+      "confidence": 0.8
+    },
+    {
+      "date": "2026-02-14",
+      "amount": 700.0,
+      "currency": "TWD",
+      "expense_name": "Transaction",
+      "expense_type": "Other",
+      "source": "HSBC",
+      "confidence": 0.8
+    },
+    {
+      "date": "2026-02-15",
+      "amount": 35.0,
+      "currency": "TWD",
+      "expense_name": "Transaction",
+      "expense_type": "Other",
+      "source": "HSBC",
+      "confidence": 0.8
+    },
+    {
+      "date": "2026-02-15",
+      "amount": 75.0,
+      "currency": "TWD",
+      "expense_name": "Transaction",
+      "expense_type": "Other",
+      "source": "HSBC",
+      "confidence": 0.8
+    },
+    {
+      "date": "2026-02-15",
+      "amount": 244.0,
+      "currency": "TWD",
+      "expense_name": "Transaction",
+      "expense_type": "Other",
+      "source": "HSBC",
+      "confidence": 0.8
+    },
+    {
+      "date": "2026-02-16",
+      "amount": 174.0,
+      "currency": "TWD",
+      "expense_name": "Transaction",
+      "expense_type": "Other",
+      "source": "HSBC",
+      "confidence": 0.8
+    },
+    {
+      "date": "2026-02-17",
+      "amount": 8729.0,
+      "currency": "TWD",
+      "expense_name": "Transaction",
+      "expense_type": "Other",
+      "source": "HSBC",
+      "confidence": 0.8
+    },
+    {
+      "date": "2026-02-19",
+      "amount": 220.0,
+      "currency": "TWD",
+      "expense_name": "Transaction",
+      "expense_type": "Other",
+      "source": "HSBC",
+      "confidence": 0.8
+    },
+    {
+      "date": "2026-02-19",
+      "amount": 220.0,
+      "currency": "TWD",
+      "expense_name": "Transaction",
+      "expense_type": "Other",
+      "source": "HSBC",
+      "confidence": 0.8
+    },
+    {
+      "date": "2026-02-19",
+      "amount": 244.0,
+      "currency": "TWD",
+      "expense_name": "Transaction",
+      "expense_type": "Other",
+      "source": "HSBC",
+      "confidence": 0.8
+    },
+    {
+      "date": "2026-02-20",
+      "amount": 2398.0,
+      "currency": "TWD",
+      "expense_name": "Transaction",
+      "expense_type": "Other",
+      "source": "HSBC",
+      "confidence": 0.8
+    },
+    {
+      "date": "2026-02-21",
+      "amount": 69.0,
+      "currency": "TWD",
+      "expense_name": "Transaction",
+      "expense_type": "Other",
+      "source": "HSBC",
+      "confidence": 0.8
+    },
+    {
+      "date": "2026-02-21",
+      "amount": 373.0,
+      "currency": "TWD",
+      "expense_name": "Transaction",
+      "expense_type": "Other",
+      "source": "HSBC",
+      "confidence": 0.8
+    },
+    {
+      "date": "2026-02-22",
+      "amount": 55.0,
+      "currency": "TWD",
+      "expense_name": "Transaction",
+      "expense_type": "Other",
+      "source": "HSBC",
+      "confidence": 0.8
+    },
+    {
+      "date": "2026-02-23",
+      "amount": 1040.0,
+      "currency": "TWD",
+      "expense_name": "Transaction",
+      "expense_type": "Other",
+      "source": "HSBC",
+      "confidence": 0.8
+    },
+    {
+      "date": "2026-02-24",
+      "amount": 210.0,
+      "currency": "TWD",
+      "expense_name": "Transaction",
+      "expense_type": "Other",
+      "source": "HSBC",
+      "confidence": 0.8
+    },
+    {
+      "date": "2026-02-24",
+      "amount": 1966.0,
+      "currency": "TWD",
+      "expense_name": "Transaction",
+      "expense_type": "Other",
+      "source": "HSBC",
+      "confidence": 0.8
+    },
+    {
+      "date": "2026-02-25",
+      "amount": 20.0,
+      "currency": "TWD",
+      "expense_name": "Transaction",
+      "expense_type": "Other",
+      "source": "HSBC",
+      "confidence": 0.8
+    },
+    {
+      "date": "2026-02-25",
+      "amount": 20.0,
+      "currency": "TWD",
+      "expense_name": "Transaction",
+      "expense_type": "Other",
+      "source": "HSBC",
+      "confidence": 0.8
+    },
+    {
+      "date": "2026-02-25",
+      "amount": 211.0,
+      "currency": "TWD",
+      "expense_name": "Transaction",
+      "expense_type": "Other",
+      "source": "HSBC",
+      "confidence": 0.8
+    },
+    {
+      "date": "2026-02-25",
+      "amount": 1150.0,
+      "currency": "TWD",
+      "expense_name": "Transaction",
+      "expense_type": "Other",
+      "source": "HSBC",
+      "confidence": 0.8
+    },
+    {
+      "date": "2026-02-25",
+      "amount": 1192.0,
+      "currency": "TWD",
+      "expense_name": "Transaction",
+      "expense_type": "Other",
+      "source": "HSBC",
+      "confidence": 0.8
+    },
+    {
+      "date": "2026-02-26",
+      "amount": 99.0,
+      "currency": "TWD",
+      "expense_name": "Transaction",
+      "expense_type": "Other",
+      "source": "HSBC",
+      "confidence": 0.8
+    },
+    {
+      "date": "2026-02-27",
+      "amount": 4300.0,
+      "currency": "TWD",
+      "expense_name": "Transaction",
+      "expense_type": "Other",
+      "source": "HSBC",
+      "confidence": 0.8
+    },
+    {
+      "date": "2026-02-28",
+      "amount": 100.0,
+      "currency": "TWD",
+      "expense_name": "Transaction",
+      "expense_type": "Other",
+      "source": "HSBC",
+      "confidence": 0.8
+    },
+    {
+      "date": "2026-02-28",
+      "amount": 437.0,
+      "currency": "TWD",
+      "expense_name": "Transaction",
+      "expense_type": "Other",
+      "source": "HSBC",
+      "confidence": 0.8
+    },
+    {
+      "
+2026-03-11 05:29:25 - src.utils.retry - WARNING - Attempt 2/3 failed: OpenAI API error: Invalid JSON response from OpenAI: Unterminated string starting at: line 274 column 7 (char 6193). Will retry.
+2026-03-11 05:29:25 - src.utils.retry - INFO - Waiting 5.43 seconds before retry...
+2026-03-11 05:29:30 - src.llm.parse_receipt - INFO - Initialized OpenAI client for receipt parsing (model: gpt-4o-mini)
+2026-03-11 05:30:03 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-11 05:30:03 - src.llm.parse_receipt - INFO - OpenAI response received (6078 chars): {
+  "transactions": [
+    {
+      "date": "2026-03-03",
+      "amount": 2880.0,
+      "currency": "TWD",
+      "expense_name": "Credit Card Payment",
+      "expense_type": "Other",
+      "source": "HS...
+2026-03-11 05:30:03 - src.llm.parse_receipt - ERROR - Failed to parse OpenAI JSON response: Unterminated string starting at: line 274 column 7 (char 6077), response: {
+  "transactions": [
+    {
+      "date": "2026-03-03",
+      "amount": 2880.0,
+      "currency": "TWD",
+      "expense_name": "Credit Card Payment",
+      "expense_type": "Other",
+      "source": "HSBC",
+      "confidence": 0.9
+    },
+    {
+      "date": "2026-02-11",
+      "amount": 100.0,
+      "currency": "TWD",
+      "expense_name": "Expense",
+      "expense_type": "Other",
+      "source": "HSBC",
+      "confidence": 0.8
+    },
+    {
+      "date": "2026-02-14",
+      "amount": 103.0,
+      "currency": "TWD",
+      "expense_name": "Expense",
+      "expense_type": "Other",
+      "source": "HSBC",
+      "confidence": 0.8
+    },
+    {
+      "date": "2026-02-14",
+      "amount": 405.0,
+      "currency": "TWD",
+      "expense_name": "Expense",
+      "expense_type": "Other",
+      "source": "HSBC",
+      "confidence": 0.8
+    },
+    {
+      "date": "2026-02-14",
+      "amount": 520.0,
+      "currency": "TWD",
+      "expense_name": "Expense",
+      "expense_type": "Other",
+      "source": "HSBC",
+      "confidence": 0.8
+    },
+    {
+      "date": "2026-02-14",
+      "amount": 700.0,
+      "currency": "TWD",
+      "expense_name": "Expense",
+      "expense_type": "Other",
+      "source": "HSBC",
+      "confidence": 0.8
+    },
+    {
+      "date": "2026-02-15",
+      "amount": 35.0,
+      "currency": "TWD",
+      "expense_name": "Expense",
+      "expense_type": "Other",
+      "source": "HSBC",
+      "confidence": 0.8
+    },
+    {
+      "date": "2026-02-15",
+      "amount": 75.0,
+      "currency": "TWD",
+      "expense_name": "Expense",
+      "expense_type": "Other",
+      "source": "HSBC",
+      "confidence": 0.8
+    },
+    {
+      "date": "2026-02-15",
+      "amount": 244.0,
+      "currency": "TWD",
+      "expense_name": "Expense",
+      "expense_type": "Other",
+      "source": "HSBC",
+      "confidence": 0.8
+    },
+    {
+      "date": "2026-02-16",
+      "amount": 174.0,
+      "currency": "TWD",
+      "expense_name": "Expense",
+      "expense_type": "Other",
+      "source": "HSBC",
+      "confidence": 0.8
+    },
+    {
+      "date": "2026-02-17",
+      "amount": 8729.0,
+      "currency": "TWD",
+      "expense_name": "Expense",
+      "expense_type": "Other",
+      "source": "HSBC",
+      "confidence": 0.8
+    },
+    {
+      "date": "2026-02-19",
+      "amount": 220.0,
+      "currency": "TWD",
+      "expense_name": "Expense",
+      "expense_type": "Other",
+      "source": "HSBC",
+      "confidence": 0.8
+    },
+    {
+      "date": "2026-02-19",
+      "amount": 220.0,
+      "currency": "TWD",
+      "expense_name": "Expense",
+      "expense_type": "Other",
+      "source": "HSBC",
+      "confidence": 0.8
+    },
+    {
+      "date": "2026-02-19",
+      "amount": 244.0,
+      "currency": "TWD",
+      "expense_name": "Expense",
+      "expense_type": "Other",
+      "source": "HSBC",
+      "confidence": 0.8
+    },
+    {
+      "date": "2026-02-20",
+      "amount": 2398.0,
+      "currency": "TWD",
+      "expense_name": "Expense",
+      "expense_type": "Other",
+      "source": "HSBC",
+      "confidence": 0.8
+    },
+    {
+      "date": "2026-02-21",
+      "amount": 69.0,
+      "currency": "TWD",
+      "expense_name": "Expense",
+      "expense_type": "Other",
+      "source": "HSBC",
+      "confidence": 0.8
+    },
+    {
+      "date": "2026-02-21",
+      "amount": 373.0,
+      "currency": "TWD",
+      "expense_name": "Expense",
+      "expense_type": "Other",
+      "source": "HSBC",
+      "confidence": 0.8
+    },
+    {
+      "date": "2026-02-22",
+      "amount": 55.0,
+      "currency": "TWD",
+      "expense_name": "Expense",
+      "expense_type": "Other",
+      "source": "HSBC",
+      "confidence": 0.8
+    },
+    {
+      "date": "2026-02-23",
+      "amount": 1040.0,
+      "currency": "TWD",
+      "expense_name": "Expense",
+      "expense_type": "Other",
+      "source": "HSBC",
+      "confidence": 0.8
+    },
+    {
+      "date": "2026-02-24",
+      "amount": 210.0,
+      "currency": "TWD",
+      "expense_name": "Expense",
+      "expense_type": "Other",
+      "source": "HSBC",
+      "confidence": 0.8
+    },
+    {
+      "date": "2026-02-24",
+      "amount": 1966.0,
+      "currency": "TWD",
+      "expense_name": "Expense",
+      "expense_type": "Other",
+      "source": "HSBC",
+      "confidence": 0.8
+    },
+    {
+      "date": "2026-02-25",
+      "amount": 20.0,
+      "currency": "TWD",
+      "expense_name": "Expense",
+      "expense_type": "Other",
+      "source": "HSBC",
+      "confidence": 0.8
+    },
+    {
+      "date": "2026-02-25",
+      "amount": 20.0,
+      "currency": "TWD",
+      "expense_name": "Expense",
+      "expense_type": "Other",
+      "source": "HSBC",
+      "confidence": 0.8
+    },
+    {
+      "date": "2026-02-25",
+      "amount": 211.0,
+      "currency": "TWD",
+      "expense_name": "Expense",
+      "expense_type": "Other",
+      "source": "HSBC",
+      "confidence": 0.8
+    },
+    {
+      "date": "2026-02-25",
+      "amount": 1150.0,
+      "currency": "TWD",
+      "expense_name": "Expense",
+      "expense_type": "Other",
+      "source": "HSBC",
+      "confidence": 0.8
+    },
+    {
+      "date": "2026-02-25",
+      "amount": 1192.0,
+      "currency": "TWD",
+      "expense_name": "Expense",
+      "expense_type": "Other",
+      "source": "HSBC",
+      "confidence": 0.8
+    },
+    {
+      "date": "2026-02-26",
+      "amount": 99.0,
+      "currency": "TWD",
+      "expense_name": "Expense",
+      "expense_type": "Other",
+      "source": "HSBC",
+      "confidence": 0.8
+    },
+    {
+      "date": "2026-02-27",
+      "amount": 4300.0,
+      "currency": "TWD",
+      "expense_name": "Expense",
+      "expense_type": "Other",
+      "source": "HSBC",
+      "confidence": 0.8
+    },
+    {
+      "date": "2026-02-28",
+      "amount": 100.0,
+      "currency": "TWD",
+      "expense_name": "Expense",
+      "expense_type": "Other",
+      "source": "HSBC",
+      "confidence": 0.8
+    },
+    {
+      "date": "2026-02-28",
+      "amount": 437.0,
+      "currency": "TWD",
+      "expense_name": "Expense",
+      "expense_type": "Other",
+      "source": "HSBC",
+      "confidence": 0.8
+    },
+    {
+      "
+2026-03-11 05:30:03 - src.utils.retry - WARNING - Attempt 3/3 failed: OpenAI API error: Invalid JSON response from OpenAI: Unterminated string starting at: line 274 column 7 (char 6077). Will retry.
+2026-03-11 05:30:03 - src.utils.retry - ERROR - All 3 attempts failed. Last error: OpenAI API error: Invalid JSON response from OpenAI: Unterminated string starting at: line 274 column 7 (char 6077)
+2026-03-11 05:30:03 - src.llm.parse_receipt - WARNING - OpenAI parsing failed: OpenAI API error: Invalid JSON response from OpenAI: Unterminated string starting at: line 274 column 7 (char 6077), trying heuristic fallback
+2026-03-11 05:30:03 - src.llm.parse_receipt - INFO - Using heuristic fallback parsing
+2026-03-11 05:30:03 - src.llm.parse_receipt - INFO - No multiple transactions found, falling back to single transaction extraction
+2026-03-11 05:30:03 - src.llm.parse_receipt - INFO - Heuristic parsing result: Bank Statement Transaction - 9760556523753756.0
+2026-03-11 05:30:03 - src.llm.parse_receipt - INFO - Parsing receipt text (6862 chars), source: fubon
+2026-03-11 05:30:03 - src.llm.parse_receipt - INFO - Attempting OpenAI API parsing...
+2026-03-11 05:30:04 - src.llm.parse_receipt - INFO - Initialized OpenAI client for receipt parsing (model: gpt-4o-mini)
+2026-03-11 05:30:04 - src.llm.parse_receipt - INFO - Truncated text from 6862 to 6000 characters for LLM
+2026-03-11 05:30:11 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-11 05:30:11 - src.llm.parse_receipt - INFO - OpenAI response received (1026 chars): {
+  "transactions": [
+    {
+      "date": "2026-02-01",
+      "amount": 3580.0,
+      "currency": "TWD",
+      "expense_name": "承轉結餘",
+      "expense_type": "Other",
+      "source": "fubon",
+      "co...
+2026-03-11 05:30:11 - src.llm.parse_receipt - INFO - Successfully parsed 5 transaction(s)
+2026-03-11 05:30:11 - src.llm.parse_receipt - INFO - Parsing receipt text (2688 chars), source: _bank
+2026-03-11 05:30:11 - src.llm.parse_receipt - INFO - Attempting OpenAI API parsing...
+2026-03-11 05:30:11 - src.llm.parse_receipt - INFO - Initialized OpenAI client for receipt parsing (model: gpt-4o-mini)
+2026-03-11 05:30:26 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-11 05:30:26 - src.llm.parse_receipt - INFO - OpenAI response received (1702 chars): {
+  "transactions": [
+    {
+      "date": "2023-02-05",
+      "amount": 2503.0,
+      "currency": "TWD",
+      "expense_name": "寶島眼鏡",
+      "expense_type": "Shopping",
+      "source": "Ｐｉ－寶島眼鏡",
+    ...
+2026-03-11 05:30:26 - src.llm.parse_receipt - INFO - Successfully parsed 8 transaction(s)
+2026-03-11 05:30:26 - src.llm.parse_receipt - INFO - Parsing receipt text (751 chars), source: hsbc
+2026-03-11 05:30:26 - src.llm.parse_receipt - INFO - Attempting OpenAI API parsing...
+2026-03-11 05:30:26 - src.llm.parse_receipt - INFO - Initialized OpenAI client for receipt parsing (model: gpt-4o-mini)
+2026-03-11 05:30:31 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-11 05:30:31 - src.llm.parse_receipt - INFO - OpenAI response received (644 chars): {
+  "transactions": [
+    {
+      "date": "2026-01-28",
+      "amount": 59258.0,
+      "currency": "TWD",
+      "expense_name": "Credit Card Payment",
+      "expense_type": "Other",
+      "source": "H...
+2026-03-11 05:30:31 - src.llm.parse_receipt - INFO - Successfully parsed 3 transaction(s)
+2026-03-11 05:30:31 - src.llm.parse_receipt - INFO - Parsing receipt text (7020 chars), source: fubon
+2026-03-11 05:30:31 - src.llm.parse_receipt - INFO - Attempting OpenAI API parsing...
+2026-03-11 05:30:31 - src.llm.parse_receipt - INFO - Initialized OpenAI client for receipt parsing (model: gpt-4o-mini)
+2026-03-11 05:30:31 - src.llm.parse_receipt - INFO - Truncated text from 7020 to 6000 characters for LLM
+2026-03-11 05:30:36 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-11 05:30:36 - src.llm.parse_receipt - INFO - OpenAI response received (621 chars): {
+  "transactions": [
+    {
+      "date": "2026-01-01",
+      "amount": 0.0,
+      "currency": "TWD",
+      "expense_name": "承轉結餘",
+      "expense_type": "Other",
+      "source": "fubon",
+      "confi...
+2026-03-11 05:30:36 - src.llm.parse_receipt - INFO - Successfully parsed 3 transaction(s)
+2026-03-11 05:30:36 - src.llm.parse_receipt - INFO - Parsing receipt text (2611 chars), source: _bank
+2026-03-11 05:30:36 - src.llm.parse_receipt - INFO - Attempting OpenAI API parsing...
+2026-03-11 05:30:36 - src.llm.parse_receipt - INFO - Initialized OpenAI client for receipt parsing (model: gpt-4o-mini)
+2026-03-11 05:30:42 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-11 05:30:42 - src.llm.parse_receipt - INFO - OpenAI response received (1481 chars): {
+  "transactions": [
+    {
+      "date": "2023-01-06",
+      "amount": -8668.0,
+      "currency": "TWD",
+      "expense_name": "自動轉帳繳款",
+      "expense_type": "Bills",
+      "source": "玉山信用卡",
+      ...
+2026-03-11 05:30:42 - src.llm.parse_receipt - INFO - Successfully parsed 7 transaction(s)
+2026-03-11 05:30:42 - src.llm.parse_receipt - INFO - Parsing receipt text (840 chars), source: hsbc
+2026-03-11 05:30:42 - src.llm.parse_receipt - INFO - Attempting OpenAI API parsing...
+2026-03-11 05:30:42 - src.llm.parse_receipt - INFO - Initialized OpenAI client for receipt parsing (model: gpt-4o-mini)
+2026-03-11 05:31:07 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-11 05:31:07 - src.llm.parse_receipt - INFO - OpenAI response received (3517 chars): {
+  "transactions": [
+    {
+      "date": "2026-01-05",
+      "amount": 340.0,
+      "currency": "TWD",
+      "expense_name": "Transaction",
+      "expense_type": "Other",
+      "source": "hsbc",
+    ...
+2026-03-11 05:31:07 - src.llm.parse_receipt - INFO - Successfully parsed 17 transaction(s)
+2026-03-11 05:31:07 - src.llm.parse_receipt - INFO - Parsing receipt text (6931 chars), source: fubon
+2026-03-11 05:31:07 - src.llm.parse_receipt - INFO - Attempting OpenAI API parsing...
+2026-03-11 05:31:07 - src.llm.parse_receipt - INFO - Initialized OpenAI client for receipt parsing (model: gpt-4o-mini)
+2026-03-11 05:31:07 - src.llm.parse_receipt - INFO - Truncated text from 6931 to 6000 characters for LLM
+2026-03-11 05:31:13 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-11 05:31:13 - src.llm.parse_receipt - INFO - OpenAI response received (817 chars): {
+  "transactions": [
+    {
+      "date": "2025-12-12",
+      "amount": 1000.0,
+      "currency": "TWD",
+      "expense_name": "委代扣",
+      "expense_type": "Other",
+      "source": "fubon",
+      "con...
+2026-03-11 05:31:13 - src.llm.parse_receipt - INFO - Successfully parsed 4 transaction(s)
+2026-03-11 05:31:13 - src.llm.parse_receipt - INFO - Parsing receipt text (2814 chars), source: _bank
+2026-03-11 05:31:13 - src.llm.parse_receipt - INFO - Attempting OpenAI API parsing...
+2026-03-11 05:31:13 - src.llm.parse_receipt - INFO - Initialized OpenAI client for receipt parsing (model: gpt-4o-mini)
+2026-03-11 05:31:25 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-11 05:31:25 - src.llm.parse_receipt - INFO - OpenAI response received (1474 chars): {
+  "transactions": [
+    {
+      "date": "2023-11-29",
+      "amount": 8250.0,
+      "currency": "TWD",
+      "expense_name": "GOOGLE *Google One",
+      "expense_type": "Other",
+      "source": "玉山信...
+2026-03-11 05:31:25 - src.llm.parse_receipt - INFO - Successfully parsed 7 transaction(s)
+2026-03-11 05:31:25 - src.llm.parse_receipt - INFO - Parsing receipt text (692 chars), source: hsbc
+2026-03-11 05:31:25 - src.llm.parse_receipt - INFO - Attempting OpenAI API parsing...
+2026-03-11 05:31:25 - src.llm.parse_receipt - INFO - Initialized OpenAI client for receipt parsing (model: gpt-4o-mini)
+2026-03-11 05:31:27 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-11 05:31:27 - src.llm.parse_receipt - INFO - OpenAI response received (241 chars): {
+  "transactions": [
+    {
+      "date": "2025-11-22",
+      "amount": 986.68,
+      "currency": "TWD",
+      "expense_name": "Transaction on 11/22",
+      "expense_type": "Other",
+      "source": "h...
+2026-03-11 05:31:27 - src.llm.parse_receipt - INFO - Successfully parsed 1 transaction(s)
+2026-03-11 05:31:27 - src.llm.parse_receipt - INFO - Parsing receipt text (7031 chars), source: fubon
+2026-03-11 05:31:27 - src.llm.parse_receipt - INFO - Attempting OpenAI API parsing...
+2026-03-11 05:31:27 - src.llm.parse_receipt - INFO - Initialized OpenAI client for receipt parsing (model: gpt-4o-mini)
+2026-03-11 05:31:27 - src.llm.parse_receipt - INFO - Truncated text from 7031 to 6000 characters for LLM
+2026-03-11 05:31:33 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-11 05:31:33 - src.llm.parse_receipt - INFO - OpenAI response received (225 chars): {
+  "transactions": [
+    {
+      "date": "2025-11-12",
+      "amount": 1000.0,
+      "currency": "TWD",
+      "expense_name": "委代扣",
+      "expense_type": "Other",
+      "source": "fubon",
+      "con...
+2026-03-11 05:31:33 - src.llm.parse_receipt - INFO - Successfully parsed 1 transaction(s)
+2026-03-11 05:31:33 - src.llm.parse_receipt - INFO - Parsing receipt text (2561 chars), source: _bank
+2026-03-11 05:31:33 - src.llm.parse_receipt - INFO - Attempting OpenAI API parsing...
+2026-03-11 05:31:33 - src.llm.parse_receipt - INFO - Initialized OpenAI client for receipt parsing (model: gpt-4o-mini)
+2026-03-11 05:31:46 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-11 05:31:46 - src.llm.parse_receipt - INFO - OpenAI response received (1666 chars): {
+  "transactions": [
+    {
+      "date": "2023-11-06",
+      "amount": -295.0,
+      "currency": "TWD",
+      "expense_name": "自動轉帳繳款",
+      "expense_type": "Bills",
+      "source": "玉山信用卡",
+      "...
+2026-03-11 05:31:46 - src.llm.parse_receipt - INFO - Successfully parsed 8 transaction(s)
+2026-03-11 05:31:46 - src.llm.parse_receipt - INFO - Parsing receipt text (620 chars), source: hsbc
+2026-03-11 05:31:46 - src.llm.parse_receipt - INFO - Attempting OpenAI API parsing...
+2026-03-11 05:31:46 - src.llm.parse_receipt - INFO - Initialized OpenAI client for receipt parsing (model: gpt-4o-mini)
+2026-03-11 05:31:48 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-11 05:31:48 - src.llm.parse_receipt - INFO - OpenAI response received (241 chars): {
+  "transactions": [
+    {
+      "date": "2025-11-09",
+      "amount": 11061.0,
+      "currency": "TWD",
+      "expense_name": "Credit Card Payment",
+      "expense_type": "Other",
+      "source": "H...
+2026-03-11 05:31:48 - src.llm.parse_receipt - INFO - Successfully parsed 1 transaction(s)
+2026-03-11 05:31:48 - src.llm.parse_receipt - INFO - Parsing receipt text (6642 chars), source: fubon
+2026-03-11 05:31:48 - src.llm.parse_receipt - INFO - Attempting OpenAI API parsing...
+2026-03-11 05:31:48 - src.llm.parse_receipt - INFO - Initialized OpenAI client for receipt parsing (model: gpt-4o-mini)
+2026-03-11 05:31:48 - src.llm.parse_receipt - INFO - Truncated text from 6642 to 6000 characters for LLM
+2026-03-11 05:31:56 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-11 05:31:56 - src.llm.parse_receipt - INFO - OpenAI response received (422 chars): {
+  "transactions": [
+    {
+      "date": "2025-10-01",
+      "amount": 0.0,
+      "currency": "TWD",
+      "expense_name": "承轉結餘",
+      "expense_type": "Other",
+      "source": "fubon",
+      "confi...
+2026-03-11 05:31:56 - src.llm.parse_receipt - INFO - Successfully parsed 2 transaction(s)
+2026-03-11 05:31:56 - src.llm.parse_receipt - INFO - Parsing receipt text (2394 chars), source: _bank
+2026-03-11 05:31:56 - src.llm.parse_receipt - INFO - Attempting OpenAI API parsing...
+2026-03-11 05:31:56 - src.llm.parse_receipt - INFO - Initialized OpenAI client for receipt parsing (model: gpt-4o-mini)
+2026-03-11 05:32:05 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-11 05:32:05 - src.llm.parse_receipt - INFO - OpenAI response received (1063 chars): {
+  "transactions": [
+    {
+      "date": "2025-10-03",
+      "amount": 298.0,
+      "currency": "TWD",
+      "expense_name": "Spotify",
+      "expense_type": "Entertainment",
+      "source": "U Bear卡...
+2026-03-11 05:32:05 - src.llm.parse_receipt - INFO - Successfully parsed 5 transaction(s)
+2026-03-11 05:32:05 - src.llm.parse_receipt - INFO - Parsing receipt text (961 chars), source: hsbc
+2026-03-11 05:32:05 - src.llm.parse_receipt - INFO - Attempting OpenAI API parsing...
+2026-03-11 05:32:05 - src.llm.parse_receipt - INFO - Initialized OpenAI client for receipt parsing (model: gpt-4o-mini)
+2026-03-11 05:32:09 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-11 05:32:09 - src.llm.parse_receipt - INFO - OpenAI response received (443 chars): {
+  "transactions": [
+    {
+      "date": "2025-10-09",
+      "amount": -381.0,
+      "currency": "TWD",
+      "expense_name": "Transaction Fee",
+      "expense_type": "Other",
+      "source": "hsbc",...
+2026-03-11 05:32:09 - src.llm.parse_receipt - INFO - Successfully parsed 2 transaction(s)
+2026-03-11 05:32:09 - src.llm.parse_receipt - INFO - Parsing receipt text (6277 chars), source: fubon
+2026-03-11 05:32:09 - src.llm.parse_receipt - INFO - Attempting OpenAI API parsing...
+2026-03-11 05:32:09 - src.llm.parse_receipt - INFO - Initialized OpenAI client for receipt parsing (model: gpt-4o-mini)
+2026-03-11 05:32:09 - src.llm.parse_receipt - INFO - Truncated text from 6277 to 6000 characters for LLM
+2026-03-11 05:32:11 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-11 05:32:11 - src.llm.parse_receipt - INFO - OpenAI response received (225 chars): {
+  "transactions": [
+    {
+      "date": "2025-09-12",
+      "amount": 1000.0,
+      "currency": "TWD",
+      "expense_name": "委代扣",
+      "expense_type": "Other",
+      "source": "fubon",
+      "con...
+2026-03-11 05:32:11 - src.llm.parse_receipt - INFO - Successfully parsed 1 transaction(s)
+2026-03-11 05:32:11 - src.llm.parse_receipt - INFO - Parsing receipt text (2418 chars), source: _bank
+2026-03-11 05:32:11 - src.llm.parse_receipt - INFO - Attempting OpenAI API parsing...
+2026-03-11 05:32:11 - src.llm.parse_receipt - INFO - Initialized OpenAI client for receipt parsing (model: gpt-4o-mini)
+2026-03-11 05:32:20 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-11 05:32:20 - src.llm.parse_receipt - INFO - OpenAI response received (1059 chars): {
+  "transactions": [
+    {
+      "date": "2023-09-03",
+      "amount": 268.0,
+      "currency": "TWD",
+      "expense_name": "Spotify",
+      "expense_type": "Entertainment",
+      "source": "U Bear卡...
+2026-03-11 05:32:20 - src.llm.parse_receipt - INFO - Successfully parsed 5 transaction(s)
+2026-03-11 05:32:20 - src.llm.parse_receipt - INFO - Parsing receipt text (2756 chars), source: _bank
+2026-03-11 05:32:20 - src.llm.parse_receipt - INFO - Attempting OpenAI API parsing...
+2026-03-11 05:32:20 - src.llm.parse_receipt - INFO - Initialized OpenAI client for receipt parsing (model: gpt-4o-mini)
+2026-03-11 05:32:24 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-11 05:32:24 - src.llm.parse_receipt - INFO - OpenAI response received (633 chars): {
+  "transactions": [
+    {
+      "date": "2025-08-06",
+      "amount": 6527.00,
+      "currency": "TWD",
+      "expense_name": "玉山卡款扣繳",
+      "expense_type": "Bills",
+      "source": "玉山銀行",
+      "...
+2026-03-11 05:32:24 - src.llm.parse_receipt - INFO - Successfully parsed 3 transaction(s)
+2026-03-11 05:32:24 - src.llm.parse_receipt - INFO - Parsing receipt text (349 chars), source: hsbc
+2026-03-11 05:32:24 - src.llm.parse_receipt - INFO - Attempting OpenAI API parsing...
+2026-03-11 05:32:24 - src.llm.parse_receipt - INFO - Initialized OpenAI client for receipt parsing (model: gpt-4o-mini)
+2026-03-11 05:32:26 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-11 05:32:26 - src.llm.parse_receipt - INFO - OpenAI response received (232 chars): {
+  "transactions": [
+    {
+      "date": "2025-09-09",
+      "amount": -500.0,
+      "currency": "TWD",
+      "expense_name": "Transaction",
+      "expense_type": "Other",
+      "source": "hsbc",
+   ...
+2026-03-11 05:32:26 - src.llm.parse_receipt - INFO - Successfully parsed 1 transaction(s)
+2026-03-11 05:32:26 - src.llm.parse_receipt - INFO - Parsing receipt text (6400 chars), source: fubon
+2026-03-11 05:32:26 - src.llm.parse_receipt - INFO - Attempting OpenAI API parsing...
+2026-03-11 05:32:26 - src.llm.parse_receipt - INFO - Initialized OpenAI client for receipt parsing (model: gpt-4o-mini)
+2026-03-11 05:32:26 - src.llm.parse_receipt - INFO - Truncated text from 6400 to 6000 characters for LLM
+2026-03-11 05:32:28 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-11 05:32:28 - src.llm.parse_receipt - INFO - OpenAI response received (225 chars): {
+  "transactions": [
+    {
+      "date": "2025-08-12",
+      "amount": 1000.0,
+      "currency": "TWD",
+      "expense_name": "委代扣",
+      "expense_type": "Other",
+      "source": "fubon",
+      "con...
+2026-03-11 05:32:28 - src.llm.parse_receipt - INFO - Successfully parsed 1 transaction(s)
+2026-03-11 05:32:28 - src.llm.parse_receipt - INFO - Parsing receipt text (2480 chars), source: _bank
+2026-03-11 05:32:28 - src.llm.parse_receipt - INFO - Attempting OpenAI API parsing...
+2026-03-11 05:32:28 - src.llm.parse_receipt - INFO - Initialized OpenAI client for receipt parsing (model: gpt-4o-mini)
+2026-03-11 05:32:41 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-11 05:32:41 - src.llm.parse_receipt - INFO - OpenAI response received (1264 chars): {
+  "transactions": [
+    {
+      "date": "2023-08-06",
+      "amount": -6527.0,
+      "currency": "TWD",
+      "expense_name": "自動轉帳繳款",
+      "expense_type": "Bills",
+      "source": "玉山信用卡",
+      ...
+2026-03-11 05:32:41 - src.llm.parse_receipt - INFO - Successfully parsed 6 transaction(s)
+2026-03-11 05:32:41 - src.llm.parse_receipt - INFO - Parsing receipt text (407 chars), source: hsbc
+2026-03-11 05:32:41 - src.llm.parse_receipt - INFO - Attempting OpenAI API parsing...
+2026-03-11 05:32:41 - src.llm.parse_receipt - INFO - Initialized OpenAI client for receipt parsing (model: gpt-4o-mini)
+2026-03-11 05:32:46 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-11 05:32:46 - src.llm.parse_receipt - INFO - OpenAI response received (643 chars): {
+  "transactions": [
+    {
+      "date": "2025-07-17",
+      "amount": 125.0,
+      "currency": "TWD",
+      "expense_name": "Transaction",
+      "expense_type": "Other",
+      "source": "hsbc",
+    ...
+2026-03-11 05:32:46 - src.llm.parse_receipt - INFO - Successfully parsed 3 transaction(s)
+2026-03-11 05:32:46 - src.llm.parse_receipt - INFO - Parsing receipt text (6714 chars), source: fubon
+2026-03-11 05:32:46 - src.llm.parse_receipt - INFO - Attempting OpenAI API parsing...
+2026-03-11 05:32:46 - src.llm.parse_receipt - INFO - Initialized OpenAI client for receipt parsing (model: gpt-4o-mini)
+2026-03-11 05:32:46 - src.llm.parse_receipt - INFO - Truncated text from 6714 to 6000 characters for LLM
+2026-03-11 05:32:59 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-11 05:32:59 - src.llm.parse_receipt - INFO - OpenAI response received (1032 chars): {
+  "transactions": [
+    {
+      "date": "2025-07-01",
+      "amount": 5993.00,
+      "currency": "TWD",
+      "expense_name": "承轉結餘",
+      "expense_type": "Other",
+      "source": "fubon",
+      "c...
+2026-03-11 05:32:59 - src.llm.parse_receipt - INFO - Successfully parsed 5 transaction(s)
+2026-03-11 05:32:59 - src.llm.parse_receipt - INFO - Parsing receipt text (2707 chars), source: _bank
+2026-03-11 05:32:59 - src.llm.parse_receipt - INFO - Attempting OpenAI API parsing...
+2026-03-11 05:32:59 - src.llm.parse_receipt - INFO - Initialized OpenAI client for receipt parsing (model: gpt-4o-mini)
+2026-03-11 05:33:08 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-11 05:33:08 - src.llm.parse_receipt - INFO - OpenAI response received (1294 chars): {
+  "transactions": [
+    {
+      "date": "2023-06-20",
+      "amount": 5817.0,
+      "currency": "TWD",
+      "expense_name": "Ｐｉ－ＰＣＨＯＭＥ２４Ｈ購物－３Ｄ",
+      "expense_type": "Shopping",
+      "source": "玉...
+2026-03-11 05:33:08 - src.llm.parse_receipt - INFO - Successfully parsed 6 transaction(s)
+2026-03-11 05:33:08 - src.llm.parse_receipt - INFO - Parsing receipt text (1810 chars), source: hsbc
+2026-03-11 05:33:08 - src.llm.parse_receipt - INFO - Attempting OpenAI API parsing...
+2026-03-11 05:33:08 - src.llm.parse_receipt - INFO - Initialized OpenAI client for receipt parsing (model: gpt-4o-mini)
+2026-03-11 05:33:14 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-11 05:33:14 - src.llm.parse_receipt - INFO - OpenAI response received (616 chars): {
+  "transactions": [
+    {
+      "date": "2025-06-21",
+      "amount": -71.0,
+      "currency": "TWD",
+      "expense_name": "KOR",
+      "expense_type": "Other",
+      "source": "hsbc",
+      "confi...
+2026-03-11 05:33:14 - src.llm.parse_receipt - INFO - Successfully parsed 3 transaction(s)
+2026-03-11 05:33:14 - src.llm.parse_receipt - INFO - Parsing receipt text (6725 chars), source: fubon
+2026-03-11 05:33:14 - src.llm.parse_receipt - INFO - Attempting OpenAI API parsing...
+2026-03-11 05:33:14 - src.llm.parse_receipt - INFO - Initialized OpenAI client for receipt parsing (model: gpt-4o-mini)
+2026-03-11 05:33:14 - src.llm.parse_receipt - INFO - Truncated text from 6725 to 6000 characters for LLM
+2026-03-11 05:33:31 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-11 05:33:31 - src.llm.parse_receipt - INFO - OpenAI response received (1624 chars): {
+  "transactions": [
+    {
+      "date": "2025-06-01",
+      "amount": 3530.00,
+      "currency": "TWD",
+      "expense_name": "承轉結餘",
+      "expense_type": "Other",
+      "source": "fubon",
+      "c...
+2026-03-11 05:33:31 - src.llm.parse_receipt - INFO - Successfully parsed 8 transaction(s)
+2026-03-11 05:33:31 - src.llm.parse_receipt - INFO - Parsing receipt text (2766 chars), source: _bank
+2026-03-11 05:33:31 - src.llm.parse_receipt - INFO - Attempting OpenAI API parsing...
+2026-03-11 05:33:31 - src.llm.parse_receipt - INFO - Initialized OpenAI client for receipt parsing (model: gpt-4o-mini)
+2026-03-11 05:33:41 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-11 05:33:41 - src.llm.parse_receipt - INFO - OpenAI response received (1062 chars): {
+  "transactions": [
+    {
+      "date": "2023-06-02",
+      "amount": 929.0,
+      "currency": "TWD",
+      "expense_name": "Ｐｉ－ＰＣＨＯＭＥ１",
+      "expense_type": "Shopping",
+      "source": "玉山信用卡",
+ ...
+2026-03-11 05:33:41 - src.llm.parse_receipt - INFO - Successfully parsed 5 transaction(s)
+2026-03-11 05:33:41 - src.llm.parse_receipt - INFO - Parsing receipt text (6409 chars), source: fubon
+2026-03-11 05:33:41 - src.llm.parse_receipt - INFO - Attempting OpenAI API parsing...
+2026-03-11 05:33:41 - src.llm.parse_receipt - INFO - Initialized OpenAI client for receipt parsing (model: gpt-4o-mini)
+2026-03-11 05:33:41 - src.llm.parse_receipt - INFO - Truncated text from 6409 to 6000 characters for LLM
+2026-03-11 05:33:49 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-11 05:33:49 - src.llm.parse_receipt - INFO - OpenAI response received (622 chars): {
+  "transactions": [
+    {
+      "date": "2025-05-01",
+      "amount": 0.0,
+      "currency": "TWD",
+      "expense_name": "承轉結餘",
+      "expense_type": "Other",
+      "source": "fubon",
+      "confi...
+2026-03-11 05:33:49 - src.llm.parse_receipt - INFO - Successfully parsed 3 transaction(s)
+2026-03-11 05:33:49 - src.llm.parse_receipt - INFO - Parsing receipt text (2571 chars), source: _bank
+2026-03-11 05:33:49 - src.llm.parse_receipt - INFO - Attempting OpenAI API parsing...
+2026-03-11 05:33:49 - src.llm.parse_receipt - INFO - Initialized OpenAI client for receipt parsing (model: gpt-4o-mini)
+2026-03-11 05:33:55 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-11 05:33:55 - src.llm.parse_receipt - INFO - OpenAI response received (863 chars): {
+  "transactions": [
+    {
+      "date": "2023-05-21",
+      "amount": 26.0,
+      "currency": "TWD",
+      "expense_name": "U Bear娛樂影音10%現金回饋",
+      "expense_type": "Other",
+      "source": "玉山信用卡"...
+2026-03-11 05:33:55 - src.llm.parse_receipt - INFO - Successfully parsed 4 transaction(s)
+2026-03-11 05:33:55 - src.llm.parse_receipt - INFO - Parsing receipt text (6206 chars), source: fubon
+2026-03-11 05:33:55 - src.llm.parse_receipt - INFO - Attempting OpenAI API parsing...
+2026-03-11 05:33:55 - src.llm.parse_receipt - INFO - Initialized OpenAI client for receipt parsing (model: gpt-4o-mini)
+2026-03-11 05:33:55 - src.llm.parse_receipt - INFO - Truncated text from 6206 to 6000 characters for LLM
+2026-03-11 05:34:07 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-11 05:34:07 - src.llm.parse_receipt - INFO - OpenAI response received (622 chars): {
+  "transactions": [
+    {
+      "date": "2025-04-01",
+      "amount": 0.0,
+      "currency": "TWD",
+      "expense_name": "承轉結餘",
+      "expense_type": "Other",
+      "source": "fubon",
+      "confi...
+2026-03-11 05:34:07 - src.llm.parse_receipt - INFO - Successfully parsed 3 transaction(s)
+2026-03-11 05:34:07 - src.llm.parse_receipt - INFO - Parsing receipt text (2649 chars), source: _bank
+2026-03-11 05:34:07 - src.llm.parse_receipt - INFO - Attempting OpenAI API parsing...
+2026-03-11 05:34:07 - src.llm.parse_receipt - INFO - Initialized OpenAI client for receipt parsing (model: gpt-4o-mini)
+2026-03-11 05:34:16 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-11 05:34:16 - src.llm.parse_receipt - INFO - OpenAI response received (1067 chars): {
+  "transactions": [
+    {
+      "date": "2023-04-07",
+      "amount": -246.0,
+      "currency": "TWD",
+      "expense_name": "自動轉帳繳款",
+      "expense_type": "Bills",
+      "source": "玉山信用卡",
+      "...
+2026-03-11 05:34:16 - src.llm.parse_receipt - INFO - Successfully parsed 5 transaction(s)
+2026-03-11 05:34:16 - src.llm.parse_receipt - INFO - Parsing receipt text (6152 chars), source: fubon
+2026-03-11 05:34:16 - src.llm.parse_receipt - INFO - Attempting OpenAI API parsing...
+2026-03-11 05:34:16 - src.llm.parse_receipt - INFO - Initialized OpenAI client for receipt parsing (model: gpt-4o-mini)
+2026-03-11 05:34:16 - src.llm.parse_receipt - INFO - Truncated text from 6152 to 6000 characters for LLM
+2026-03-11 05:34:23 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-11 05:34:23 - src.llm.parse_receipt - INFO - OpenAI response received (425 chars): {
+  "transactions": [
+    {
+      "date": "2025-03-12",
+      "amount": 1000.0,
+      "currency": "TWD",
+      "expense_name": "委代扣",
+      "expense_type": "Other",
+      "source": "fubon",
+      "con...
+2026-03-11 05:34:23 - src.llm.parse_receipt - INFO - Successfully parsed 2 transaction(s)
+2026-03-11 05:34:23 - src.llm.parse_receipt - INFO - Parsing receipt text (2545 chars), source: _bank
+2026-03-11 05:34:23 - src.llm.parse_receipt - INFO - Attempting OpenAI API parsing...
+2026-03-11 05:34:23 - src.llm.parse_receipt - INFO - Initialized OpenAI client for receipt parsing (model: gpt-4o-mini)
+2026-03-11 05:34:29 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-03-11 05:34:29 - src.llm.parse_receipt - INFO - OpenAI response received (846 chars): {
+  "transactions": [
+    {
+      "date": "2023-03-03",
+      "amount": 268.0,
+      "currency": "TWD",
+      "expense_name": "Spotify",
+      "expense_type": "Entertainment",
+      "source": "玉山信用卡",...
+2026-03-11 05:34:29 - src.llm.parse_receipt - INFO - Successfully parsed 4 transaction(s)
+2026-03-11 05:34:29 - src.llm.parse_receipt - INFO - Parsing receipt text (6179 chars), source: fubon
+2026-03-11 05:34:29 - src.llm.parse_receipt - INFO - Attempting OpenAI API parsing...
+2026-03-11 05:34:29 - src.llm.parse_receipt - INFO - Initialized OpenAI client for receipt parsing (model: gpt-4o-mini)
+2026-03-11 05:34:29 - src.llm.parse_receipt - INFO - Truncated text from 6179 to 6000 characters for LLM
