@@ -13,50 +13,51 @@ from src.csv_exporter import CSVExporter
 from src.output.csv_writer import export_receipts_to_csv, export_extracted_texts_to_csv
 
 
-def _is_expense_transaction(tx: dict, sender_tag: str) -> bool:
-    """Return True only for spending/outflow transactions."""
+def _is_transaction_excluding_balance(tx: dict) -> bool:
+    """Keep transaction rows (存入/支出) but exclude balance/carry rows."""
     amount = tx.get('amount')
     if amount is None:
         return False
 
     try:
-        amount = float(amount)
+        float(amount)
     except (TypeError, ValueError):
-        return False
-
-    # Expense-focused view: only keep positive spend amounts
-    if amount <= 0:
         return False
 
     name = str(tx.get('expense_name', '')).lower()
 
-    # Exclude non-expense/incoming patterns
-    non_expense_keywords = [
-        '承轉結餘', '本月餘額', '餘額', '結餘',
-        '轉收', '存入', '入帳', '利息', '退款', '退費',
-        '回饋', '返還', 'reversal', 'refund',
+    # Exclude balance-like rows only
+    balance_keywords = [
+        '承轉結餘', '本月餘額', '餘額', '結餘', '上期結餘', '期末餘額',
+        'balance carried', 'running balance', 'closing balance'
     ]
-    if any(k.lower() in name for k in non_expense_keywords):
-        return False
-
-    # Credit-card payment itself is not consumption spending
-    payment_keywords = ['繳款', '信用卡款', '自動轉帳繳款']
-    if any(k.lower() in name for k in payment_keywords):
+    if any(k.lower() in name for k in balance_keywords):
         return False
 
     return True
 
 
-def _currency_totals(transactions: list[dict]) -> dict:
-    totals = {}
+def _currency_flow_summary(transactions: list[dict]) -> dict:
+    """Return inflow/outflow/net totals per currency."""
+    summary = {}
     for tx in transactions:
-        c = tx.get('currency') or 'TWD'
+        currency = tx.get('currency') or 'TWD'
         try:
             amt = float(tx.get('amount') or 0)
         except (TypeError, ValueError):
             continue
-        totals[c] = totals.get(c, 0.0) + amt
-    return totals
+
+        if currency not in summary:
+            summary[currency] = {'in': 0.0, 'out': 0.0, 'net': 0.0}
+
+        if amt >= 0:
+            summary[currency]['out'] += amt
+        else:
+            summary[currency]['in'] += abs(amt)
+
+        summary[currency]['net'] += amt
+
+    return summary
 
 
 def main():
@@ -246,40 +247,43 @@ def main():
                     print(f"   ⚠ No transactions extracted from PDF")
                     continue
                 
-                # Keep expense-only rows for this PDF
-                expense_transactions = [
+                # Keep transaction rows (存入+支出), exclude balance rows
+                kept_transactions = [
                     tx for tx in transactions
-                    if _is_expense_transaction(tx, item['sender_tag'])
+                    if _is_transaction_excluding_balance(tx)
                 ]
 
-                # Add metadata and collect expense rows
-                for tx in expense_transactions:
+                # Add metadata and collect rows
+                for tx in kept_transactions:
                     tx['original_file'] = item['filename']
                     tx['sender_tag'] = item['sender_tag']
                     parsed_receipts.append(tx)
 
-                if not expense_transactions:
-                    print(f"   ⚠ 0 expense transaction(s) kept (raw parsed: {len(transactions)})")
+                if not kept_transactions:
+                    print(f"   ⚠ 0 transaction(s) kept after balance filter (raw parsed: {len(transactions)})")
                     continue
 
-                totals = _currency_totals(expense_transactions)
-                totals_text = ', '.join([f"{v:.2f} {k}" for k, v in totals.items()])
+                flow = _currency_flow_summary(kept_transactions)
+                flow_text = ', '.join([
+                    f"{currency} out:{data['out']:.2f} in:{data['in']:.2f} net:{data['net']:.2f}"
+                    for currency, data in flow.items()
+                ])
 
-                # Show brief result for first expense transaction
-                first_tx = expense_transactions[0]
-                tx_count = len(expense_transactions)
+                # Show brief result for first kept transaction
+                first_tx = kept_transactions[0]
+                tx_count = len(kept_transactions)
                 if tx_count > 1:
                     print(
-                        f"   ✓ {tx_count} expense transaction(s), "
+                        f"   ✓ {tx_count} transaction(s), "
                         f"first: {first_tx.get('expense_name')[:30]:<30} "
                         f"{first_tx.get('amount')} {first_tx.get('currency')} "
-                        f"| total: {totals_text}"
+                        f"| summary: {flow_text}"
                     )
                 else:
                     print(
                         f"   ✓ {first_tx.get('expense_name')[:30]:<30} "
                         f"{first_tx.get('amount')} {first_tx.get('currency')} "
-                        f"| total: {totals_text}"
+                        f"| summary: {flow_text}"
                     )
                     
             except ReceiptParsingError as e:
@@ -301,7 +305,7 @@ def main():
     print(f"• Emails found: {len(emails)}")
     print(f"• PDFs downloaded: {len(downloaded_files)}")
     print(f"• Texts extracted: {len(extracted_texts)}")
-    print(f"• Expense rows parsed: {len(parsed_receipts)}")
+    print(f"• Transaction rows parsed (exclude balance): {len(parsed_receipts)}")
     if text_debug_csv:
         print(f"• Extracted text CSV: {text_debug_csv}")
     if downloaded_files:
@@ -366,7 +370,7 @@ def main():
     
     print("\n" + "=" * 60)
     print("Next steps:")
-    print("1. Review exported CSV file (expense-only rows)")
+    print("1. Review exported CSV file (存入+支出，已排除結餘列)")
     if not parsed_receipts:
         print("2. Check local LLM runtime config (LLM_PROVIDER/LOCAL_BASE_URL/LOCAL_MODEL)")
     print("=" * 60)
