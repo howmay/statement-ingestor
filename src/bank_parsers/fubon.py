@@ -23,13 +23,40 @@ class FubonBankParser(BaseBankParser):
         '分期型房貸', '循環型貸款', '定存', '信託', '透支', '組合式商品',
     ]
 
+    DETAIL_SECTION_START_KEYWORDS = [
+        '交易明細', '每月交易明細', '本月交易明細'
+    ]
+
+    DETAIL_SECTION_END_KEYWORDS = [
+        '帳 戶 總 覽', '資產總覽', '本月餘額', '本月結餘', '貸款', '定存', '信託'
+    ]
+
     def parse(self) -> BankParseResult:
         txs: List[Dict] = []
 
-        for raw_line in self.text.splitlines():
+        lines = [line.strip() for line in self.text.splitlines()]
+        has_detail_heading = any(
+            any(k in line for k in self.DETAIL_SECTION_START_KEYWORDS)
+            for line in lines if line
+        )
+        in_detail_section = not has_detail_heading
+
+        for raw_line in lines:
             line = raw_line.strip()
             if not line or line.startswith('--- Page'):
                 continue
+
+            if has_detail_heading:
+                if any(k in line for k in self.DETAIL_SECTION_START_KEYWORDS):
+                    in_detail_section = True
+                    continue
+
+                if in_detail_section and any(k in line for k in self.DETAIL_SECTION_END_KEYWORDS):
+                    in_detail_section = False
+                    continue
+
+                if not in_detail_section:
+                    continue
 
             if any(k in line for k in self.NON_EXPENSE_KEYWORDS):
                 continue
@@ -41,15 +68,16 @@ class FubonBankParser(BaseBankParser):
             date = _date_slash_to_iso(m.group('date'))
             body = m.group('body').strip()
 
-            amount_match = self.AMOUNT_PATTERN.search(body)
-            if not amount_match:
+            # 富邦交易明細通常至少包含「交易金額 + 餘額」兩個數字欄位。
+            amount_matches = list(self.AMOUNT_PATTERN.finditer(body))
+            if len(amount_matches) < 2:
                 continue
 
-            amount = self._parse_amount(amount_match.group('amount'))
+            amount = self._parse_amount(amount_matches[0].group('amount'))
             if amount is None:
                 continue
 
-            desc = body[:amount_match.start()].strip() or body
+            desc = body[:amount_matches[0].start()].strip() or body
             expense_type = _classify_expense_type(desc)
 
             txs.append(self._build_transaction(

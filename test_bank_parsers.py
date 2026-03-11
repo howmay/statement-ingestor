@@ -62,8 +62,33 @@ def test_fubon_parse():
     assert len(result.transactions) == 2
 
 
+def test_fubon_transaction_detail_section_only():
+    text = """
+帳 戶 總 覽
+對帳單期間：2026/02/01~2026/02/28
+交易明細
+00766168****65 2026/02/01 承轉結餘 3,580.00
+2026/02/12 委代扣 1,000.00 台新銀行轉存款 2,580.00
+2026/02/24 信用卡轉 2,580.00 台北富邦信用卡款 0.00
+本月餘額
+"""
+    source = {
+        'sender_tag': 'fubon',
+        'sender': 'service@bhu.taipeifubon.com.tw',
+        'subject': '台北富邦銀行2026年2月 銀行對帳單',
+    }
+
+    result = parse_with_bank_factory(text, source)
+    assert result.matched
+    assert result.parser_name == 'FubonBankParser'
+    assert len(result.transactions) == 2
+    assert result.transactions[0]['expense_name'] == '委代扣'
+    assert result.transactions[1]['expense_name'] == '信用卡轉'
+
+
 if __name__ == '__main__':
     test_hsbc_parse()
     test_esun_parse()
     test_fubon_parse()
+    test_fubon_transaction_detail_section_only()
     print('All parser tests passed ✅')
