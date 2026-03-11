@@ -7,7 +7,7 @@ from typing import Dict, List, Any, Optional, Tuple
 from datetime import datetime
 
 # Import enhanced utilities
-from src.utils.retry import retry_openai
+from src.utils.retry_enhanced import enhanced_retry_openai, JSONTruncationError
 from src.bank_parsers.factory import parse_with_bank_factory
 
 logger = logging.getLogger(__name__)
@@ -18,9 +18,115 @@ class ReceiptParsingError(Exception):
     pass
 
 
-class JSONTruncationError(Exception):
-    """Exception for truncated JSON responses."""
-    pass
+def _get_llm_runtime_config() -> Dict[str, Any]:
+    """
+    Resolve runtime LLM config.
+
+    Priority:
+    1) Explicit LLM_PROVIDER
+    2) Default to local OpenAI-compatible runtime
+    """
+    provider = os.getenv("LLM_PROVIDER", "local").strip().lower()
+
+    # Local OpenAI-compatible runtime (requested branch default)
+    if provider in {"local", "openai-completions"}:
+        base_url = os.getenv("LOCAL_BASE_URL", "http://0.0.0.0:30000/v1").rstrip("/")
+        if not base_url.endswith("/v1"):
+            base_url = f"{base_url}/v1"
+
+        model = os.getenv("LOCAL_MODEL", "qwen3.5-9b")
+        api_key = os.getenv("LOCAL_API_KEY", "not-needed")
+
+        return {
+            "provider": "local",
+            "enabled": True,
+            "api_key": api_key,
+            "base_url": base_url,
+            "model": model,
+            "supports_response_format": False,
+        }
+
+    # Optional backward-compatible Ollama path
+    if provider == "ollama":
+        base_url = os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434").rstrip("/")
+        if not base_url.endswith("/v1"):
+            base_url = f"{base_url}/v1"
+
+        model = os.getenv("OLLAMA_MODEL", "lukey03/qwen3.5-9b-abliterated-vision")
+        api_key = os.getenv("OLLAMA_API_KEY", "ollama-local")
+
+        return {
+            "provider": "ollama",
+            "enabled": True,
+            "api_key": api_key,
+            "base_url": base_url,
+            "model": model,
+            "supports_response_format": False,
+        }
+
+    # OpenAI cloud path
+    api_key = os.getenv("OPENAI_API_KEY", "")
+    model = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+    base_url = os.getenv("OPENAI_BASE_URL", "").strip() or None
+
+    enabled = bool(api_key and api_key != "your_openai_api_key_here")
+    return {
+        "provider": "openai",
+        "enabled": enabled,
+        "api_key": api_key,
+        "base_url": base_url,
+        "model": model,
+        "supports_response_format": True,
+    }
+
+
+def _extract_json_payload(response_text: str) -> str:
+    """Try to recover JSON from raw model text (including fenced markdown)."""
+    text = (response_text or "").strip()
+    if not text:
+        return text
+
+    # Remove markdown fence wrappers if present
+    fence_match = re.search(r"```(?:json)?\s*(.*?)\s*```", text, re.DOTALL | re.IGNORECASE)
+    if fence_match:
+        text = fence_match.group(1).strip()
+
+    if text.startswith('{') or text.startswith('['):
+        return text
+
+    # Fallback: locate first JSON object/array region
+    first_obj = text.find('{')
+    first_arr = text.find('[')
+    candidates = [idx for idx in (first_obj, first_arr) if idx != -1]
+    if not candidates:
+        return text
+
+    start = min(candidates)
+    return text[start:].strip()
+
+
+def _safe_env_int(name: str, default: int, minimum: int = 1, maximum: int = 100000) -> int:
+    raw = os.getenv(name, str(default)).strip()
+    try:
+        val = int(raw)
+    except Exception:
+        return default
+    return max(minimum, min(maximum, val))
+
+
+def _get_chunking_config() -> Dict[str, Any]:
+    """Read adaptive chunking controls from environment variables."""
+    enabled = os.getenv('ENABLE_ADAPTIVE_CHUNKING', 'true').strip().lower() in {'1', 'true', 'yes', 'on'}
+    max_chunk_size = _safe_env_int('MAX_CHUNK_SIZE', 3500, minimum=500, maximum=20000)
+    min_tx_per_chunk = _safe_env_int('MIN_TRANSACTIONS_PER_CHUNK', 5, minimum=1, maximum=100)
+    force_threshold = _safe_env_int('FORCE_CHUNKING_TEXT_LENGTH', 8000, minimum=1000, maximum=50000)
+
+    return {
+        'enabled': enabled,
+        'max_chunk_size': max_chunk_size,
+        'min_transactions_per_chunk': min_tx_per_chunk,
+        'force_threshold': force_threshold,
+    }
 
 
 def parse_receipt_text(text: str, source_info: Dict[str, Any] = None) -> List[Dict[str, Any]]:
@@ -59,16 +165,18 @@ def parse_receipt_text(text: str, source_info: Dict[str, Any] = None) -> List[Di
         logger.warning(msg)
 
     # 2) LLM path for non-bank or when strict mode disabled
-    api_key = os.getenv("OPENAI_API_KEY")
-    if not api_key or api_key == "your_openai_api_key_here":
-        logger.info("No OpenAI API key configured, using heuristic parsing")
+    llm_config = _get_llm_runtime_config()
+    if not llm_config.get("enabled"):
+        logger.info("No LLM runtime configured, using heuristic parsing")
         return _parse_with_heuristics(text, source_info)
 
     try:
-        logger.info("Attempting OpenAI API parsing...")
-        return _parse_with_openai_enhanced(text, source_info)
+        logger.info(
+            f"Attempting {llm_config.get('provider')} parsing with model: {llm_config.get('model')}"
+        )
+        return _parse_with_openai_enhanced(text, source_info, llm_config)
     except Exception as e:
-        logger.warning(f"OpenAI parsing failed: {e}, trying heuristic fallback")
+        logger.warning(f"LLM parsing failed: {e}, trying heuristic fallback")
         return _parse_with_heuristics(text, source_info)
 
 
@@ -231,16 +339,26 @@ def _chunk_text_by_transactions(text: str, max_chunk_size: int = 3500,
     return chunks
 
 
-def _should_enable_chunking(text: str, source_info: Dict[str, Any]) -> bool:
+def _should_enable_chunking(text: str, source_info: Dict[str, Any], force: bool = False) -> bool:
     """Determine whether to enable chunking."""
-    if len(text) > 8000:
+    cfg = _get_chunking_config()
+    if not cfg['enabled'] and not force:
+        return False
+
+    if force:
         return True
+
+    if len(text) > cfg['force_threshold']:
+        return True
+
     sender_tag = source_info.get('sender_tag', '').lower()
     if 'hsbc' in sender_tag and len(text) > 5000:
         return True
+
     date_count = len(re.findall(r'\d{4}[-/]\d{1,2}[-/]\d{1,2}', text))
     if date_count > 25:
         return True
+
     return False
 
 
@@ -266,67 +384,157 @@ def _merge_transaction_results(all_transactions: List[List[Dict[str, Any]]]) -> 
     return unique_transactions
 
 
-@retry_openai
-def _parse_with_openai_enhanced(text: str, source_info: Dict[str, Any]) -> List[Dict[str, Any]]:
-    """Enhanced OpenAI parsing."""
+def _parse_with_adaptive_strategy(
+    text: str,
+    source_info: Dict[str, Any],
+    source_label: str,
+    model_name: str,
+    provider_name: str,
+    call_llm,
+    force_chunking: bool = False,
+) -> List[Dict[str, Any]]:
+    """Adaptive parsing strategy for large transaction lists."""
+    chunk_cfg = _get_chunking_config()
+    user_prompt_template = "Extract transactions from {source} text:\n{text}"
+
+    if _should_enable_chunking(text, source_info, force=force_chunking):
+        chunks = _chunk_text_by_transactions(
+            text,
+            max_chunk_size=chunk_cfg['max_chunk_size'],
+            min_transactions_per_chunk=chunk_cfg['min_transactions_per_chunk'],
+        )
+        logger.info(f"Chunking enabled, processing {len(chunks)} chunks")
+
+        all_transactions = []
+        for i, (chunk_text, _) in enumerate(chunks):
+            user_prompt = user_prompt_template.format(text=chunk_text, source=source_label)
+            try:
+                logger.info(f"Processing chunk {i+1}/{len(chunks)}")
+                result_text = call_llm(user_prompt, _calculate_max_tokens(len(chunk_text)))
+                json_payload = _extract_json_payload(result_text)
+                fixed_json = _fix_truncated_json_enhanced(json_payload, {'expected_keys': ['transactions']})
+                parsed = json.loads(fixed_json or json_payload)
+                all_transactions.append(
+                    _extract_and_validate_transactions(parsed, source_info, chunk_text, model_name, provider_name)
+                )
+            except Exception as e:
+                logger.error(f"Chunk {i+1} failed after retries: {e}")
+
+        if not all_transactions:
+            raise ReceiptParsingError("All chunks failed to parse")
+
+        return _merge_transaction_results(all_transactions)
+
+    user_prompt = user_prompt_template.format(text=text, source=source_label)
+    result_text = call_llm(user_prompt, 4000)
+    json_payload = _extract_json_payload(result_text)
+    fixed_json = _fix_truncated_json_enhanced(json_payload, {'expected_keys': ['transactions']})
+
+    try:
+        parsed = json.loads(fixed_json or json_payload)
+    except json.JSONDecodeError as je:
+        raise JSONTruncationError(f"Final JSON decode error: {je}")
+
+    return _extract_and_validate_transactions(parsed, source_info, text, model_name, provider_name)
+
+
+@enhanced_retry_openai
+def _parse_with_openai_enhanced(
+    text: str,
+    source_info: Dict[str, Any],
+    llm_config: Optional[Dict[str, Any]] = None,
+    **kwargs
+) -> List[Dict[str, Any]]:
+    """LLM parsing via OpenAI-compatible API (OpenAI cloud or local Ollama)."""
     try:
         from openai import OpenAI
     except ImportError:
         raise ReceiptParsingError("OpenAI Python package not installed")
-    
-    api_key = os.getenv("OPENAI_API_KEY")
-    if not api_key or api_key == "your_openai_api_key_here":
-        raise ReceiptParsingError("OPENAI_API_KEY not configured")
-    
-    client = OpenAI(api_key=api_key)
+
+    cfg = llm_config or _get_llm_runtime_config()
+    if not cfg.get("enabled"):
+        raise ReceiptParsingError("No LLM runtime configured")
+
+    client_kwargs = {"api_key": cfg.get("api_key")}
+    if cfg.get("base_url"):
+        client_kwargs["base_url"] = cfg.get("base_url")
+
+    client = OpenAI(**client_kwargs)
+    model_name = cfg.get("model", "gpt-4o-mini")
+    provider_name = cfg.get("provider", "openai")
+    supports_response_format = bool(cfg.get("supports_response_format", False))
+
     sender_tag = source_info.get('sender_tag', 'unknown')
     source = "unknown"
-    if 'hsbc' in sender_tag: source = "HSBC Bank"
-    elif 'fubon' in sender_tag: source = "Fubon Bank"
-    elif 'esunbank' in sender_tag: source = "Esun Bank"
-    elif 'apple' in sender_tag: source = "Apple"
-    elif 'uber' in sender_tag: source = "Uber"
-    elif 'amazon' in sender_tag: source = "Amazon"
-    
-    system_prompt = "You are a financial data extraction expert. Extract ALL transactions. Return JSON only."
-    user_prompt_template = "Extract transactions from {source} text:\n{text}"
+    if 'hsbc' in sender_tag:
+        source = "HSBC Bank"
+    elif 'fubon' in sender_tag:
+        source = "Fubon Bank"
+    elif 'esunbank' in sender_tag:
+        source = "Esun Bank"
+    elif 'apple' in sender_tag:
+        source = "Apple"
+    elif 'uber' in sender_tag:
+        source = "Uber"
+    elif 'amazon' in sender_tag:
+        source = "Amazon"
 
-    if _should_enable_chunking(text, source_info):
-        chunks = _chunk_text_by_transactions(text)
-        all_transactions = []
-        for i, (chunk_text, _) in enumerate(chunks):
-            user_prompt = user_prompt_template.format(text=chunk_text, source=source)
+    system_prompt = (
+        "You are a financial data extraction expert. "
+        "Extract ALL transactions and return JSON only. "
+        "Return exactly this shape: {\"transactions\":[{" 
+        "\"date\":\"YYYY-MM-DD\",\"amount\":123.45,\"currency\":\"TWD\"," 
+        "\"expense_name\":\"...\",\"expense_type\":\"Other\",\"source\":\"...\",\"confidence\":0.9}]}."
+    )
+
+    @enhanced_retry_openai
+    def call_llm_with_retry(prompt_text: str, max_tokens: int) -> str:
+        api_kwargs = {
+            "model": model_name,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": prompt_text},
+            ],
+            "temperature": 0.1,
+            "max_tokens": max_tokens,
+        }
+        if supports_response_format:
+            api_kwargs["response_format"] = {"type": "json_object"}
+
+        response = client.chat.completions.create(**api_kwargs)
+        content = response.choices[0].message.content or ""
+
+        # Check for truncation
+        if not content.strip().endswith('}') and not content.strip().endswith(']'):
             try:
-                response = client.chat.completions.create(
-                    model="gpt-4o-mini",
-                    messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}],
-                    temperature=0.1,
-                    max_tokens=_calculate_max_tokens(len(chunk_text)),
-                    response_format={"type": "json_object"}
-                )
-                result_text = response.choices[0].message.content
-                fixed_json = _fix_truncated_json_enhanced(result_text, {'expected_keys': ['transactions']})
-                parsed = json.loads(fixed_json or result_text)
-                all_transactions.append(_extract_and_validate_transactions(parsed, source_info, chunk_text))
-            except Exception as e:
-                logger.warning(f"Chunk {i+1} failed: {e}")
-        return _merge_transaction_results(all_transactions)
-    else:
-        user_prompt = user_prompt_template.format(text=text, source=source)
-        response = client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}],
-            temperature=0.1,
-            max_tokens=4000,
-            response_format={"type": "json_object"}
-        )
-        result_text = response.choices[0].message.content
-        fixed_json = _fix_truncated_json_enhanced(result_text, {'expected_keys': ['transactions']})
-        parsed = json.loads(fixed_json or result_text)
-        return _extract_and_validate_transactions(parsed, source_info, text)
+                json.loads(content)
+            except json.JSONDecodeError:
+                logger.warning("Detected potentially truncated JSON response")
+                raise JSONTruncationError("JSON response appears truncated")
+
+        return content
+
+    # Check if we should force chunking (e.g. from a retry context)
+    force_chunking = kwargs.get('context', {}).get('force_chunking', False)
+
+    return _parse_with_adaptive_strategy(
+        text=text,
+        source_info=source_info,
+        source_label=source,
+        model_name=model_name,
+        provider_name=provider_name,
+        call_llm=call_llm_with_retry,
+        force_chunking=force_chunking,
+    )
 
 
-def _extract_and_validate_transactions(parsed: Any, source_info: Dict[str, Any], original_text: str) -> List[Dict[str, Any]]:
+def _extract_and_validate_transactions(
+    parsed: Any,
+    source_info: Dict[str, Any],
+    original_text: str,
+    model_name: str,
+    provider_name: str,
+) -> List[Dict[str, Any]]:
     """Common extraction logic."""
     required_fields = ['date', 'amount', 'currency', 'expense_name', 'expense_type', 'source', 'confidence']
     transactions_raw = []
@@ -347,8 +555,8 @@ def _extract_and_validate_transactions(parsed: Any, source_info: Dict[str, Any],
         _enrich_expense_name_from_text(validated_tx, original_text)
         validated_tx['raw_text_snippet'] = original_text[:200]
         validated_tx['parsed_at'] = datetime.now().isoformat()
-        validated_tx['llm_model'] = 'gpt-4o-mini'
-        validated_tx['parsing_method'] = 'openai'
+        validated_tx['llm_model'] = model_name
+        validated_tx['parsing_method'] = provider_name
         transactions.append(validated_tx)
     if not transactions: raise ReceiptParsingError("No transactions extracted")
     return transactions

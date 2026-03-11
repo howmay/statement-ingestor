@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 import sys
-sys.path.insert(0, '.')
+from pathlib import Path
+
+project_root = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(project_root))
+
 from src.llm.parse_receipt import _should_enable_chunking, _chunk_text_by_transactions
 
 # Test 1: Should enable chunking for large HSBC text

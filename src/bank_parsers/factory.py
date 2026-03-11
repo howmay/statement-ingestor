@@ -4,7 +4,7 @@ from typing import Any, Dict, Optional
 
 from .base import BankParseResult, BaseBankParser
 from .hsbc import HsbcTwCardParser
-from .fubon import FubonBankParser
+from .fubon import FubonBankParser, FubonCreditCardParser
 from .esun import EsunCardParser
 
 
@@ -20,6 +20,10 @@ def get_bank_parser(text: str, source_info: Optional[Dict[str, Any]] = None) -> 
         return HsbcTwCardParser(text, source_info)
 
     if 'fubon' in bank_hint or 'taipeifubon' in bank_hint:
+        # Fubon has multiple statement types: bank account statement / credit-card statement
+        is_credit_card = any(k in bank_hint for k in ['信用卡', 'credit card', 'card statement', 'card'])
+        if is_credit_card:
+            return FubonCreditCardParser(text, source_info)
         return FubonBankParser(text, source_info)
 
     if 'esun' in bank_hint or sender_tag == '_bank':

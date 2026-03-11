@@ -10,8 +10,8 @@ import logging
 from unittest.mock import Mock, patch, MagicMock
 from datetime import datetime
 
-# Add src to path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
+# Add project root to path
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from src.llm.parse_receipt import (
     parse_receipt_text,
@@ -178,6 +178,7 @@ def test_mock_openai_parsing():
         )
         
         os.environ['OPENAI_API_KEY'] = 'test-key'
+        os.environ['STRICT_BANK_PARSER'] = 'false'
         
         try:
             text = "2024-01-01 NT$100.00 Test"
@@ -191,6 +192,8 @@ def test_mock_openai_parsing():
         finally:
             if 'OPENAI_API_KEY' in os.environ:
                 del os.environ['OPENAI_API_KEY']
+            if 'STRICT_BANK_PARSER' in os.environ:
+                del os.environ['STRICT_BANK_PARSER']
     
     print("Mock API parsing tests completed\n")
 

@@ -12,6 +12,54 @@ from src.parser_factory import get_parser
 from src.csv_exporter import CSVExporter
 from src.output.csv_writer import export_receipts_to_csv, export_extracted_texts_to_csv
 
+
+def _is_transaction_excluding_balance(tx: dict) -> bool:
+    """Keep transaction rows (存入/支出) but exclude balance/carry rows."""
+    amount = tx.get('amount')
+    if amount is None:
+        return False
+
+    try:
+        float(amount)
+    except (TypeError, ValueError):
+        return False
+
+    name = str(tx.get('expense_name', '')).lower()
+
+    # Exclude balance-like rows only
+    balance_keywords = [
+        '承轉結餘', '本月餘額', '餘額', '結餘', '上期結餘', '期末餘額',
+        'balance carried', 'running balance', 'closing balance'
+    ]
+    if any(k.lower() in name for k in balance_keywords):
+        return False
+
+    return True
+
+
+def _currency_flow_summary(transactions: list[dict]) -> dict:
+    """Return inflow/outflow/net totals per currency."""
+    summary = {}
+    for tx in transactions:
+        currency = tx.get('currency') or 'TWD'
+        try:
+            amt = float(tx.get('amount') or 0)
+        except (TypeError, ValueError):
+            continue
+
+        if currency not in summary:
+            summary[currency] = {'in': 0.0, 'out': 0.0, 'net': 0.0}
+
+        if amt >= 0:
+            summary[currency]['out'] += amt
+        else:
+            summary[currency]['in'] += abs(amt)
+
+        summary[currency]['net'] += amt
+
+    return summary
+
+
 def main():
     # Setup logging
     logging.basicConfig(
@@ -142,6 +190,7 @@ def main():
                         'sender_tag': sender_tag,
                         'text': text,
                         'subject': file_info.get('subject', ''),
+                        'pdf_password': password_used,
                         'password_used': bool(password_used),
                         'password_tried': len(passwords) if passwords else 0
                     })
@@ -189,7 +238,9 @@ def main():
                     'sender': item['sender'],
                     'sender_tag': item['sender_tag'],
                     'filename': item['filename'],
-                    'subject': item.get('subject', '')
+                    'filepath': item.get('filepath', ''),
+                    'subject': item.get('subject', ''),
+                    'pdf_password': item.get('pdf_password'),
                 }
                 
                 # Parse receipt text (returns list of transactions)
@@ -199,22 +250,44 @@ def main():
                     print(f"   ⚠ No transactions extracted from PDF")
                     continue
                 
-                # Add metadata to each transaction and collect them
-                for tx in transactions:
+                # Keep transaction rows (存入+支出), exclude balance rows
+                kept_transactions = [
+                    tx for tx in transactions
+                    if _is_transaction_excluding_balance(tx)
+                ]
+
+                # Add metadata and collect rows
+                for tx in kept_transactions:
                     tx['original_file'] = item['filename']
                     tx['sender_tag'] = item['sender_tag']
                     parsed_receipts.append(tx)
-                
-                # Show brief result for first transaction
-                first_tx = transactions[0]
-                if first_tx.get('amount') and first_tx.get('currency'):
-                    tx_count = len(transactions)
-                    if tx_count > 1:
-                        print(f"   ✓ {tx_count} transactions found, first: {first_tx.get('expense_name')[:30]:<30} {first_tx.get('amount')} {first_tx.get('currency')}")
-                    else:
-                        print(f"   ✓ {first_tx.get('expense_name')[:30]:<30} {first_tx.get('amount')} {first_tx.get('currency')}")
+
+                if not kept_transactions:
+                    print(f"   ⚠ 0 transaction(s) kept after balance filter (raw parsed: {len(transactions)})")
+                    continue
+
+                flow = _currency_flow_summary(kept_transactions)
+                flow_text = ', '.join([
+                    f"{currency} out:{data['out']:.2f} in:{data['in']:.2f} net:{data['net']:.2f}"
+                    for currency, data in flow.items()
+                ])
+
+                # Show brief result for first kept transaction
+                first_tx = kept_transactions[0]
+                tx_count = len(kept_transactions)
+                if tx_count > 1:
+                    print(
+                        f"   ✓ {tx_count} transaction(s), "
+                        f"first: {first_tx.get('expense_name')[:30]:<30} "
+                        f"{first_tx.get('amount')} {first_tx.get('currency')} "
+                        f"| summary: {flow_text}"
+                    )
                 else:
-                    print(f"   ⚠ Limited info extracted from {len(transactions)} transaction(s)")
+                    print(
+                        f"   ✓ {first_tx.get('expense_name')[:30]:<30} "
+                        f"{first_tx.get('amount')} {first_tx.get('currency')} "
+                        f"| summary: {flow_text}"
+                    )
                     
             except ReceiptParsingError as e:
                 print(f"   ✗ Parsing failed: {e}")
@@ -235,7 +308,7 @@ def main():
     print(f"• Emails found: {len(emails)}")
     print(f"• PDFs downloaded: {len(downloaded_files)}")
     print(f"• Texts extracted: {len(extracted_texts)}")
-    print(f"• Receipts parsed: {len(parsed_receipts)}")
+    print(f"• Transaction rows parsed (exclude balance): {len(parsed_receipts)}")
     if text_debug_csv:
         print(f"• Extracted text CSV: {text_debug_csv}")
     if downloaded_files:
@@ -300,9 +373,9 @@ def main():
     
     print("\n" + "=" * 60)
     print("Next steps:")
-    print("1. Review exported CSV file")
+    print("1. Review exported CSV file (存入+支出，已排除結餘列)")
     if not parsed_receipts:
-        print("2. Configure OPENAI_API_KEY in .env for better LLM parsing")
+        print("2. Check local LLM runtime config (LLM_PROVIDER/LOCAL_BASE_URL/LOCAL_MODEL)")
     print("=" * 60)
 
 if __name__ == "__main__":
