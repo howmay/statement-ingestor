@@ -132,17 +132,45 @@ def _ocr_statement_rows(pdf_path: str, source_info: Optional[Dict] = None) -> Li
     with tempfile.TemporaryDirectory(prefix='hsbc_ocr_') as tmpdir:
         pdf = _open_pdf_with_password_candidates(pdfium, pdf_path, source_info)
 
-        for i in range(len(pdf)):
-            page = pdf[i]
-            bitmap = page.render(scale=2.4)
-            image_path = os.path.join(tmpdir, f'page_{i+1}.png')
-            bitmap.to_pil().save(image_path, format='PNG')
+        try:
+            for i in range(len(pdf)):
+                page = None
+                bitmap = None
+                pil_image = None
+                try:
+                    page = pdf[i]
+                    bitmap = page.render(scale=2.4)
+                    image_path = os.path.join(tmpdir, f'page_{i+1}.png')
 
-            text = _run_tesseract_text(image_path)
-            if not text:
-                continue
+                    pil_image = bitmap.to_pil()
+                    pil_image.save(image_path, format='PNG')
 
-            rows.extend(_extract_rows_from_ocr_text(text))
+                    text = _run_tesseract_text(image_path)
+                    if not text:
+                        continue
+
+                    rows.extend(_extract_rows_from_ocr_text(text))
+                finally:
+                    if pil_image is not None:
+                        try:
+                            pil_image.close()
+                        except Exception:
+                            pass
+                    if bitmap is not None:
+                        try:
+                            bitmap.close()
+                        except Exception:
+                            pass
+                    if page is not None:
+                        try:
+                            page.close()
+                        except Exception:
+                            pass
+        finally:
+            try:
+                pdf.close()
+            except Exception:
+                pass
 
     return rows
 
