@@ -29,19 +29,35 @@ def _get_llm_runtime_config() -> Dict[str, Any]:
 
     Priority:
     1) Explicit LLM_PROVIDER
-    2) Default to ollama
+    2) Default to local OpenAI-compatible runtime
     """
-    provider = os.getenv("LLM_PROVIDER", "ollama").strip().lower()
+    provider = os.getenv("LLM_PROVIDER", "local").strip().lower()
 
+    # Local OpenAI-compatible runtime (requested branch default)
+    if provider in {"local", "openai-completions"}:
+        base_url = os.getenv("LOCAL_BASE_URL", "http://0.0.0.0:30000/v1").rstrip("/")
+        if not base_url.endswith("/v1"):
+            base_url = f"{base_url}/v1"
+
+        model = os.getenv("LOCAL_MODEL", "qwen3.5-9b")
+        api_key = os.getenv("LOCAL_API_KEY", "not-needed")
+
+        return {
+            "provider": "local",
+            "enabled": True,
+            "api_key": api_key,
+            "base_url": base_url,
+            "model": model,
+            "supports_response_format": False,
+        }
+
+    # Optional backward-compatible Ollama path
     if provider == "ollama":
         base_url = os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434").rstrip("/")
         if not base_url.endswith("/v1"):
             base_url = f"{base_url}/v1"
 
-        model = os.getenv(
-            "OLLAMA_MODEL",
-            "lukey03/qwen3.5-9b-abliterated-vision"
-        )
+        model = os.getenv("OLLAMA_MODEL", "lukey03/qwen3.5-9b-abliterated-vision")
         api_key = os.getenv("OLLAMA_API_KEY", "ollama-local")
 
         return {
@@ -53,7 +69,7 @@ def _get_llm_runtime_config() -> Dict[str, Any]:
             "supports_response_format": False,
         }
 
-    # openai-compatible cloud path
+    # OpenAI cloud path
     api_key = os.getenv("OPENAI_API_KEY", "")
     model = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
     base_url = os.getenv("OPENAI_BASE_URL", "").strip() or None
