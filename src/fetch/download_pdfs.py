@@ -148,14 +148,18 @@ def build_sender_base64_suffix(sender_name: str) -> str:
 
 def build_file_base64_suffix(file_data: bytes) -> str:
     """
-    Create base64 suffix from file bytes and return last 8 chars.
+    Create stable suffix from file content hash and return last 8 chars.
 
-    This makes same-sender files produce different suffixes when file content differs.
+    Why not use raw file base64 tail directly?
+    - Many PDFs end with very similar bytes (e.g., %%EOF), so tail8 can collide.
+
+    We hash first (SHA-256), then base64-encode hash bytes to get a high-entropy suffix.
     """
     if not file_data:
         return 'unknown='
 
-    encoded = base64.urlsafe_b64encode(file_data).decode('ascii')
+    digest = hashlib.sha256(file_data).digest()
+    encoded = base64.urlsafe_b64encode(digest).decode('ascii')
     if not encoded:
         encoded = 'unknown='
     return encoded[-8:]
