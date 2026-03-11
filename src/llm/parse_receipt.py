@@ -315,8 +315,10 @@ def _chunk_text_by_transactions(text: str, max_chunk_size: int = 3500,
     return chunks
 
 
-def _should_enable_chunking(text: str, source_info: Dict[str, Any]) -> bool:
+def _should_enable_chunking(text: str, source_info: Dict[str, Any], force: bool = False) -> bool:
     """Determine whether to enable chunking."""
+    if force:
+        return True
     if len(text) > 8000:
         return True
     sender_tag = source_info.get('sender_tag', '').lower()
@@ -355,6 +357,7 @@ def _parse_with_openai_enhanced(
     text: str,
     source_info: Dict[str, Any],
     llm_config: Optional[Dict[str, Any]] = None,
+    **kwargs
 ) -> List[Dict[str, Any]]:
     """LLM parsing via OpenAI-compatible API (OpenAI cloud or local Ollama)."""
     try:
@@ -401,7 +404,7 @@ def _parse_with_openai_enhanced(
 
     @enhanced_retry_openai
     def call_llm_with_retry(prompt_text: str, max_tokens: int) -> str:
-        kwargs = {
+        api_kwargs = {
             "model": model_name,
             "messages": [
                 {"role": "system", "content": system_prompt},
@@ -411,9 +414,9 @@ def _parse_with_openai_enhanced(
             "max_tokens": max_tokens,
         }
         if supports_response_format:
-            kwargs["response_format"] = {"type": "json_object"}
+            api_kwargs["response_format"] = {"type": "json_object"}
 
-        response = client.chat.completions.create(**kwargs)
+        response = client.chat.completions.create(**api_kwargs)
         content = response.choices[0].message.content or ""
         
         # Check for truncation
@@ -427,7 +430,10 @@ def _parse_with_openai_enhanced(
                 
         return content
 
-    if _should_enable_chunking(text, source_info):
+    # Check if we should force chunking (e.g. from a retry context)
+    force_chunking = kwargs.get('context', {}).get('force_chunking', False)
+    
+    if _should_enable_chunking(text, source_info, force=force_chunking):
         chunks = _chunk_text_by_transactions(text)
         logger.info(f"Chunking enabled, processing {len(chunks)} chunks")
         all_transactions = []

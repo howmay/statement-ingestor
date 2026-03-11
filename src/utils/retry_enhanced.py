@@ -286,6 +286,10 @@ class EnhancedAPIRetry:
                     strategy = self.config.json_truncation_retry_strategy
                     logger.info(f"JSON truncation detected, applying strategy: {strategy}")
                     
+                    # Ensure context exists in kwargs
+                    if 'context' not in kwargs:
+                        kwargs['context'] = {}
+                    
                     # Modify kwargs based on strategy
                     if strategy == 'reduce_text' and 'text' in kwargs:
                         # Reduce text size for retry
@@ -294,8 +298,10 @@ class EnhancedAPIRetry:
                             kwargs['text'] = original_text[:2000] + "\n[Text truncated for retry]"
                             logger.info(f"Reduced text from {len(original_text)} to {len(kwargs['text'])} characters")
                     
-                    # For chunk_and_retry, we rely on the calling function to handle it
-                    # The function should detect JSON truncation and enable chunking
+                    elif strategy == 'chunk_and_retry':
+                        # Signal the function to enable chunking
+                        kwargs['context']['force_chunking'] = True
+                        logger.info("Signaled function to force chunking on next attempt")
                 
                 # Check if we should retry
                 if not self.config.should_retry(e, response, context):
