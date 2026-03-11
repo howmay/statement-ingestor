@@ -12,6 +12,53 @@ from src.parser_factory import get_parser
 from src.csv_exporter import CSVExporter
 from src.output.csv_writer import export_receipts_to_csv, export_extracted_texts_to_csv
 
+
+def _is_expense_transaction(tx: dict, sender_tag: str) -> bool:
+    """Return True only for spending/outflow transactions."""
+    amount = tx.get('amount')
+    if amount is None:
+        return False
+
+    try:
+        amount = float(amount)
+    except (TypeError, ValueError):
+        return False
+
+    # Expense-focused view: only keep positive spend amounts
+    if amount <= 0:
+        return False
+
+    name = str(tx.get('expense_name', '')).lower()
+
+    # Exclude non-expense/incoming patterns
+    non_expense_keywords = [
+        '承轉結餘', '本月餘額', '餘額', '結餘',
+        '轉收', '存入', '入帳', '利息', '退款', '退費',
+        '回饋', '返還', 'reversal', 'refund',
+    ]
+    if any(k.lower() in name for k in non_expense_keywords):
+        return False
+
+    # Credit-card payment itself is not consumption spending
+    payment_keywords = ['繳款', '信用卡款', '自動轉帳繳款']
+    if any(k.lower() in name for k in payment_keywords):
+        return False
+
+    return True
+
+
+def _currency_totals(transactions: list[dict]) -> dict:
+    totals = {}
+    for tx in transactions:
+        c = tx.get('currency') or 'TWD'
+        try:
+            amt = float(tx.get('amount') or 0)
+        except (TypeError, ValueError):
+            continue
+        totals[c] = totals.get(c, 0.0) + amt
+    return totals
+
+
 def main():
     # Setup logging
     logging.basicConfig(
@@ -199,22 +246,41 @@ def main():
                     print(f"   ⚠ No transactions extracted from PDF")
                     continue
                 
-                # Add metadata to each transaction and collect them
-                for tx in transactions:
+                # Keep expense-only rows for this PDF
+                expense_transactions = [
+                    tx for tx in transactions
+                    if _is_expense_transaction(tx, item['sender_tag'])
+                ]
+
+                # Add metadata and collect expense rows
+                for tx in expense_transactions:
                     tx['original_file'] = item['filename']
                     tx['sender_tag'] = item['sender_tag']
                     parsed_receipts.append(tx)
-                
-                # Show brief result for first transaction
-                first_tx = transactions[0]
-                if first_tx.get('amount') and first_tx.get('currency'):
-                    tx_count = len(transactions)
-                    if tx_count > 1:
-                        print(f"   ✓ {tx_count} transactions found, first: {first_tx.get('expense_name')[:30]:<30} {first_tx.get('amount')} {first_tx.get('currency')}")
-                    else:
-                        print(f"   ✓ {first_tx.get('expense_name')[:30]:<30} {first_tx.get('amount')} {first_tx.get('currency')}")
+
+                if not expense_transactions:
+                    print(f"   ⚠ 0 expense transaction(s) kept (raw parsed: {len(transactions)})")
+                    continue
+
+                totals = _currency_totals(expense_transactions)
+                totals_text = ', '.join([f"{v:.2f} {k}" for k, v in totals.items()])
+
+                # Show brief result for first expense transaction
+                first_tx = expense_transactions[0]
+                tx_count = len(expense_transactions)
+                if tx_count > 1:
+                    print(
+                        f"   ✓ {tx_count} expense transaction(s), "
+                        f"first: {first_tx.get('expense_name')[:30]:<30} "
+                        f"{first_tx.get('amount')} {first_tx.get('currency')} "
+                        f"| total: {totals_text}"
+                    )
                 else:
-                    print(f"   ⚠ Limited info extracted from {len(transactions)} transaction(s)")
+                    print(
+                        f"   ✓ {first_tx.get('expense_name')[:30]:<30} "
+                        f"{first_tx.get('amount')} {first_tx.get('currency')} "
+                        f"| total: {totals_text}"
+                    )
                     
             except ReceiptParsingError as e:
                 print(f"   ✗ Parsing failed: {e}")
@@ -235,7 +301,7 @@ def main():
     print(f"• Emails found: {len(emails)}")
     print(f"• PDFs downloaded: {len(downloaded_files)}")
     print(f"• Texts extracted: {len(extracted_texts)}")
-    print(f"• Receipts parsed: {len(parsed_receipts)}")
+    print(f"• Expense rows parsed: {len(parsed_receipts)}")
     if text_debug_csv:
         print(f"• Extracted text CSV: {text_debug_csv}")
     if downloaded_files:
@@ -300,9 +366,9 @@ def main():
     
     print("\n" + "=" * 60)
     print("Next steps:")
-    print("1. Review exported CSV file")
+    print("1. Review exported CSV file (expense-only rows)")
     if not parsed_receipts:
-        print("2. Configure OPENAI_API_KEY in .env for better LLM parsing")
+        print("2. Check local LLM runtime config (LLM_PROVIDER/LOCAL_BASE_URL/LOCAL_MODEL)")
     print("=" * 60)
 
 if __name__ == "__main__":
