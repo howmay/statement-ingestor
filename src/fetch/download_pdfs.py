@@ -146,9 +146,28 @@ def build_sender_base64_suffix(sender_name: str) -> str:
     return encoded[-8:]
 
 
-def build_pdf_filename_by_sender(sender: str, original_filename: str) -> str:
+def build_file_base64_suffix(file_data: bytes) -> str:
+    """
+    Create base64 suffix from file bytes and return last 8 chars.
+
+    This makes same-sender files produce different suffixes when file content differs.
+    """
+    if not file_data:
+        return 'unknown='
+
+    encoded = base64.urlsafe_b64encode(file_data).decode('ascii')
+    if not encoded:
+        encoded = 'unknown='
+    return encoded[-8:]
+
+
+def build_pdf_filename_by_sender(sender: str, original_filename: str, file_data: bytes = b'') -> str:
     """
     Build filename as: <sender_name>_<base64_tail8><ext>
+
+    base64_tail8 priority:
+    1) file_data base64 tail8 (preferred)
+    2) sender_name base64 tail8 (fallback)
     """
     sender_name_safe = extract_sender_display_name(sender)
 
@@ -157,7 +176,7 @@ def build_pdf_filename_by_sender(sender: str, original_filename: str) -> str:
     if not sender_name_raw:
         sender_name_raw = raw_email.split('@', 1)[0] if '@' in raw_email else sender_name_safe
 
-    suffix = build_sender_base64_suffix(sender_name_raw)
+    suffix = build_file_base64_suffix(file_data) if file_data else build_sender_base64_suffix(sender_name_raw)
 
     ext = os.path.splitext(os.path.basename(original_filename or ''))[1].lower()
     if not ext:
@@ -241,9 +260,9 @@ def download_attachment(service, message_id: str, attachment_info: Dict[str, Any
         # Ensure download directory exists
         os.makedirs(DOWNLOAD_DIR, exist_ok=True)
         
-        # Generate filename by user rule: sender_name + base64_tail8
+        # Generate filename by user rule: sender_name + base64_tail8(file content)
         original_filename = attachment_info['filename']
-        safe_filename = build_pdf_filename_by_sender(sender or 'unknown', original_filename)
+        safe_filename = build_pdf_filename_by_sender(sender or 'unknown', original_filename, file_data)
         
         filepath = os.path.join(DOWNLOAD_DIR, safe_filename)
         
