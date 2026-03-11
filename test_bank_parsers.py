@@ -27,6 +27,32 @@ def test_hsbc_parse():
     assert '12/27 12/30 20,990' in target['expense_name']
 
 
+def test_hsbc_tw_statement_table_style():
+    """HSBC TW statement style: date/date/amount without description text."""
+    text = """
+12/30 12/30 -1,061
+12/27 12/30 20,990
+01/01 01/06 4,262
+01/05 01/08 575
+"""
+    source = {
+        'sender_tag': 'hsbc',
+        'sender': 'cards@estatements.hsbc.com.tw',
+        'subject': '115年01月滙豐Live+現金回饋卡信用卡帳單',
+    }
+
+    result = parse_with_bank_factory(text, source)
+    assert result.matched
+    assert result.parser_name == 'HsbcTwCardParser'
+    assert len(result.transactions) == 4
+
+    dec_tx = [t for t in result.transactions if abs(float(t['amount']) - 20990.0) < 0.01][0]
+    assert dec_tx['date'] == '2025-12-27'
+
+    jan_tx = [t for t in result.transactions if abs(float(t['amount']) - 4262.0) < 0.01][0]
+    assert jan_tx['date'] == '2026-01-01'
+
+
 def test_esun_parse():
     text = """
 01/06 感謝您辦理本行自動轉帳繳款！ TWD -8,668
@@ -88,6 +114,7 @@ def test_fubon_transaction_detail_section_only():
 
 if __name__ == '__main__':
     test_hsbc_parse()
+    test_hsbc_tw_statement_table_style()
     test_esun_parse()
     test_fubon_parse()
     test_fubon_transaction_detail_section_only()
