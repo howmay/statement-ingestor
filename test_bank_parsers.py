@@ -2,6 +2,7 @@
 """Quick deterministic parser tests."""
 
 from src.bank_parsers.factory import parse_with_bank_factory
+from src.ocr.hsbc_ocr import _extract_rows_from_ocr_text
 
 
 def test_hsbc_parse():
@@ -79,6 +80,19 @@ def test_hsbc_sg_credit_card_statement_style():
     # CR should be treated as negative
     credit_tx = [t for t in result.transactions if 'amazon' in t['expense_name'].lower()][0]
     assert abs(float(credit_tx['amount']) + 15.00) < 0.01
+
+
+def test_hsbc_ocr_row_extraction_parser():
+    text = """
+03/03 03/03 CARREFOUR TAIPEI 2,880
+02/11 02/24 NETFLIX.COM 100
+02/14 02/24 REFUND 15.00CR
+"""
+    rows = _extract_rows_from_ocr_text(text)
+    assert len(rows) == 3
+    assert rows[0]['tx_md'] == '03/03'
+    assert abs(rows[0]['amount'] - 2880.0) < 0.01
+    assert abs(rows[2]['amount'] + 15.0) < 0.01
 
 
 def test_esun_parse():
@@ -196,6 +210,7 @@ if __name__ == '__main__':
     test_hsbc_parse()
     test_hsbc_tw_statement_table_style()
     test_hsbc_sg_credit_card_statement_style()
+    test_hsbc_ocr_row_extraction_parser()
     test_esun_parse()
     test_esun_statement_page_style()
     test_fubon_parse()

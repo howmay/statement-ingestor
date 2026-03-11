@@ -1,7 +1,11 @@
+import logging
 import re
 from typing import Dict, List, Optional
 
 from .base import BaseBankParser, BankParseResult
+from src.ocr.hsbc_ocr import enrich_hsbc_transactions_with_ocr
+
+logger = logging.getLogger(__name__)
 
 
 class HsbcTwCardParser(BaseBankParser):
@@ -150,6 +154,14 @@ class HsbcTwCardParser(BaseBankParser):
                 raw_line=line,
                 parser_name='HsbcTwCardParser',
             ))
+
+        # OCR fallback for rows where merchant description is missing in PDF text layer
+        try:
+            enriched = enrich_hsbc_transactions_with_ocr(txs, self.source_info)
+            if enriched > 0:
+                warnings.append(f'ocr_enriched_descriptions={enriched}')
+        except Exception as e:
+            logger.warning(f'HSBC OCR enrichment error: {e}')
 
         return BankParseResult(
             matched=True,

@@ -237,6 +237,7 @@ def main():
                     'sender': item['sender'],
                     'sender_tag': item['sender_tag'],
                     'filename': item['filename'],
+                    'filepath': item.get('filepath', ''),
                     'subject': item.get('subject', '')
                 }
                 
