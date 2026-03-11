@@ -341,16 +341,24 @@ def _chunk_text_by_transactions(text: str, max_chunk_size: int = 3500,
 
 def _should_enable_chunking(text: str, source_info: Dict[str, Any], force: bool = False) -> bool:
     """Determine whether to enable chunking."""
+    cfg = _get_chunking_config()
+    if not cfg['enabled'] and not force:
+        return False
+
     if force:
         return True
-    if len(text) > 8000:
+
+    if len(text) > cfg['force_threshold']:
         return True
+
     sender_tag = source_info.get('sender_tag', '').lower()
     if 'hsbc' in sender_tag and len(text) > 5000:
         return True
+
     date_count = len(re.findall(r'\d{4}[-/]\d{1,2}[-/]\d{1,2}', text))
     if date_count > 25:
         return True
+
     return False
 
 
@@ -374,6 +382,60 @@ def _merge_transaction_results(all_transactions: List[List[Dict[str, Any]]]) -> 
             seen.add(key)
             unique_transactions.append(tx)
     return unique_transactions
+
+
+def _parse_with_adaptive_strategy(
+    text: str,
+    source_info: Dict[str, Any],
+    source_label: str,
+    model_name: str,
+    provider_name: str,
+    call_llm,
+    force_chunking: bool = False,
+) -> List[Dict[str, Any]]:
+    """Adaptive parsing strategy for large transaction lists."""
+    chunk_cfg = _get_chunking_config()
+    user_prompt_template = "Extract transactions from {source} text:\n{text}"
+
+    if _should_enable_chunking(text, source_info, force=force_chunking):
+        chunks = _chunk_text_by_transactions(
+            text,
+            max_chunk_size=chunk_cfg['max_chunk_size'],
+            min_transactions_per_chunk=chunk_cfg['min_transactions_per_chunk'],
+        )
+        logger.info(f"Chunking enabled, processing {len(chunks)} chunks")
+
+        all_transactions = []
+        for i, (chunk_text, _) in enumerate(chunks):
+            user_prompt = user_prompt_template.format(text=chunk_text, source=source_label)
+            try:
+                logger.info(f"Processing chunk {i+1}/{len(chunks)}")
+                result_text = call_llm(user_prompt, _calculate_max_tokens(len(chunk_text)))
+                json_payload = _extract_json_payload(result_text)
+                fixed_json = _fix_truncated_json_enhanced(json_payload, {'expected_keys': ['transactions']})
+                parsed = json.loads(fixed_json or json_payload)
+                all_transactions.append(
+                    _extract_and_validate_transactions(parsed, source_info, chunk_text, model_name, provider_name)
+                )
+            except Exception as e:
+                logger.error(f"Chunk {i+1} failed after retries: {e}")
+
+        if not all_transactions:
+            raise ReceiptParsingError("All chunks failed to parse")
+
+        return _merge_transaction_results(all_transactions)
+
+    user_prompt = user_prompt_template.format(text=text, source=source_label)
+    result_text = call_llm(user_prompt, 4000)
+    json_payload = _extract_json_payload(result_text)
+    fixed_json = _fix_truncated_json_enhanced(json_payload, {'expected_keys': ['transactions']})
+
+    try:
+        parsed = json.loads(fixed_json or json_payload)
+    except json.JSONDecodeError as je:
+        raise JSONTruncationError(f"Final JSON decode error: {je}")
+
+    return _extract_and_validate_transactions(parsed, source_info, text, model_name, provider_name)
 
 
 @enhanced_retry_openai
@@ -424,7 +486,6 @@ def _parse_with_openai_enhanced(
         "\"date\":\"YYYY-MM-DD\",\"amount\":123.45,\"currency\":\"TWD\"," 
         "\"expense_name\":\"...\",\"expense_type\":\"Other\",\"source\":\"...\",\"confidence\":0.9}]}."
     )
-    user_prompt_template = "Extract transactions from {source} text:\n{text}"
 
     @enhanced_retry_openai
     def call_llm_with_retry(prompt_text: str, max_tokens: int) -> str:
@@ -442,62 +503,29 @@ def _parse_with_openai_enhanced(
 
         response = client.chat.completions.create(**api_kwargs)
         content = response.choices[0].message.content or ""
-        
+
         # Check for truncation
         if not content.strip().endswith('}') and not content.strip().endswith(']'):
-            # If it's not valid JSON and looks truncated, raise special error for retry
             try:
                 json.loads(content)
             except json.JSONDecodeError:
                 logger.warning("Detected potentially truncated JSON response")
                 raise JSONTruncationError("JSON response appears truncated")
-                
+
         return content
 
     # Check if we should force chunking (e.g. from a retry context)
     force_chunking = kwargs.get('context', {}).get('force_chunking', False)
-    
-    if _should_enable_chunking(text, source_info, force=force_chunking):
-        chunks = _chunk_text_by_transactions(text)
-        logger.info(f"Chunking enabled, processing {len(chunks)} chunks")
-        all_transactions = []
 
-        for i, (chunk_text, _) in enumerate(chunks):
-            user_prompt = user_prompt_template.format(text=chunk_text, source=source)
-            try:
-                logger.info(f"Processing chunk {i+1}/{len(chunks)}")
-                result_text = call_llm_with_retry(user_prompt, _calculate_max_tokens(len(chunk_text)))
-                json_payload = _extract_json_payload(result_text)
-                fixed_json = _fix_truncated_json_enhanced(json_payload, {'expected_keys': ['transactions']})
-                
-                try:
-                    parsed = json.loads(fixed_json or json_payload)
-                except json.JSONDecodeError as je:
-                    logger.error(f"Failed to parse JSON even after repair attempt: {je}")
-                    raise JSONTruncationError(f"Persistent JSON decode error: {je}")
-
-                all_transactions.append(
-                    _extract_and_validate_transactions(parsed, source_info, chunk_text, model_name, provider_name)
-                )
-            except Exception as e:
-                logger.error(f"Chunk {i+1} failed after retries: {e}")
-
-        if not all_transactions:
-            raise ReceiptParsingError("All chunks failed to parse")
-            
-        return _merge_transaction_results(all_transactions)
-
-    user_prompt = user_prompt_template.format(text=text, source=source)
-    result_text = call_llm_with_retry(user_prompt, 4000)
-    json_payload = _extract_json_payload(result_text)
-    fixed_json = _fix_truncated_json_enhanced(json_payload, {'expected_keys': ['transactions']})
-    
-    try:
-        parsed = json.loads(fixed_json or json_payload)
-    except json.JSONDecodeError as je:
-        raise JSONTruncationError(f"Final JSON decode error: {je}")
-
-    return _extract_and_validate_transactions(parsed, source_info, text, model_name, provider_name)
+    return _parse_with_adaptive_strategy(
+        text=text,
+        source_info=source_info,
+        source_label=source,
+        model_name=model_name,
+        provider_name=provider_name,
+        call_llm=call_llm_with_retry,
+        force_chunking=force_chunking,
+    )
 
 
 def _extract_and_validate_transactions(

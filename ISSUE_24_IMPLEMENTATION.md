@@ -82,3 +82,24 @@ MIN_TRANSACTIONS_PER_CHUNK=5
 2. **API 成本增加**: 僅在必要時啟用分塊
 3. **解析一致性**: 添加結果合併和去重邏輯
 4. **性能影響**: 添加性能監控和優化選項
+
+---
+
+## 實作進度（2026-03-11）
+
+已完成：
+- `parse_receipt.py`
+  - 補上 `adaptive strategy` 路徑：`_parse_with_adaptive_strategy()`
+  - 分塊決策改為讀取環境設定：`ENABLE_ADAPTIVE_CHUNKING`、`MAX_CHUNK_SIZE`、`MIN_TRANSACTIONS_PER_CHUNK`、`FORCE_CHUNKING_TEXT_LENGTH`
+  - 保留向後相容（未設定時使用預設值）
+- `retry_enhanced.py`
+  - 修正多階段重試 context 注入邏輯，避免對不接受 `context` 參數的函式重試時拋出 `unexpected keyword argument`
+  - JSON truncation 重試策略（chunk/reduce_text）可穩定作用於支援 context 的外層函式
+- 測試
+  - `test_issue_24_large_transactions.py` 修正 strict bank parser 干擾（mock LLM 測試改為 `STRICT_BANK_PARSER=false`）
+  - `test_issue_24_comprehensive.py` 全綠
+
+驗證命令：
+- `python test_issue_24_large_transactions.py`
+- `python test_issue_24_comprehensive.py`
+- `python test_bank_parsers.py`

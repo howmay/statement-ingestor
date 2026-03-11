@@ -178,6 +178,7 @@ def test_mock_openai_parsing():
         )
         
         os.environ['OPENAI_API_KEY'] = 'test-key'
+        os.environ['STRICT_BANK_PARSER'] = 'false'
         
         try:
             text = "2024-01-01 NT$100.00 Test"
@@ -191,6 +192,8 @@ def test_mock_openai_parsing():
         finally:
             if 'OPENAI_API_KEY' in os.environ:
                 del os.environ['OPENAI_API_KEY']
+            if 'STRICT_BANK_PARSER' in os.environ:
+                del os.environ['STRICT_BANK_PARSER']
     
     print("Mock API parsing tests completed\n")
 

@@ -5,6 +5,7 @@ import time
 import random
 import json
 import logging
+import inspect
 from typing import Callable, Type, Tuple, List, Optional, Any, Dict
 from functools import wraps
 
@@ -239,20 +240,36 @@ class EnhancedAPIRetry:
         """
         last_exception = None
         response = None
-        context = kwargs.get('context', {})
-        
+        context = dict(kwargs.get('context', {}) or {})
+
+        # Reset per-execution counter
+        self.json_repair_attempts = 0
+
+        try:
+            signature = inspect.signature(func)
+            accepts_context = ('context' in signature.parameters) or any(
+                p.kind == inspect.Parameter.VAR_KEYWORD for p in signature.parameters.values()
+            )
+        except Exception:
+            accepts_context = True
+
+        base_kwargs = dict(kwargs)
+
         for attempt in range(self.config.max_retries):
+            call_kwargs = dict(base_kwargs)
+            if accepts_context:
+                call_kwargs['context'] = context
+
             try:
                 # Execute the function
-                result = func(*args, **kwargs)
+                result = func(*args, **call_kwargs)
                 response = result
-                
+
                 # Check if result indicates failure
                 if hasattr(result, 'status_code') and result.status_code >= 400:
-                    # Create a pseudo-exception for HTTP errors
                     error_msg = f"HTTP {result.status_code}: {result.reason if hasattr(result, 'reason') else 'Unknown error'}"
                     http_exception = Exception(error_msg)
-                    
+
                     if self.config.should_retry(http_exception, result, context):
                         logger.warning(
                             f"HTTP error {result.status_code} on attempt {attempt + 1}/{self.config.max_retries}. "
@@ -260,87 +277,73 @@ class EnhancedAPIRetry:
                         )
                         last_exception = http_exception
                         continue
-                    else:
-                        # Not a retryable error
-                        return result
-                
+                    return result
+
                 # Check for JSON truncation in successful responses
-                if (self.config.enable_json_truncation_retry and 
-                    hasattr(result, 'text') and 
-                    self._is_truncated_json(result.text)):
-                    
+                if (
+                    self.config.enable_json_truncation_retry
+                    and hasattr(result, 'text')
+                    and self._is_truncated_json(result.text)
+                ):
                     logger.warning("Response appears to contain truncated JSON")
                     raise JSONTruncationError("JSON response appears truncated")
-                
-                # Success
+
                 if attempt > 0:
                     logger.info(f"Operation succeeded on attempt {attempt + 1}")
                 return result
-                
+
             except JSONTruncationError as e:
                 last_exception = e
                 self.json_repair_attempts += 1
-                
+
                 # Apply JSON truncation strategy
                 if self.json_repair_attempts <= self.config.max_json_repair_attempts:
                     strategy = self.config.json_truncation_retry_strategy
                     logger.info(f"JSON truncation detected, applying strategy: {strategy}")
-                    
-                    # Ensure context exists in kwargs
-                    if 'context' not in kwargs:
-                        kwargs['context'] = {}
-                    
-                    # Modify kwargs based on strategy
-                    if strategy == 'reduce_text' and 'text' in kwargs:
-                        # Reduce text size for retry
-                        original_text = kwargs['text']
-                        if len(original_text) > 2000:
-                            kwargs['text'] = original_text[:2000] + "\n[Text truncated for retry]"
-                            logger.info(f"Reduced text from {len(original_text)} to {len(kwargs['text'])} characters")
-                    
+
+                    if strategy == 'reduce_text' and 'text' in base_kwargs:
+                        original_text = base_kwargs['text']
+                        if isinstance(original_text, str) and len(original_text) > 2000:
+                            base_kwargs['text'] = original_text[:2000] + "\n[Text truncated for retry]"
+                            logger.info(
+                                f"Reduced text from {len(original_text)} to {len(base_kwargs['text'])} characters"
+                            )
+
                     elif strategy == 'chunk_and_retry':
-                        # Signal the function to enable chunking
-                        kwargs['context']['force_chunking'] = True
+                        context['force_chunking'] = True
                         logger.info("Signaled function to force chunking on next attempt")
-                
-                # Check if we should retry
+
                 if not self.config.should_retry(e, response, context):
                     logger.error(f"Non-retryable JSON truncation: {e}")
                     raise
-                
-                # Log retry attempt
+
                 logger.warning(
                     f"JSON truncation on attempt {attempt + 1}/{self.config.max_retries}. "
                     f"Will retry (repair attempt {self.json_repair_attempts}/{self.config.max_json_repair_attempts})."
                 )
-                
-                # Calculate and wait for delay (except on last attempt)
+
                 if attempt < self.config.max_retries - 1:
                     delay = self.config.calculate_delay(attempt, is_json_truncation=True)
                     logger.info(f"Waiting {delay:.2f} seconds before JSON truncation retry...")
                     time.sleep(delay)
-                
+
             except Exception as e:
                 last_exception = e
-                
-                # Check if we should retry
+
                 if not self.config.should_retry(e, response, context):
                     logger.error(f"Non-retryable exception: {e}")
                     raise
-                
-                # Log retry attempt
+
                 logger.warning(
                     f"Attempt {attempt + 1}/{self.config.max_retries} failed: {e}. "
                     f"Will retry."
                 )
-                
-                # Calculate and wait for delay (except on last attempt)
+
                 if attempt < self.config.max_retries - 1:
                     delay = self.config.calculate_delay(attempt)
                     logger.info(f"Waiting {delay:.2f} seconds before retry...")
                     time.sleep(delay)
-        
-        # All retries failed
+
         logger.error(f"All {self.config.max_retries} attempts failed. Last error: {last_exception}")
         raise last_exception
     
