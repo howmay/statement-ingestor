@@ -190,6 +190,7 @@ def main():
                         'sender_tag': sender_tag,
                         'text': text,
                         'subject': file_info.get('subject', ''),
+                        'pdf_password': password_used,
                         'password_used': bool(password_used),
                         'password_tried': len(passwords) if passwords else 0
                     })
@@ -238,7 +239,8 @@ def main():
                     'sender_tag': item['sender_tag'],
                     'filename': item['filename'],
                     'filepath': item.get('filepath', ''),
-                    'subject': item.get('subject', '')
+                    'subject': item.get('subject', ''),
+                    'pdf_password': item.get('pdf_password'),
                 }
                 
                 # Parse receipt text (returns list of transactions)

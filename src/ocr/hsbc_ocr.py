@@ -75,7 +75,7 @@ def enrich_hsbc_transactions_with_ocr(
         return 0
 
     try:
-        ocr_rows = _ocr_statement_rows(pdf_path)
+        ocr_rows = _ocr_statement_rows(pdf_path, source_info)
     except Exception as e:
         logger.warning(f'HSBC OCR failed: {e}')
         return 0
@@ -119,7 +119,7 @@ def enrich_hsbc_transactions_with_ocr(
     return enriched
 
 
-def _ocr_statement_rows(pdf_path: str) -> List[Dict]:
+def _ocr_statement_rows(pdf_path: str, source_info: Optional[Dict] = None) -> List[Dict]:
     rows: List[Dict] = []
 
     try:
@@ -127,8 +127,10 @@ def _ocr_statement_rows(pdf_path: str) -> List[Dict]:
     except ImportError as e:
         raise RuntimeError('pypdfium2 is required for OCR fallback') from e
 
+    source_info = source_info or {}
+
     with tempfile.TemporaryDirectory(prefix='hsbc_ocr_') as tmpdir:
-        pdf = pdfium.PdfDocument(pdf_path)
+        pdf = _open_pdf_with_password_candidates(pdfium, pdf_path, source_info)
 
         for i in range(len(pdf)):
             page = pdf[i]
@@ -143,6 +145,40 @@ def _ocr_statement_rows(pdf_path: str) -> List[Dict]:
             rows.extend(_extract_rows_from_ocr_text(text))
 
     return rows
+
+
+def _open_pdf_with_password_candidates(pdfium, pdf_path: str, source_info: Dict):
+    """Open encrypted PDF using known password candidates."""
+    sender = source_info.get('sender', '')
+    preferred_password = source_info.get('pdf_password')
+
+    candidates: List[Optional[str]] = []
+    if preferred_password:
+        candidates.append(preferred_password)
+
+    # Fallback to configured password list for this sender
+    try:
+        from src.config import get_bank_password
+        for pw in get_bank_password(sender) or []:
+            if pw and pw not in candidates:
+                candidates.append(pw)
+    except Exception:
+        pass
+
+    # Finally, try opening without password
+    candidates.append(None)
+
+    last_error = None
+    for pw in candidates:
+        try:
+            if pw:
+                return pdfium.PdfDocument(pdf_path, password=pw)
+            return pdfium.PdfDocument(pdf_path)
+        except Exception as e:
+            last_error = e
+            continue
+
+    raise RuntimeError(f"Failed to load document (PDFium: {last_error})")
 
 
 def _run_tesseract_text(image_path: str) -> str:
