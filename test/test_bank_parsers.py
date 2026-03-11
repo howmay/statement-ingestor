@@ -1,6 +1,12 @@
 #!/usr/bin/env python3
 """Quick deterministic parser tests."""
 
+import sys
+from pathlib import Path
+
+project_root = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(project_root))
+
 from src.bank_parsers.factory import parse_with_bank_factory
 from src.ocr.hsbc_ocr import _extract_rows_from_ocr_text
 

@@ -4,7 +4,7 @@ Test script for multiple transaction extraction from bank statements.
 """
 import sys
 import os
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
 
 from src.llm.parse_receipt import parse_receipt_text
 
