@@ -46,6 +46,19 @@ class TestFetchEmails:
         query = build_gmail_query([], [])
         assert query == "has:attachment filename:pdf"
 
+    def test_build_gmail_query_with_date_range(self):
+        """Test building query with date range filters."""
+        query = build_gmail_query(
+            ["bank@example.com"],
+            ["statement"],
+            date_from="2026-03-01",
+            date_to="2026-03-31",
+        )
+
+        assert 'after:2026/03/01' in query
+        # before is exclusive, so date_to + 1 day
+        assert 'before:2026/04/01' in query
+
     @patch('src.fetch.fetch_emails.TARGET_SENDERS', ["default@example.com"])
     @patch('src.fetch.fetch_emails.TARGET_KEYWORDS', ["default"])
     def test_search_emails_success(self):

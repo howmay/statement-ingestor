@@ -3,119 +3,149 @@ import os
 import json
 import re
 from datetime import datetime
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Tuple
 import logging
 
 logger = logging.getLogger(__name__)
 
 
+CSV_COLUMNS = [
+    ('date', '日期'),
+    ('amount', '金額'),
+    ('currency', '幣別'),
+    ('expense_name', '消費名目'),
+    ('expense_type', '類型'),
+    ('source', '來源'),
+    ('source_file', '來源檔案'),
+]
+
+
+def _transaction_month(receipt: Dict[str, Any]) -> str:
+    """Return YYYY-MM bucket for a receipt. Unknown dates go to `unknown`."""
+    date_value = str(receipt.get('date') or '').strip()
+    if re.match(r'^\d{4}-\d{2}-\d{2}$', date_value):
+        return date_value[:7]
+    if re.match(r'^\d{4}/\d{2}/\d{2}$', date_value):
+        return date_value[:7].replace('/', '-')
+    return 'unknown'
+
+
+def _receipt_key(receipt: Dict[str, Any]) -> Tuple[str, str, str, str, str]:
+    """Stable key for de-duplication across reruns."""
+    amount_value = receipt.get('amount')
+    amount_str = ''
+    if amount_value is not None:
+        try:
+            amount_str = f"{float(amount_value):.2f}"
+        except Exception:
+            amount_str = str(amount_value)
+
+    return (
+        str(receipt.get('date') or '').strip(),
+        amount_str,
+        str(receipt.get('currency') or '').strip(),
+        str(receipt.get('expense_name') or '').strip(),
+        str(receipt.get('source_file') or receipt.get('original_file') or '').strip(),
+    )
+
+
+def _format_export_row(receipt: Dict[str, Any]) -> Dict[str, str]:
+    row: Dict[str, str] = {}
+    source_file = receipt.get('source_file') or receipt.get('original_file') or ''
+
+    for key, _display in CSV_COLUMNS:
+        value = source_file if key == 'source_file' else receipt.get(key)
+        if value is None:
+            row[key] = ''
+        elif key == 'amount':
+            try:
+                row[key] = f"{float(value):.2f}"
+            except Exception:
+                row[key] = str(value)
+        else:
+            row[key] = str(value)
+
+    return row
+
+
+def _load_existing_rows(filepath: str) -> List[Dict[str, str]]:
+    if not os.path.exists(filepath):
+        return []
+
+    try:
+        with open(filepath, 'r', newline='', encoding='utf-8-sig') as f:
+            reader = csv.DictReader(f)
+            return list(reader)
+    except Exception:
+        return []
+
+
 def export_receipts_to_csv(receipts: List[Dict[str, Any]], output_dir: str = "output") -> str:
     """
-    Export parsed receipts to CSV file.
-    
-    Args:
-        receipts: List of parsed receipt dictionaries.
-        output_dir: Directory to save CSV file.
-    
-    Returns:
-        Path to the created CSV file, or empty string if no data.
-    
-    Raises:
-        OSError: If file cannot be written.
+    Export parsed receipts into month-partitioned CSV files (append-only + de-duplicated).
+
+    Output naming: `expenses_YYYY-MM.csv`.
     """
     if not receipts:
         logger.warning("No receipts to export")
         return ""
-    
-    # Create output directory if it doesn't exist
+
     os.makedirs(output_dir, exist_ok=True)
-    
-    # Generate filename with timestamp
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    filename = f"expenses_{timestamp}.csv"
-    filepath = os.path.join(output_dir, filename)
-    
-    # Define column order and mapping (for display purposes)
-    # We'll include all available fields from the receipts
-    field_mapping = {
-        # Core fields (from specification)
-        'date': '日期',
-        'amount': '金額',
-        'currency': '幣別',
-        'expense_name': '消費名目',
-        'expense_type': '類型',
-        'source': '來源',
-        
-        # Additional fields from parsing
-        'confidence': '信心度',
-        'original_file': '原始檔案',
-        'sender_tag': '寄件人標籤',
-        'parsed_at': '解析時間',
-        'llm_model': 'LLM模型',
-        'parsing_method': '解析方法',
-        'raw_text_snippet': '原始文字片段',
-    }
-    
-    # Determine all fields that exist in the receipts
-    all_fields = set()
+
+    # Group by month bucket
+    grouped: Dict[str, List[Dict[str, Any]]] = {}
     for receipt in receipts:
-        all_fields.update(receipt.keys())
-    
-    # Create ordered field list: core fields first, then others
-    ordered_fields = []
-    field_display_names = []
-    
-    # Add core fields in order (if they exist in data)
-    for field, display_name in field_mapping.items():
-        if field in all_fields:
-            ordered_fields.append(field)
-            field_display_names.append(display_name)
-    
-    # Add any remaining fields not in mapping
-    for field in sorted(all_fields):
-        if field not in ordered_fields:
-            ordered_fields.append(field)
-            # Use field name as display name if not in mapping
-            field_display_names.append(field)
-    
-    # Write CSV file
-    try:
-        with open(filepath, 'w', newline='', encoding='utf-8-sig') as csvfile:
-            writer = csv.DictWriter(csvfile, fieldnames=ordered_fields)
-            
-            # Write header with display names
-            writer.writerow(dict(zip(ordered_fields, field_display_names)))
-            
-            # Write data rows
-            for receipt in receipts:
-                # Create row with all fields, using empty string for missing
-                row = {}
-                for field in ordered_fields:
-                    value = receipt.get(field)
-                    
-                    # Handle special formatting
-                    if value is None:
-                        row[field] = ''
-                    elif isinstance(value, float):
-                        # Format float to 2 decimal places
-                        row[field] = f"{value:.2f}"
-                    elif isinstance(value, dict) or isinstance(value, list):
-                        # Convert dict/list to JSON string
-                        try:
-                            row[field] = json.dumps(value, ensure_ascii=False)
-                        except:
-                            row[field] = str(value)
-                    else:
-                        row[field] = str(value)
-                
-                writer.writerow(row)
-        
-        logger.info(f"Exported {len(receipts)} receipts to CSV: {filepath}")
-        return filepath
-        
-    except Exception as e:
-        logger.error(f"Failed to export CSV: {e}")
-        raise
+        month = _transaction_month(receipt)
+        grouped.setdefault(month, []).append(receipt)
+
+    written_paths: List[str] = []
+
+    for month, month_receipts in grouped.items():
+        filename = f"expenses_{month}.csv"
+        filepath = os.path.join(output_dir, filename)
+
+        existing_rows = _load_existing_rows(filepath)
+        existing_keys = set()
+        for row in existing_rows:
+            existing_keys.add((
+                str(row.get('date') or '').strip(),
+                str(row.get('amount') or '').strip(),
+                str(row.get('currency') or '').strip(),
+                str(row.get('expense_name') or '').strip(),
+                str(row.get('source_file') or '').strip(),
+            ))
+
+        rows_to_append: List[Dict[str, str]] = []
+        for receipt in month_receipts:
+            row = _format_export_row(receipt)
+            key = (
+                row.get('date', '').strip(),
+                row.get('amount', '').strip(),
+                row.get('currency', '').strip(),
+                row.get('expense_name', '').strip(),
+                row.get('source_file', '').strip(),
+            )
+            if key in existing_keys:
+                continue
+            existing_keys.add(key)
+            rows_to_append.append(row)
+
+        if not os.path.exists(filepath):
+            with open(filepath, 'w', newline='', encoding='utf-8-sig') as csvfile:
+                writer = csv.DictWriter(csvfile, fieldnames=[k for k, _ in CSV_COLUMNS])
+                writer.writeheader()
+                writer.writerows(rows_to_append)
+        elif rows_to_append:
+            with open(filepath, 'a', newline='', encoding='utf-8-sig') as csvfile:
+                writer = csv.DictWriter(csvfile, fieldnames=[k for k, _ in CSV_COLUMNS])
+                writer.writerows(rows_to_append)
+
+        logger.info(
+            f"Exported month={month}: new_rows={len(rows_to_append)} total_existing={len(existing_rows)} file={filepath}"
+        )
+        written_paths.append(filepath)
+
+    return ",".join(sorted(written_paths))
 
 
 def export_extracted_texts_to_csv(extracted_texts: List[Dict[str, Any]], output_dir: str = "output") -> str:

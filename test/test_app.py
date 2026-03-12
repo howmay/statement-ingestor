@@ -100,6 +100,21 @@ class TestGmailExpenseParserAppFetchEmails:
             assert result is False
             assert app.stats['errors'] > 0
 
+    def test_fetch_emails_with_date_range(self, app):
+        """Email fetch should pass date range to search layer."""
+        app.service = Mock()
+
+        with patch('src.app.search_emails', return_value=[]) as mock_search:
+            result = app.fetch_emails(max_results=20, date_from='2026-03-01', date_to='2026-03-31')
+
+            assert result is True
+            mock_search.assert_called_once_with(
+                app.service,
+                max_results=20,
+                date_from='2026-03-01',
+                date_to='2026-03-31',
+            )
+
 
 class TestGmailExpenseParserAppDownloadAttachments:
     """Test attachment download."""
@@ -124,8 +139,9 @@ class TestGmailExpenseParserAppDownloadAttachments:
             result = app.download_attachments()
             
             assert result is True
-            assert len(app.downloaded_files) == 2  # 1 file per email * 2 emails
-            assert app.stats['pdfs_downloaded'] == 2
+            # dedupe by filepath -> only one unique file kept
+            assert len(app.downloaded_files) == 1
+            assert app.stats['pdfs_downloaded'] == 1
     
     def test_download_attachments_no_emails(self, app):
         """Test download with no emails."""
@@ -178,8 +194,9 @@ class TestGmailExpenseParserAppParseReceipts:
             {'text': 'text2', 'file_info': {'filepath': '/f2.pdf', 'sender': 'vendor', 'subject': 'inv'}}
         ]
         
-        with patch('src.app.parse_receipt_text', return_value=[
-            {'date': '2024-01-01', 'amount': 100.0, 'expense_name': 'Purchase', 'expense_type': 'Food', 'source': 'bank', 'confidence': 0.95}
+        with patch('src.app.parse_receipt_text', side_effect=[
+            [{'date': '2024-01-01', 'amount': 100.0, 'expense_name': 'Purchase', 'expense_type': 'Food', 'source': 'bank', 'confidence': 0.95}],
+            [{'date': '2024-01-01', 'amount': 100.0, 'expense_name': 'Purchase', 'expense_type': 'Food', 'source': 'bank', 'confidence': 0.95}],
         ]):
             result = app.parse_receipts()
             

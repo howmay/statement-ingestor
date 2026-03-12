@@ -1,19 +1,45 @@
 import logging
-from typing import List, Dict, Any
+from datetime import datetime, timedelta
+from typing import List, Dict, Any, Optional
 from src.config import TARGET_SENDERS, TARGET_KEYWORDS
 from src.utils.retry import retry_gmail
 
 logger = logging.getLogger(__name__)
 
 
-def build_gmail_query(senders: List[str], keywords: List[str]) -> str:
+def _normalize_gmail_date(date_text: Optional[str]) -> Optional[str]:
+    """Normalize date string into Gmail query format YYYY/MM/DD."""
+    if not date_text:
+        return None
+
+    raw = str(date_text).strip()
+    if not raw:
+        return None
+
+    for fmt in ("%Y-%m-%d", "%Y/%m/%d", "%Y%m%d"):
+        try:
+            return datetime.strptime(raw, fmt).strftime("%Y/%m/%d")
+        except ValueError:
+            continue
+
+    return None
+
+
+def build_gmail_query(
+    senders: List[str],
+    keywords: List[str],
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+) -> str:
     """
-    Build a Gmail API search query from senders and keywords.
-    
+    Build a Gmail API search query from senders/keywords and optional date range.
+
     Args:
         senders: List of sender email addresses.
         keywords: List of keywords to search in subject/body.
-    
+        date_from: Inclusive start date (YYYY-MM-DD, YYYY/MM/DD, or YYYYMMDD).
+        date_to: Inclusive end date (same formats). Implemented as Gmail `before` of next day.
+
     Returns:
         A Gmail search query string.
     """
@@ -34,16 +60,36 @@ def build_gmail_query(senders: List[str], keywords: List[str]) -> str:
     if keyword_query:
         query_parts.append(keyword_query)
     query_parts.append("has:attachment filename:pdf")
-    
+
+    # Date range (Gmail query: after inclusive-ish, before exclusive)
+    from_norm = _normalize_gmail_date(date_from)
+    to_norm = _normalize_gmail_date(date_to)
+
+    if from_norm:
+        query_parts.append(f"after:{from_norm}")
+
+    if to_norm:
+        to_dt = datetime.strptime(to_norm, "%Y/%m/%d") + timedelta(days=1)
+        query_parts.append(f"before:{to_dt.strftime('%Y/%m/%d')}")
+
     final_query = " ".join(query_parts)
     logger.debug(f"Built Gmail query: {final_query}")
     logger.debug(f"  - Senders: {senders}")
     logger.debug(f"  - Keywords: {keywords}")
+    logger.debug(f"  - Date from: {from_norm}")
+    logger.debug(f"  - Date to: {to_norm}")
     return final_query
 
 
 @retry_gmail
-def search_emails(service, senders=None, keywords=None, max_results=100) -> List[Dict[str, Any]]:
+def search_emails(
+    service,
+    senders=None,
+    keywords=None,
+    max_results=100,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+) -> List[Dict[str, Any]]:
     """
     Search emails using Gmail API with retry mechanism.
     
@@ -52,6 +98,8 @@ def search_emails(service, senders=None, keywords=None, max_results=100) -> List
         senders: List of sender email addresses (defaults to TARGET_SENDERS).
         keywords: List of keywords (defaults to TARGET_KEYWORDS).
         max_results: Maximum number of emails to return.
+        date_from: Inclusive start date (YYYY-MM-DD, YYYY/MM/DD, or YYYYMMDD).
+        date_to: Inclusive end date (same formats).
     
     Returns:
         List of email metadata dictionaries with keys:
@@ -70,8 +118,9 @@ def search_emails(service, senders=None, keywords=None, max_results=100) -> List
     logger.info(f"  - Senders: {senders}")
     logger.info(f"  - Keywords: {keywords}")
     logger.info(f"  - Max results: {max_results}")
-    
-    query = build_gmail_query(senders, keywords)
+    logger.info(f"  - Date range: {date_from or '-'} ~ {date_to or '-'}")
+
+    query = build_gmail_query(senders, keywords, date_from=date_from, date_to=date_to)
     logger.info(f"Searching emails with query: {query}")
     
     emails = []

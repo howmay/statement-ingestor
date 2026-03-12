@@ -135,11 +135,24 @@ class GmailExpenseParserApp:
             self.stats['errors'] += 1
             return False
             
-    def fetch_emails(self, max_results: int = 20) -> bool:
-        """Step 2: Search for matching emails."""
-        self.log('info', f"Step 2: Searching for emails (max {max_results})...")
+    def fetch_emails(
+        self,
+        max_results: int = 20,
+        date_from: Optional[str] = None,
+        date_to: Optional[str] = None,
+    ) -> bool:
+        """Step 2: Search for matching emails (supports date range)."""
+        self.log(
+            'info',
+            f"Step 2: Searching for emails (max {max_results}, range {date_from or '-'} ~ {date_to or '-'})..."
+        )
         try:
-            self.emails = search_emails(self.service, max_results=max_results)
+            self.emails = search_emails(
+                self.service,
+                max_results=max_results,
+                date_from=date_from,
+                date_to=date_to,
+            )
             self.stats['emails_found'] = len(self.emails)
             self.log('info', f"✓ Found {len(self.emails)} matching email(s)")
             return True
@@ -174,9 +187,19 @@ class GmailExpenseParserApp:
                         self.log('error', f"✗ Failed to download attachments for email {email.get('id', 'unknown')}: {e}")
                         self.stats['errors'] += 1
             
-            self.downloaded_files = all_downloaded_files
+            # De-duplicate by physical file path (same attachment may appear in multiple emails)
+            deduped = []
+            seen_paths = set()
+            for item in all_downloaded_files:
+                path = item.get('filepath')
+                if not path or path in seen_paths:
+                    continue
+                seen_paths.add(path)
+                deduped.append(item)
+
+            self.downloaded_files = deduped
             self.stats['pdfs_downloaded'] = len(self.downloaded_files)
-            self.log('info', f"✓ Downloaded {len(self.downloaded_files)} PDF(s) in total")
+            self.log('info', f"✓ Downloaded {len(self.downloaded_files)} unique PDF(s)")
             return True
         except Exception as e:
             self.log('error', f"✗ Batch PDF download failed: {e}")
@@ -204,18 +227,40 @@ class GmailExpenseParserApp:
         
         def process_file(file_info):
             try:
-                # Get password if needed (by bank name/sender tag)
-                sender_tag = file_info.get('sender_tag', 'unknown')
-                password = get_bank_password(sender_tag)
-                
-                text = extract_text_from_pdf(file_info['filepath'], password)
-                if text:
+                sender = file_info.get('sender', '')
+                password_candidates = get_bank_password(sender) or [None]
+
+                extracted_text = None
+                password_used = None
+                last_error = None
+
+                # Try all passwords, then fallback to no-password
+                tried = list(password_candidates)
+                if None not in tried:
+                    tried.append(None)
+
+                for pw in tried:
+                    try:
+                        extracted_text = extract_text_from_pdf(file_info['filepath'], pw)
+                        if extracted_text:
+                            password_used = pw
+                            break
+                    except Exception as e:
+                        last_error = e
+                        continue
+
+                if extracted_text:
+                    file_info = dict(file_info)
+                    file_info['pdf_password'] = password_used
                     return {
-                        'text': text,
-                        'file_info': file_info
+                        'text': extracted_text,
+                        'file_info': file_info,
                     }
-                else:
-                    return {'warning': f"No text extracted from {file_info['filepath']}"}
+
+                if last_error:
+                    return {'error': f"Failed to extract text from {file_info['filepath']}: {last_error}"}
+
+                return {'warning': f"No text extracted from {file_info['filepath']}"}
             except Exception as e:
                 return {'error': f"Failed to extract text from {file_info['filepath']}: {e}"}
 
@@ -245,28 +290,33 @@ class GmailExpenseParserApp:
             
         self.log('info', "Step 5: Parsing receipts using LLM...")
         
-        # Group texts for batch processing if needed, or process individually
+        parsed_candidates: List[Dict[str, Any]] = []
+
         for item in self.extracted_texts:
             text = item['text']
             file_info = item['file_info']
-            
+
+            source_info = {
+                'sender': file_info.get('sender', ''),
+                'sender_tag': file_info.get('sender_tag', ''),
+                'filename': file_info.get('filename') or os.path.basename(file_info.get('filepath', '')),
+                'filepath': file_info.get('filepath', ''),
+                'subject': file_info.get('subject', ''),
+                'pdf_password': file_info.get('pdf_password'),
+            }
+
             try:
-                # Use enhanced parsing if multiple receipts might be in one text
-                # or if the text is very large
-                receipts = parse_receipt_text(text)
-                
-                if receipts:
-                    # Add metadata to each receipt
-                    for r in receipts:
-                        r['source_file'] = os.path.basename(file_info['filepath'])
-                        r['sender'] = file_info['sender']
-                        r['subject'] = file_info['subject']
-                        self.parsed_receipts.append(r)
-                        self.stats['receipts_parsed'] += 1
-                else:
+                receipts = parse_receipt_text(text, source_info)
+
+                if not receipts:
                     self.log('warning', f"No receipts parsed from {file_info['filepath']}")
                     self.stats['warnings'] += 1
-                    
+                    continue
+
+                for r in receipts:
+                    r['source_file'] = os.path.basename(file_info['filepath'])
+                    parsed_candidates.append(r)
+
             except ReceiptParsingError as e:
                 self.log('error', f"LLM parsing error for {file_info['filepath']}: {e}")
                 self.stats['errors'] += 1
@@ -274,8 +324,26 @@ class GmailExpenseParserApp:
                 self.log('error', f"Unexpected error parsing {file_info['filepath']}: {e}")
                 self.log('debug', traceback.format_exc())
                 self.stats['errors'] += 1
-                
-        self.log('info', f"✓ Parsed {len(self.parsed_receipts)} receipt(s) in total")
+
+        # De-duplicate parsed transactions to avoid repeated detail rows across reruns/files
+        deduped_receipts: List[Dict[str, Any]] = []
+        seen = set()
+        for r in parsed_candidates:
+            key = (
+                str(r.get('date') or ''),
+                f"{float(r.get('amount', 0)):.2f}" if r.get('amount') is not None else '',
+                str(r.get('currency') or ''),
+                str(r.get('expense_name') or '').strip(),
+                str(r.get('source_file') or ''),
+            )
+            if key in seen:
+                continue
+            seen.add(key)
+            deduped_receipts.append(r)
+
+        self.parsed_receipts = deduped_receipts
+        self.stats['receipts_parsed'] = len(self.parsed_receipts)
+        self.log('info', f"✓ Parsed {len(self.parsed_receipts)} unique receipt row(s) in total")
         return True
         
     def export_results(self) -> bool:
@@ -303,7 +371,12 @@ class GmailExpenseParserApp:
             self.stats['errors'] += 1
             return False
             
-    def run(self, max_results: int = 10) -> Dict[str, Any]:
+    def run(
+        self,
+        max_results: int = 10,
+        date_from: Optional[str] = None,
+        date_to: Optional[str] = None,
+    ) -> Dict[str, Any]:
         """Run the full pipeline."""
         self.log('info', "=" * 60)
         self.log('info', f"Gmail Expense Parser started at {self.start_time}")
@@ -317,7 +390,7 @@ class GmailExpenseParserApp:
             if not self.authenticate():
                 return self.stats
                 
-            if not self.fetch_emails(max_results=max_results):
+            if not self.fetch_emails(max_results=max_results, date_from=date_from, date_to=date_to):
                 return self.stats
                 
             if not self.download_attachments():

@@ -27,6 +27,18 @@ def main():
         action='store_true', 
         help='Enable debug level logging'
     )
+    parser.add_argument(
+        '--date-from',
+        type=str,
+        default=None,
+        help='Email start date (inclusive), format: YYYY-MM-DD'
+    )
+    parser.add_argument(
+        '--date-to',
+        type=str,
+        default=None,
+        help='Email end date (inclusive), format: YYYY-MM-DD'
+    )
     
     args = parser.parse_args()
     
@@ -40,7 +52,11 @@ def main():
         app.logger.setLevel(logging.DEBUG)
     
     # Execute the pipeline
-    stats = app.run(max_results=args.limit)
+    stats = app.run(
+        max_results=args.limit,
+        date_from=args.date_from,
+        date_to=args.date_to,
+    )
     
     # Exit with appropriate status code
     if stats.get('errors', 0) > 0 and stats.get('receipts_parsed', 0) == 0:
