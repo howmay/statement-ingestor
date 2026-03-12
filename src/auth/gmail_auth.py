@@ -223,15 +223,22 @@ def get_gmail_service(client_secrets_path=None, token_path=None, port=None,
     if not creds or not creds.valid:
         # Check if manual token is provided
         if manual_token:
-            logger.info(f"Using manual token (first 20 chars): {manual_token[:20]}...")
             try:
-                # Create credentials from manual token
-                creds = Credentials(
-                    token=manual_token,
-                    token_uri='https://oauth2.googleapis.com/token',
-                    revoke_url='https://oauth2.googleapis.com/revoke',
-                    refresh_url='https://oauth2.googleapis.com/token'
-                )
+                if isinstance(manual_token, dict):
+                    token_preview = str(manual_token.get('token', ''))[:20]
+                    logger.info(f"Using manual token info (token first 20 chars): {token_preview}...")
+                    creds = Credentials.from_authorized_user_info(manual_token, SCOPES)
+                elif isinstance(manual_token, str):
+                    logger.info(f"Using manual token (first 20 chars): {manual_token[:20]}...")
+                    creds = Credentials(
+                        token=manual_token,
+                        token_uri='https://oauth2.googleapis.com/token',
+                        revoke_url='https://oauth2.googleapis.com/revoke',
+                        refresh_url='https://oauth2.googleapis.com/token'
+                    )
+                else:
+                    raise ValueError("manual_token must be a string token or authorized-user dict")
+
                 # Test if the manual token works
                 if not _test_token_usable(creds):
                     logger.warning("Manual token failed API test.")
@@ -279,9 +286,12 @@ def get_gmail_service(client_secrets_path=None, token_path=None, port=None,
             
             logger.info("=" * 60)
             logger.info("Authorization successful!")
-            
+
             # Save the credentials for the next run
-            _save_credentials_to_token_file(creds, token_path)
+            try:
+                _save_credentials_to_token_file(creds, token_path)
+            except Exception as e:
+                logger.warning(f"Failed to save token: {e}")
 
         elif creds and creds.expired and creds.refresh_token:
             logger.info("Refreshing expired credentials")
@@ -312,7 +322,10 @@ def get_gmail_service(client_secrets_path=None, token_path=None, port=None,
                                f"Or try OOB flow with --oob")
             
             # Save the credentials for the next run
-            _save_credentials_to_token_file(creds, token_path)
+            try:
+                _save_credentials_to_token_file(creds, token_path)
+            except Exception as e:
+                logger.warning(f"Failed to save token: {e}")
 
     # Build the Gmail API service
     try:
