@@ -1,382 +1,53 @@
-import os
+#!/usr/bin/env python3
+"""
+Gmail Expense Parser - Entry Point
+"""
 import sys
+import argparse
 import logging
-from src.config import TARGET_SENDERS, TARGET_KEYWORDS, DOWNLOAD_DIR, get_bank_password
-from src.auth.gmail_auth import get_gmail_service
-from src.fetch.fetch_emails import search_emails, list_attachments
-from src.fetch.download_pdfs import batch_download_pdfs
-from src.pdf.pdf_to_text import extract_text_from_pdf
-from src.llm.parse_receipt import parse_receipt_text, parse_multiple_receipts, ReceiptParsingError
-# Temporarily keep imports for future steps (will be replaced in later steps)
-from src.parser_factory import get_parser
-from src.csv_exporter import CSVExporter
-from src.output.csv_writer import export_receipts_to_csv, export_extracted_texts_to_csv
-
-
-def _is_transaction_excluding_balance(tx: dict) -> bool:
-    """Keep transaction rows (存入/支出) but exclude balance/carry rows."""
-    amount = tx.get('amount')
-    if amount is None:
-        return False
-
-    try:
-        float(amount)
-    except (TypeError, ValueError):
-        return False
-
-    name = str(tx.get('expense_name', '')).lower()
-
-    # Exclude balance-like rows only
-    balance_keywords = [
-        '承轉結餘', '本月餘額', '餘額', '結餘', '上期結餘', '期末餘額',
-        'balance carried', 'running balance', 'closing balance'
-    ]
-    if any(k.lower() in name for k in balance_keywords):
-        return False
-
-    return True
-
-
-def _currency_flow_summary(transactions: list[dict]) -> dict:
-    """Return inflow/outflow/net totals per currency."""
-    summary = {}
-    for tx in transactions:
-        currency = tx.get('currency') or 'TWD'
-        try:
-            amt = float(tx.get('amount') or 0)
-        except (TypeError, ValueError):
-            continue
-
-        if currency not in summary:
-            summary[currency] = {'in': 0.0, 'out': 0.0, 'net': 0.0}
-
-        if amt >= 0:
-            summary[currency]['out'] += amt
-        else:
-            summary[currency]['in'] += abs(amt)
-
-        summary[currency]['net'] += amt
-
-    return summary
+from src.app import GmailExpenseParserApp
 
 
 def main():
-    # Setup logging
-    logging.basicConfig(
-        level=logging.INFO,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    """Main entry point for the Gmail Expense Parser."""
+    parser = argparse.ArgumentParser(description='Gmail Expense Parser')
+    parser.add_argument(
+        '--limit', 
+        type=int, 
+        default=10, 
+        help='Maximum number of emails to search for (default: 10)'
     )
-    logger = logging.getLogger(__name__)
+    parser.add_argument(
+        '--no-enhancements', 
+        action='store_true', 
+        help='Disable enhanced logging and progress indicators'
+    )
+    parser.add_argument(
+        '--debug', 
+        action='store_true', 
+        help='Enable debug level logging'
+    )
     
-    print("=" * 60)
-    print("Gmail Receipt & Invoice Extractor (MVP) - Step 5 Demo")
-    print("=" * 60)
+    args = parser.parse_args()
     
-    # Step 1: Authenticate using OAuth2
-    try:
-        service = get_gmail_service()
-        profile = service.users().getProfile(userId='me').execute()
-        user_email = profile.get('emailAddress')
-        print(f"✓ Authenticated as: {user_email}")
-    except Exception as e:
-        print(f"✗ Authentication failed: {e}")
-        print("\nPlease ensure you have:")
-        print("1. Created a Google Cloud project with Gmail API enabled")
-        print("2. Configured OAuth2 desktop client credentials")
-        print("3. Placed client_secrets.json in config/ directory")
+    # Initialize and run the application
+    app = GmailExpenseParserApp(use_enhancements=not args.no_enhancements)
+    
+    # Override log level if debug requested
+    if args.debug:
+        logging.getLogger().setLevel(logging.DEBUG)
+        # Also set for app logger
+        app.logger.setLevel(logging.DEBUG)
+    
+    # Execute the pipeline
+    stats = app.run(max_results=args.limit)
+    
+    # Exit with appropriate status code
+    if stats.get('errors', 0) > 0 and stats.get('receipts_parsed', 0) == 0:
         sys.exit(1)
     
-    print("\n" + "=" * 60)
-    print("Step 3: Email filtering & PDF download")
-    print("=" * 60)
-    
-    # Step 2: Search for emails
-    print("\n1. Searching for emails...")
-    try:
-        emails = search_emails(service, max_results=10)  # Limit to 10 for demo
-        print(f"   ✓ Found {len(emails)} matching email(s)")
-        
-        if not emails:
-            print("\n   No matching emails found with current criteria:")
-            print(f"   - Senders: {TARGET_SENDERS}")
-            print(f"   - Keywords: {TARGET_KEYWORDS}")
-            print("\n   Exiting.")
-            sys.exit(0)
-            
-        # Display summary of found emails
-        print("\n   Email summary:")
-        for i, email in enumerate(emails[:5]):  # Show first 5
-            print(f"   {i+1}. From: {email['sender'][:50]}")
-            print(f"      Subject: {email['subject'][:60]}...")
-            attachments = list_attachments(service, email['id'])
-            print(f"      PDF attachments: {len(attachments)}")
-        
-        if len(emails) > 5:
-            print(f"   ... and {len(emails) - 5} more")
-            
-    except Exception as e:
-        print(f"   ✗ Email search failed: {e}")
-        sys.exit(1)
-    
-    # Step 3: Download PDF attachments
-    print("\n2. Downloading PDF attachments...")
-    try:
-        downloaded_files = batch_download_pdfs(service, emails)
-        print(f"   ✓ Downloaded {len(downloaded_files)} PDF file(s)")
-        
-        if downloaded_files:
-            print("\n   Downloaded files:")
-            for i, file_info in enumerate(downloaded_files[:5]):  # Show first 5
-                print(f"   {i+1}. {file_info['filename'][:40]}")
-                print(f"      Saved to: {file_info['filepath']}")
-            
-            if len(downloaded_files) > 5:
-                print(f"   ... and {len(downloaded_files) - 5} more")
-        else:
-            print("\n   No PDF attachments found in the matching emails.")
-            
-    except Exception as e:
-        print(f"   ✗ PDF download failed: {e}")
-        sys.exit(1)
-    
-    # Step 4: Extract text from PDFs
-    print("\n3. Extracting text from PDFs (Step 4)...")
-    extracted_texts = []
-    
-    if downloaded_files:
-        for i, file_info in enumerate(downloaded_files):
-            filepath = file_info['filepath']
-            filename = file_info['filename']
-            sender_tag = file_info.get('sender_tag', 'unknown')
-            sender = file_info.get('sender', '')
-            
-            try:
-                print(f"   Processing: {filename}...")
-                
-                # Get passwords to try (now returns list)
-                passwords = get_bank_password(sender)
-                
-                text = None
-                password_used = None
-                
-                if passwords:
-                    print(f"   Trying {len(passwords)} password(s)...")
-                    for i, password in enumerate(passwords):
-                        try:
-                            masked_pw = password[:3] + "..." + password[-3:] if len(password) > 6 else "***"
-                            print(f"     Password {i+1}/{len(passwords)}: {masked_pw}")
-                            
-                            text = extract_text_from_pdf(filepath, password)
-                            if text:
-                                password_used = password
-                                break
-                        except ValueError as e:
-                            if "Incorrect password" in str(e) or "password" in str(e).lower():
-                                # Try next password
-                                continue
-                            else:
-                                # Other ValueError, re-raise
-                                raise
-                else:
-                    # No passwords configured
-                    text = extract_text_from_pdf(filepath)
-                
-                if text:
-                    print(f"   ✓ Extracted {len(text)} characters")
-                    extracted_texts.append({
-                        'filepath': filepath,
-                        'filename': filename,
-                        'sender': sender,
-                        'sender_tag': sender_tag,
-                        'text': text,
-                        'subject': file_info.get('subject', ''),
-                        'pdf_password': password_used,
-                        'password_used': bool(password_used),
-                        'password_tried': len(passwords) if passwords else 0
-                    })
-                else:
-                    if passwords:
-                        print(f"   ✗ All {len(passwords)} passwords failed")
-                    else:
-                        print(f"   ⚠ No text extracted (may be scanned/image PDF or no password)")
-            except ValueError as e:
-                if "Incorrect password" in str(e) or "password" in str(e).lower():
-                    print(f"   ✗ Extraction failed: {e}")
-                    print(f"   Please check BANK_PASSWORDS configuration for {sender_tag}")
-                else:
-                    print(f"   ✗ Extraction failed: {e}")
-            except Exception as e:
-                print(f"   ✗ Extraction failed: {e}")
-                continue
-        
-        print(f"\n   Successfully extracted text from {len(extracted_texts)}/{len(downloaded_files)} PDF(s)")
-    else:
-        print("   No PDFs to process")
+    sys.exit(0)
 
-    # Export raw extracted text lines for debugging
-    text_debug_csv = ""
-    if extracted_texts:
-        try:
-            output_dir = os.path.join(os.path.dirname(__file__), "output")
-            text_debug_csv = export_extracted_texts_to_csv(extracted_texts, output_dir)
-            if text_debug_csv:
-                print(f"   ✓ Extracted text lines exported: {text_debug_csv}")
-        except Exception as e:
-            print(f"   ⚠ Failed to export extracted text lines CSV: {e}")
 
-    # Step 5: LLM parsing
-    print("\n4. Parsing receipts with LLM (Step 5)...")
-    parsed_receipts = []
-    
-    if extracted_texts:
-        for i, item in enumerate(extracted_texts):
-            try:
-                print(f"   Parsing: {item['filename'][:40]}...")
-                
-                # Prepare source info for LLM
-                source_info = {
-                    'sender': item['sender'],
-                    'sender_tag': item['sender_tag'],
-                    'filename': item['filename'],
-                    'filepath': item.get('filepath', ''),
-                    'subject': item.get('subject', ''),
-                    'pdf_password': item.get('pdf_password'),
-                }
-                
-                # Parse receipt text (returns list of transactions)
-                transactions = parse_receipt_text(item['text'], source_info)
-                
-                if not transactions:
-                    print(f"   ⚠ No transactions extracted from PDF")
-                    continue
-                
-                # Keep transaction rows (存入+支出), exclude balance rows
-                kept_transactions = [
-                    tx for tx in transactions
-                    if _is_transaction_excluding_balance(tx)
-                ]
-
-                # Add metadata and collect rows
-                for tx in kept_transactions:
-                    tx['original_file'] = item['filename']
-                    tx['sender_tag'] = item['sender_tag']
-                    parsed_receipts.append(tx)
-
-                if not kept_transactions:
-                    print(f"   ⚠ 0 transaction(s) kept after balance filter (raw parsed: {len(transactions)})")
-                    continue
-
-                flow = _currency_flow_summary(kept_transactions)
-                flow_text = ', '.join([
-                    f"{currency} out:{data['out']:.2f} in:{data['in']:.2f} net:{data['net']:.2f}"
-                    for currency, data in flow.items()
-                ])
-
-                # Show brief result for first kept transaction
-                first_tx = kept_transactions[0]
-                tx_count = len(kept_transactions)
-                if tx_count > 1:
-                    print(
-                        f"   ✓ {tx_count} transaction(s), "
-                        f"first: {first_tx.get('expense_name')[:30]:<30} "
-                        f"{first_tx.get('amount')} {first_tx.get('currency')} "
-                        f"| summary: {flow_text}"
-                    )
-                else:
-                    print(
-                        f"   ✓ {first_tx.get('expense_name')[:30]:<30} "
-                        f"{first_tx.get('amount')} {first_tx.get('currency')} "
-                        f"| summary: {flow_text}"
-                    )
-                    
-            except ReceiptParsingError as e:
-                print(f"   ✗ Parsing failed: {e}")
-                continue
-            except Exception as e:
-                print(f"   ✗ Unexpected error: {e}")
-                continue
-        
-        print(f"\n   Successfully parsed {len(parsed_receipts)}/{len(extracted_texts)} receipts")
-    else:
-        print("   No extracted text to parse")
-    
-    # Summary
-    print("\n" + "=" * 60)
-    print("Summary")
-    print("=" * 60)
-    print(f"• Authenticated user: {user_email}")
-    print(f"• Emails found: {len(emails)}")
-    print(f"• PDFs downloaded: {len(downloaded_files)}")
-    print(f"• Texts extracted: {len(extracted_texts)}")
-    print(f"• Transaction rows parsed (exclude balance): {len(parsed_receipts)}")
-    if text_debug_csv:
-        print(f"• Extracted text CSV: {text_debug_csv}")
-    if downloaded_files:
-        print(f"• Download location: {DOWNLOAD_DIR}")
-    
-    # Show preview of parsed receipts if available
-    if parsed_receipts:
-        print("\n" + "-" * 60)
-        print("Parsed Receipts Preview:")
-        print("-" * 60)
-        for i, receipt in enumerate(parsed_receipts[:3]):  # Show first 3
-            print(f"\n[{i+1}] {receipt.get('expense_name', 'Unknown')}")
-            if receipt.get('date'):
-                print(f"    Date: {receipt['date']}")
-            if receipt.get('amount') and receipt.get('currency'):
-                print(f"    Amount: {receipt['amount']} {receipt['currency']}")
-            if receipt.get('expense_type'):
-                print(f"    Type: {receipt['expense_type']}")
-            if receipt.get('source'):
-                print(f"    Source: {receipt['source']}")
-            if receipt.get('confidence'):
-                print(f"    Confidence: {receipt['confidence']:.2f}")
-    elif extracted_texts:
-        print("\n" + "-" * 60)
-        print("Extracted Text Preview (first 2 PDFs):")
-        print("-" * 60)
-        for i, item in enumerate(extracted_texts[:2]):
-            print(f"\n[{i+1}] {item['filename']} (from: {item['sender_tag']})")
-            preview = item['text'][:200]
-            print(f"    {preview}...")
-            if len(item['text']) > 200:
-                print(f"    ({len(item['text']) - 200} more characters)")
-    
-    # Step 6: CSV Export
-    print("\n" + "=" * 60)
-    print("Step 6: CSV Export")
-    print("=" * 60)
-    
-    if parsed_receipts:
-        try:
-            # Create output directory
-            output_dir = os.path.join(os.path.dirname(__file__), "output")
-            csv_path = export_receipts_to_csv(parsed_receipts, output_dir)
-            
-            if csv_path and os.path.exists(csv_path):
-                print(f"✓ CSV exported: {csv_path}")
-                print(f"  • Contains {len(parsed_receipts)} receipt(s)")
-                print(f"  • File size: {os.path.getsize(csv_path):,} bytes")
-                
-                # Show sample of exported data
-                print("\n  Sample exported data:")
-                for i, receipt in enumerate(parsed_receipts[:2]):  # Show first 2
-                    print(f"    {i+1}. {receipt.get('expense_name', 'Unknown')}: "
-                          f"{receipt.get('amount', 'N/A')} {receipt.get('currency', '')} "
-                          f"({receipt.get('date', 'N/A')})")
-            else:
-                print("⚠ CSV export failed or file not created")
-        except Exception as e:
-            print(f"✗ CSV export error: {e}")
-    else:
-        print("⚠ No parsed receipts to export")
-    
-    print("\n" + "=" * 60)
-    print("Next steps:")
-    print("1. Review exported CSV file (存入+支出，已排除結餘列)")
-    if not parsed_receipts:
-        print("2. Check local LLM runtime config (LLM_PROVIDER/LOCAL_BASE_URL/LOCAL_MODEL)")
-    print("=" * 60)
-
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()

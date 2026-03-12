@@ -63,14 +63,18 @@ class RetryConfig:
             return False
         
         # Check status codes if response is available
-        if response and hasattr(response, 'status_code'):
-            if response.status_code in self.retry_on_status_codes:
-                return True
+        status_code = getattr(response, 'status_code', None)
+        if isinstance(status_code, int) and status_code >= 400:
+            if self.retry_on_status_codes and status_code not in self.retry_on_status_codes:
+                return False
         
         # Check custom conditions
         for condition in self.retry_on_conditions:
-            if condition(exception, response):
-                return True
+            try:
+                if condition(exception, response):
+                    return True
+            except Exception:
+                pass
         
         return True
     
@@ -170,7 +174,8 @@ class APIRetry:
                 response = result
                 
                 # Check if result indicates failure
-                if hasattr(result, 'status_code') and result.status_code >= 400:
+                status_code = getattr(result, 'status_code', None)
+                if isinstance(status_code, int) and status_code >= 400:
                     # Create a pseudo-exception for HTTP errors
                     error_msg = f"HTTP {result.status_code}: {result.reason if hasattr(result, 'reason') else 'Unknown error'}"
                     http_exception = Exception(error_msg)

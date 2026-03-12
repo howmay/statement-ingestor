@@ -104,7 +104,8 @@ def get_gmail_service(client_secrets_path=None, token_path=None, port=None):
                 logger.warning(f"Failed to refresh token: {e}")
                 creds = None
         
-        if not creds:
+        # If still no valid credentials, start OAuth2 flow
+        if not creds or not creds.valid:
             logger.info(f"Starting OAuth2 flow with {client_secrets_path} on port {port}")
             try:
                 flow = InstalledAppFlow.from_client_secrets_file(
