@@ -105,3 +105,48 @@ class TestFetchEmails:
         emails = search_emails(mock_service, senders=["test@example.com"], keywords=["test"])
         
         assert len(emails) == 0
+
+    def test_search_emails_without_limit_paginates_to_end(self):
+        """When max_results is None, search should iterate until nextPageToken is absent."""
+        mock_service = Mock()
+
+        list_call = mock_service.users().messages().list
+        list_call.return_value.execute.side_effect = [
+            {'messages': [{'id': 'msg1', 'threadId': 't1'}], 'nextPageToken': 'tok2'},
+            {'messages': [{'id': 'msg2', 'threadId': 't2'}]},
+        ]
+
+        mock_service.users().messages().get.side_effect = [
+            Mock(execute=Mock(return_value={
+                'id': 'msg1',
+                'threadId': 't1',
+                'internalDate': '123',
+                'payload': {
+                    'headers': [
+                        {'name': 'From', 'value': 'Bank <bank@example.com>'},
+                        {'name': 'Subject', 'value': 'Statement 1'},
+                    ]
+                }
+            })),
+            Mock(execute=Mock(return_value={
+                'id': 'msg2',
+                'threadId': 't2',
+                'internalDate': '124',
+                'payload': {
+                    'headers': [
+                        {'name': 'From', 'value': 'Bank <bank@example.com>'},
+                        {'name': 'Subject', 'value': 'Statement 2'},
+                    ]
+                }
+            })),
+        ]
+
+        emails = search_emails(
+            mock_service,
+            senders=['bank@example.com'],
+            keywords=['statement'],
+            max_results=None,
+        )
+
+        assert len(emails) == 2
+        assert {e['id'] for e in emails} == {'msg1', 'msg2'}

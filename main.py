@@ -12,12 +12,6 @@ def main():
     """Main entry point for the Gmail Expense Parser."""
     parser = argparse.ArgumentParser(description='Gmail Expense Parser')
     parser.add_argument(
-        '--limit', 
-        type=int, 
-        default=10, 
-        help='Maximum number of emails to search for (default: 10)'
-    )
-    parser.add_argument(
         '--no-enhancements', 
         action='store_true', 
         help='Disable enhanced logging and progress indicators'
@@ -39,6 +33,12 @@ def main():
         default=None,
         help='Email end date (inclusive), format: YYYY-MM-DD'
     )
+    parser.add_argument(
+        '--workers',
+        type=int,
+        default=4,
+        help='Maximum number of parallel workers (default: 4)'
+    )
     
     args = parser.parse_args()
     
@@ -53,9 +53,9 @@ def main():
     
     # Execute the pipeline
     stats = app.run(
-        max_results=args.limit,
         date_from=args.date_from,
         date_to=args.date_to,
+        max_workers=args.workers
     )
     
     # Exit with appropriate status code
