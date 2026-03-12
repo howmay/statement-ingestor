@@ -184,31 +184,28 @@ class GmailExpenseParserApp:
             return False
             
     def download_attachments(self) -> bool:
-        """Step 3: Download PDF attachments."""
+        """Step 3: Download PDF attachments.
+
+        Note: Gmail API service objects are not reliably thread-safe. We process
+        emails sequentially here to avoid intermittent SSL / stream errors under
+        parallel access.
+        """
         if not self.emails:
             self.log('info', "No emails to process.")
             return True
-            
+
         self.log('info', "Step 3: Downloading PDF attachments...")
         try:
-            from concurrent.futures import ThreadPoolExecutor, as_completed
-            
-            # Using ThreadPoolExecutor for concurrent downloads
-            max_workers = min(os.cpu_count() or 4, 10)
             all_downloaded_files = []
-            
-            with ThreadPoolExecutor(max_workers=max_workers) as executor:
-                futures = {executor.submit(batch_download_pdfs, self.service, [email]): email for email in self.emails}
-                
-                for future in as_completed(futures):
-                    try:
-                        downloaded_files = future.result()
-                        all_downloaded_files.extend(downloaded_files)
-                    except Exception as e:
-                        email = futures[future]
-                        self.log('error', f"✗ Failed to download attachments for email {email.get('id', 'unknown')}: {e}")
-                        self.stats['errors'] += 1
-            
+
+            for email in self.emails:
+                try:
+                    downloaded_files = batch_download_pdfs(self.service, [email])
+                    all_downloaded_files.extend(downloaded_files)
+                except Exception as e:
+                    self.log('error', f"✗ Failed to download attachments for email {email.get('id', 'unknown')}: {e}")
+                    self.stats['errors'] += 1
+
             # De-duplicate by physical file path (same attachment may appear in multiple emails)
             deduped = []
             seen_paths = set()
