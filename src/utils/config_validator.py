@@ -163,14 +163,8 @@ class ConfigValidator:
             else:
                 results.append((var, 'OK', f'Present: {self._mask_sensitive(var, value)}'))
         
-        # Check for any validation errors
-        errors = [r for r in results if r[1] == 'ERROR']
-        if errors:
-            error_msg = "Environment validation failed:\n"
-            for var, status, msg in errors:
-                error_msg += f"  - {var}: {msg}\n"
-            raise ConfigValidationError(error_msg)
-        
+        # Note: We don't raise exceptions here; we return results with ERROR status
+        # The caller (validate_all) will decide if overall validation fails.
         return results
     
     def validate_files(self) -> List[Tuple[str, str, str]]:

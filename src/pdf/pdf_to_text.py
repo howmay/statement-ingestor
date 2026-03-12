@@ -39,7 +39,21 @@ def extract_text_from_pdf(pdf_path: str, password: str = None) -> Optional[str]:
     else:
         logger.info(f"Extracting text from: {pdf_path} ({file_size} bytes)")
     
-    # Try pdfplumber first (better text extraction)
+    # Try pypdfium2 first (fastest)
+    try:
+        import pypdfium2 as pdfium
+        text = _extract_with_pdfium(pdf_path, password)
+        if text and text.strip():
+            logger.info(f"Successfully extracted {len(text)} characters using pypdfium2 (fast)")
+            return text
+        else:
+            logger.warning("pypdfium2 returned empty text, trying next extractor")
+    except ImportError:
+        logger.debug("pypdfium2 not available, trying next extractor")
+    except Exception as e:
+        logger.warning(f"pypdfium2 extraction failed: {e}, trying next extractor")
+    
+    # Try pdfplumber second (better accuracy for complex layouts)
     try:
         import pdfplumber
         text = _extract_with_pdfplumber(pdf_path, password)
@@ -63,8 +77,8 @@ def extract_text_from_pdf(pdf_path: str, password: str = None) -> Optional[str]:
         else:
             logger.warning("PyPDF2 also returned empty text")
     except ImportError:
-        logger.error("Neither pdfplumber nor PyPDF2 is available")
-        raise ImportError("PDF extraction requires either pdfplumber or PyPDF2. Install with: pip install pdfplumber PyPDF2")
+        logger.error("No PDF extraction library available (pypdfium2, pdfplumber, or PyPDF2)")
+        raise ImportError("PDF extraction requires one of: pypdfium2, pdfplumber, or PyPDF2. Install with: pip install pypdfium2")
     except Exception as e:
         logger.error(f"PyPDF2 extraction failed: {e}")
     
@@ -76,6 +90,50 @@ def extract_text_from_pdf(pdf_path: str, password: str = None) -> Optional[str]:
         logger.warning(f"No text could be extracted from: {pdf_path}")
         logger.warning("This may be an encrypted or scanned/image-based PDF")
     return None
+
+
+def _extract_with_pdfium(pdf_path: str, password: str = None) -> str:
+    """
+    Extract text using pypdfium2 library (fastest option).
+    
+    Args:
+        pdf_path: Path to the PDF file.
+        password: Optional password for encrypted PDFs.
+    
+    Returns:
+        Extracted text content.
+    """
+    import pypdfium2 as pdfium
+    
+    all_text = []
+    
+    try:
+        # Load the PDF
+        pdf = pdfium.PdfDocument(pdf_path, password=password)
+        logger.debug(f"PDF has {len(pdf)} page(s)")
+        
+        for i in range(len(pdf)):
+            try:
+                page = pdf[i]
+                text = page.get_text_page().get_text_range()
+                page.close()
+                if text and text.strip():
+                    all_text.append(f"--- Page {i+1} ---\n{text}")
+                    logger.debug(f"Page {i+1}: extracted {len(text)} characters")
+            except Exception as e:
+                logger.warning(f"Error extracting text from page {i+1}: {e}")
+                continue
+        
+        pdf.close()
+    except pdfium.PdfiumError as e:
+        if "password" in str(e).lower() or "encrypted" in str(e).lower():
+            raise ValueError("PDF is encrypted and incorrect or missing password")
+        else:
+            raise ValueError(f"Failed to read PDF with pypdfium2: {e}")
+    except Exception as e:
+        raise ValueError(f"Unexpected error with pypdfium2: {e}")
+    
+    return "\n\n".join(all_text)
 
 
 def _extract_with_pdfplumber(pdf_path: str, password: str = None) -> str:

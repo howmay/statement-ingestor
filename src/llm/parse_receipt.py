@@ -9,6 +9,20 @@ from datetime import datetime
 # Import enhanced utilities
 from src.utils.retry_enhanced import enhanced_retry_openai, JSONTruncationError
 from src.bank_parsers.factory import parse_with_bank_factory
+from src.llm.chunking import (
+    safe_env_int as _safe_env_int_impl,
+    get_chunking_config as _get_chunking_config_impl,
+    should_enable_chunking as _should_enable_chunking_impl,
+    calculate_max_tokens as _calculate_max_tokens_impl,
+    chunk_text_by_transactions as _chunk_text_by_transactions_impl,
+    merge_transaction_results as _merge_transaction_results_impl,
+)
+from src.llm.json_repair import (
+    extract_json_payload as _extract_json_payload_impl,
+    fix_truncated_json as _fix_truncated_json_impl,
+    finalize_fixed_json as _finalize_fixed_json_impl,
+    fix_truncated_json_enhanced as _fix_truncated_json_enhanced_impl,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -81,52 +95,18 @@ def _get_llm_runtime_config() -> Dict[str, Any]:
 
 
 def _extract_json_payload(response_text: str) -> str:
-    """Try to recover JSON from raw model text (including fenced markdown)."""
-    text = (response_text or "").strip()
-    if not text:
-        return text
-
-    # Remove markdown fence wrappers if present
-    fence_match = re.search(r"```(?:json)?\s*(.*?)\s*```", text, re.DOTALL | re.IGNORECASE)
-    if fence_match:
-        text = fence_match.group(1).strip()
-
-    if text.startswith('{') or text.startswith('['):
-        return text
-
-    # Fallback: locate first JSON object/array region
-    first_obj = text.find('{')
-    first_arr = text.find('[')
-    candidates = [idx for idx in (first_obj, first_arr) if idx != -1]
-    if not candidates:
-        return text
-
-    start = min(candidates)
-    return text[start:].strip()
+    """Backward-compatible wrapper for JSON payload extraction."""
+    return _extract_json_payload_impl(response_text)
 
 
 def _safe_env_int(name: str, default: int, minimum: int = 1, maximum: int = 100000) -> int:
-    raw = os.getenv(name, str(default)).strip()
-    try:
-        val = int(raw)
-    except Exception:
-        return default
-    return max(minimum, min(maximum, val))
+    """Backward-compatible wrapper for env int parsing."""
+    return _safe_env_int_impl(name, default, minimum, maximum)
 
 
 def _get_chunking_config() -> Dict[str, Any]:
-    """Read adaptive chunking controls from environment variables."""
-    enabled = os.getenv('ENABLE_ADAPTIVE_CHUNKING', 'true').strip().lower() in {'1', 'true', 'yes', 'on'}
-    max_chunk_size = _safe_env_int('MAX_CHUNK_SIZE', 3500, minimum=500, maximum=20000)
-    min_tx_per_chunk = _safe_env_int('MIN_TRANSACTIONS_PER_CHUNK', 5, minimum=1, maximum=100)
-    force_threshold = _safe_env_int('FORCE_CHUNKING_TEXT_LENGTH', 8000, minimum=1000, maximum=50000)
-
-    return {
-        'enabled': enabled,
-        'max_chunk_size': max_chunk_size,
-        'min_transactions_per_chunk': min_tx_per_chunk,
-        'force_threshold': force_threshold,
-    }
+    """Backward-compatible wrapper for chunking config."""
+    return _get_chunking_config_impl()
 
 
 def parse_receipt_text(text: str, source_info: Dict[str, Any] = None) -> List[Dict[str, Any]]:
@@ -181,207 +161,48 @@ def parse_receipt_text(text: str, source_info: Dict[str, Any] = None) -> List[Di
 
 
 def _fix_truncated_json(json_str: str) -> Optional[str]:
-    """
-    Attempt to fix truncated JSON strings using a stack-based approach.
-    """
-    return _fix_truncated_json_enhanced(json_str)
+    """Backward-compatible wrapper for truncated JSON repair."""
+    return _fix_truncated_json_impl(json_str)
 
 
 def _finalize_fixed_json(parsed: Any, fixed_str: str, context: Dict[str, Any] = None) -> str:
-    """Helper to apply context and return JSON string."""
-    if context and isinstance(parsed, dict):
-        if 'expected_keys' in context:
-            for key in context['expected_keys']:
-                if key not in parsed:
-                    parsed[key] = []
-        
-        if 'transactions' in parsed and isinstance(parsed['transactions'], list):
-            required_fields = ['date', 'amount', 'currency', 'expense_name', 'expense_type', 'source', 'confidence']
-            for tx in parsed['transactions']:
-                if isinstance(tx, dict):
-                    for field in required_fields:
-                        if field not in tx:
-                            tx[field] = None
-            return json.dumps(parsed, ensure_ascii=False)
-            
-    return fixed_str
+    """Backward-compatible wrapper for fixed JSON post-processing."""
+    return _finalize_fixed_json_impl(parsed, fixed_str, context)
 
 
 def _fix_truncated_json_enhanced(json_str: str, context: Dict[str, Any] = None) -> Optional[str]:
-    """
-    Enhanced function to fix truncated JSON strings.
-    """
-    if not json_str:
-        return None
-    
-    try:
-        json.loads(json_str)
-        return json_str
-    except json.JSONDecodeError:
-        pass
-    
-    json_str = json_str.strip()
-    if not json_str.startswith(('{', '[')):
-        return None
-    
-    def try_fix(s):
-        stack = []
-        in_string = False
-        escaped = False
-        for char in s:
-            if escaped:
-                escaped = False
-                continue
-            if char == '\\':
-                escaped = True
-                continue
-            if char == '"':
-                in_string = not in_string
-                continue
-            if in_string:
-                continue
-            if char == '{':
-                stack.append('}')
-            elif char == '[':
-                stack.append(']')
-            elif char == '}':
-                if stack and stack[-1] == '}': stack.pop()
-            elif char == ']':
-                if stack and stack[-1] == ']': stack.pop()
-        
-        fixed = s
-        if in_string:
-            fixed += '"'
-        
-        temp = fixed.strip()
-        if temp.endswith(':'):
-            fixed += ' null'
-        elif temp.endswith(','):
-            fixed = temp[:-1]
-            
-        while stack:
-            fixed += stack.pop()
-        
-        try:
-            return json.loads(fixed), fixed
-        except json.JSONDecodeError:
-            return None, None
-
-    parsed, fixed = try_fix(json_str)
-    if parsed:
-        return _finalize_fixed_json(parsed, fixed, context)
-        
-    for i in range(len(json_str) - 1, 0, -1):
-        if json_str[i] in ('}', ']', ',', '"', ':'):
-            parsed, fixed = try_fix(json_str[:i+1])
-            if parsed:
-                return _finalize_fixed_json(parsed, fixed, context)
-                
-    return None
+    """Backward-compatible wrapper for enhanced JSON repair."""
+    return _fix_truncated_json_enhanced_impl(json_str, context)
 
 
-def _chunk_text_by_transactions(text: str, max_chunk_size: int = 3500, 
-                               min_transactions_per_chunk: int = 5) -> List[Tuple[str, List[int]]]:
-    """
-    Split text into chunks based on transaction boundaries.
-    """
-    if len(text) <= max_chunk_size:
-        return [(text, [0])]
-    
-    lines = text.split('\n')
-    transaction_starts = []
-    
-    date_patterns = [
-        r'\d{4}[-/]\d{1,2}[-/]\d{1,2}',
-        r'\d{1,2}[-/]\d{1,2}[-/]\d{4}',
-        r'\d{3}[-/]\d{1,2}[-/]\d{1,2}',
-        r'\d{4}年\d{1,2}月\d{1,2}日',
-    ]
-    
-    for i, line in enumerate(lines):
-        for pattern in date_patterns:
-            if re.search(pattern, line):
-                transaction_starts.append(i)
-                break
-    
-    if len(transaction_starts) < 2:
-        return [(text[i:i + max_chunk_size], [i]) for i in range(0, len(text), max_chunk_size)]
-    
-    chunks = []
-    current_chunk_lines = []
-    current_chunk_indices = []
-    current_size = 0
-    
-    for i, line in enumerate(lines):
-        line_size = len(line) + 1
-        is_transaction_start = i in transaction_starts
-        
-        if (current_size + line_size > max_chunk_size and 
-            len(current_chunk_indices) >= min_transactions_per_chunk and
-            is_transaction_start):
-            
-            if current_chunk_lines:
-                chunks.append(('\n'.join(current_chunk_lines), current_chunk_indices.copy()))
-            
-            current_chunk_lines = [line]
-            current_chunk_indices = [i] if is_transaction_start else []
-            current_size = line_size
-        else:
-            current_chunk_lines.append(line)
-            if is_transaction_start:
-                current_chunk_indices.append(i)
-            current_size += line_size
-    
-    if current_chunk_lines:
-        chunks.append(('\n'.join(current_chunk_lines), current_chunk_indices))
-    
+def _chunk_text_by_transactions(
+    text: str,
+    max_chunk_size: int = 3500,
+    min_transactions_per_chunk: int = 5,
+) -> List[Tuple[str, List[int]]]:
+    """Backward-compatible wrapper for transaction chunking."""
+    chunks = _chunk_text_by_transactions_impl(
+        text,
+        max_chunk_size=max_chunk_size,
+        min_transactions_per_chunk=min_transactions_per_chunk,
+    )
     logger.info(f"Split text into {len(chunks)} chunks")
     return chunks
 
 
 def _should_enable_chunking(text: str, source_info: Dict[str, Any], force: bool = False) -> bool:
-    """Determine whether to enable chunking."""
-    cfg = _get_chunking_config()
-    if not cfg['enabled'] and not force:
-        return False
-
-    if force:
-        return True
-
-    if len(text) > cfg['force_threshold']:
-        return True
-
-    sender_tag = source_info.get('sender_tag', '').lower()
-    if 'hsbc' in sender_tag and len(text) > 5000:
-        return True
-
-    date_count = len(re.findall(r'\d{4}[-/]\d{1,2}[-/]\d{1,2}', text))
-    if date_count > 25:
-        return True
-
-    return False
+    """Backward-compatible wrapper for chunking decision."""
+    return _should_enable_chunking_impl(text, source_info, force=force)
 
 
 def _calculate_max_tokens(text_length: int) -> int:
-    """Calculate max_tokens."""
-    return min(4000, 1000 + (text_length // 2))
+    """Backward-compatible wrapper for max token calculation."""
+    return _calculate_max_tokens_impl(text_length)
 
 
 def _merge_transaction_results(all_transactions: List[List[Dict[str, Any]]]) -> List[Dict[str, Any]]:
-    """Merge and deduplicate results."""
-    if not all_transactions:
-        return []
-    flat_transactions = []
-    for chunk_transactions in all_transactions:
-        flat_transactions.extend(chunk_transactions)
-    seen = set()
-    unique_transactions = []
-    for tx in flat_transactions:
-        key = (tx.get('date'), f"{float(tx.get('amount', 0)):.2f}" if tx.get('amount') is not None else "0.00", tx.get('expense_name', '')[:50])
-        if key not in seen:
-            seen.add(key)
-            unique_transactions.append(tx)
-    return unique_transactions
+    """Backward-compatible wrapper for merging chunked transactions."""
+    return _merge_transaction_results_impl(all_transactions)
 
 
 def _parse_with_adaptive_strategy(
