@@ -197,6 +197,7 @@ def search_emails(
     return emails if max_results is None else emails[:max_results]
 
 
+@retry_gmail
 def list_attachments(service, message_id: str) -> List[Dict[str, Any]]:
     """
     List PDF attachments in a message.
@@ -220,7 +221,7 @@ def list_attachments(service, message_id: str) -> List[Dict[str, Any]]:
         ).execute()
     except Exception as e:
         logger.error(f"Error retrieving message {message_id}: {e}")
-        return []
+        raise
     
     attachments = []
     
