@@ -32,19 +32,37 @@ def _is_json_token_path(token_path: str) -> bool:
 def _atomic_write_text(filepath: str, content: str) -> None:
     """Atomically write UTF-8 text file to avoid partial token corruption."""
     os.makedirs(os.path.dirname(filepath) or '.', exist_ok=True)
-    with tempfile.NamedTemporaryFile('w', encoding='utf-8', delete=False, dir=os.path.dirname(filepath) or '.') as tf:
-        temp_path = tf.name
-        tf.write(content)
-    os.replace(temp_path, filepath)
+    temp_path = None
+    try:
+        with tempfile.NamedTemporaryFile('w', encoding='utf-8', delete=False, dir=os.path.dirname(filepath) or '.') as tf:
+            temp_path = tf.name
+            tf.write(content)
+        os.replace(temp_path, filepath)
+    except Exception:
+        if temp_path and os.path.exists(temp_path):
+            try:
+                os.remove(temp_path)
+            except Exception:
+                pass
+        raise
 
 
 def _atomic_write_bytes(filepath: str, content: bytes) -> None:
     """Atomically write binary file to avoid partial token corruption."""
     os.makedirs(os.path.dirname(filepath) or '.', exist_ok=True)
-    with tempfile.NamedTemporaryFile('wb', delete=False, dir=os.path.dirname(filepath) or '.') as tf:
-        temp_path = tf.name
-        tf.write(content)
-    os.replace(temp_path, filepath)
+    temp_path = None
+    try:
+        with tempfile.NamedTemporaryFile('wb', delete=False, dir=os.path.dirname(filepath) or '.') as tf:
+            temp_path = tf.name
+            tf.write(content)
+        os.replace(temp_path, filepath)
+    except Exception:
+        if temp_path and os.path.exists(temp_path):
+            try:
+                os.remove(temp_path)
+            except Exception:
+                pass
+        raise
 
 
 def _load_credentials_from_token_file(token_path: str):
@@ -54,11 +72,15 @@ def _load_credentials_from_token_file(token_path: str):
 
     logger.info(f"Loading credentials from {token_path}")
 
+    json_error = None
+    pickle_error = None
+
     # If path is .json, prefer modern google-auth JSON format
     if _is_json_token_path(token_path):
         try:
             return Credentials.from_authorized_user_file(token_path, SCOPES)
         except Exception as e:
+            json_error = e
             logger.warning(f"Failed to parse JSON token, trying pickle fallback: {e}")
 
     # Legacy pickle fallback
@@ -66,8 +88,23 @@ def _load_credentials_from_token_file(token_path: str):
         with open(token_path, 'rb') as token:
             return pickle.load(token)
     except Exception as e:
+        pickle_error = e
         logger.warning(f"Failed to load token: {e}")
-        return None
+
+    # Both loaders failed; quarantine broken token to avoid repeated warnings.
+    try:
+        corrupted_path = f"{token_path}.corrupted"
+        if os.path.exists(corrupted_path):
+            os.remove(corrupted_path)
+        os.replace(token_path, corrupted_path)
+        logger.warning(
+            f"Token file appears corrupted. Moved to {corrupted_path}. "
+            f"json_error={json_error}, pickle_error={pickle_error}"
+        )
+    except Exception:
+        pass
+
+    return None
 
 
 def _save_credentials_to_token_file(creds, token_path: str) -> None:
