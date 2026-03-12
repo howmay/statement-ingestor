@@ -47,11 +47,22 @@ def extract_text_from_pdf(pdf_path: str, password: str = None) -> Optional[str]:
             logger.info(f"Successfully extracted {len(text)} characters using pypdfium2 (fast)")
             return text
         else:
-            logger.warning("pypdfium2 returned empty text, trying next extractor")
+            logger.warning("pypdfium2 returned empty text, trying pdftotext")
     except ImportError:
-        logger.debug("pypdfium2 not available, trying next extractor")
+        logger.debug("pypdfium2 not available, trying pdftotext")
     except Exception as e:
-        logger.warning(f"pypdfium2 extraction failed: {e}, trying next extractor")
+        logger.warning(f"pypdfium2 extraction failed: {e}, trying pdftotext")
+
+    # Try pdftotext (from poppler-utils) - very fast C++ tool
+    try:
+        text = _extract_with_pdftotext(pdf_path, password)
+        if text and text.strip():
+            logger.info(f"Successfully extracted {len(text)} characters using pdftotext")
+            return text
+        else:
+            logger.warning("pdftotext returned empty text, trying pdfplumber")
+    except Exception as e:
+        logger.debug(f"pdftotext failed or not available: {e}, trying pdfplumber")
     
     # Try pdfplumber second (better accuracy for complex layouts)
     try:
@@ -113,16 +124,38 @@ def _extract_with_pdfium(pdf_path: str, password: str = None) -> str:
         logger.debug(f"PDF has {len(pdf)} page(s)")
         
         for i in range(len(pdf)):
+            page = None
+            text_page = None
             try:
                 page = pdf[i]
-                text = page.get_text_page().get_text_range()
-                page.close()
+
+                # pypdfium2 API compatibility:
+                # - newer: get_textpage()
+                # - older: get_text_page()
+                textpage_getter = getattr(page, 'get_textpage', None) or getattr(page, 'get_text_page', None)
+                if textpage_getter is None:
+                    raise AttributeError('PdfPage has no textpage getter')
+
+                text_page = textpage_getter()
+                text = text_page.get_text_range()
+
                 if text and text.strip():
                     all_text.append(f"--- Page {i+1} ---\n{text}")
                     logger.debug(f"Page {i+1}: extracted {len(text)} characters")
             except Exception as e:
                 logger.warning(f"Error extracting text from page {i+1}: {e}")
                 continue
+            finally:
+                if text_page is not None:
+                    try:
+                        text_page.close()
+                    except Exception:
+                        pass
+                if page is not None:
+                    try:
+                        page.close()
+                    except Exception:
+                        pass
         
         pdf.close()
     except pdfium.PdfiumError as e:
@@ -134,6 +167,38 @@ def _extract_with_pdfium(pdf_path: str, password: str = None) -> str:
         raise ValueError(f"Unexpected error with pypdfium2: {e}")
     
     return "\n\n".join(all_text)
+
+
+def _extract_with_pdftotext(pdf_path: str, password: str = None) -> str:
+    """
+    Extract text using pdftotext CLI tool (poppler-utils).
+    
+    Args:
+        pdf_path: Path to the PDF file.
+        password: Optional password for encrypted PDFs.
+    
+    Returns:
+        Extracted text content.
+    """
+    import subprocess
+    import shutil
+    
+    if not shutil.which('pdftotext'):
+        return ""
+        
+    cmd = ['pdftotext', '-layout']
+    if password:
+        cmd.extend(['-opw', password, '-upw', password])
+    cmd.extend([pdf_path, '-'])
+    
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        if result.returncode == 0:
+            return result.stdout
+    except Exception as e:
+        logger.debug(f"pdftotext execution failed: {e}")
+        
+    return ""
 
 
 def _extract_with_pdfplumber(pdf_path: str, password: str = None) -> str:
