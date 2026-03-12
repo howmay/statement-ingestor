@@ -136,10 +136,10 @@ class TestGmailAuth:
     @patch('src.auth.gmail_auth.pickle.load')
     @patch('src.auth.gmail_auth._test_token_usable')
     @patch('src.auth.gmail_auth.InstalledAppFlow')
-    @patch('src.auth.gmail_auth.pickle.dump')
+    @patch('src.auth.gmail_auth._save_credentials_to_token_file')
     @patch('src.auth.gmail_auth.build')
     def test_get_gmail_service_new_authentication(
-        self, mock_build, mock_pickle_dump, mock_flow_class, mock_test_token,
+        self, mock_build, mock_save_token, mock_flow_class, mock_test_token,
         mock_pickle_load, mock_exists
     ):
         """Test getting Gmail service with new authentication (no token file)."""
@@ -167,16 +167,14 @@ class TestGmailAuth:
         mock_service = Mock()
         mock_build.return_value = mock_service
 
-        # Mock file opening for token saving
-        with patch('builtins.open', mock_open()) as mock_file:
-            # Call the function
-            result = get_gmail_service()
+        # Call the function
+        result = get_gmail_service()
 
-            assert result == mock_service
-            mock_flow_class.from_client_secrets_file.assert_called_once()
-            mock_flow.run_local_server.assert_called_once()
-            mock_pickle_dump.assert_called_once_with(mock_creds, mock_file())
-            # Note: _test_token_usable is NOT called for fresh OAuth credentials
+        assert result == mock_service
+        mock_flow_class.from_client_secrets_file.assert_called_once()
+        mock_flow.run_local_server.assert_called_once()
+        mock_save_token.assert_called_once_with(mock_creds, DEFAULT_TOKEN_FILE)
+        # Note: _test_token_usable is NOT called for fresh OAuth credentials
 
     @patch('src.auth.gmail_auth.os.path.exists')
     @patch('src.auth.gmail_auth.pickle.load')
