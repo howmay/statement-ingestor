@@ -108,18 +108,33 @@ class GmailExpenseParserApp:
                 # Use the enhanced validator
                 from src.utils.config_validator import ConfigValidator
                 validator = ConfigValidator()
-                is_valid, errors = validator.validate_all()
-                
+                validation_result = validator.validate_all()
+
+                # Backward compatibility:
+                # - current validator returns bool
+                # - older variant may return (is_valid, errors)
+                if isinstance(validation_result, tuple):
+                    is_valid = bool(validation_result[0])
+                    errors = validation_result[1] if len(validation_result) > 1 else []
+                else:
+                    is_valid = bool(validation_result)
+                    errors = []
+
                 if not is_valid:
-                    self.log('error', f"Configuration validation failed with {len(errors)} error(s):")
-                    for err in errors:
-                        self.log('error', f"  - {err}")
+                    if errors:
+                        self.log('error', f"Configuration validation failed with {len(errors)} error(s):")
+                        for err in errors:
+                            self.log('error', f"  - {err}")
+                    else:
+                        self.log('error', "Configuration validation failed.")
+                    self.stats['errors'] += 1
                     return False
-                
+
                 self.log('info', "✓ Configuration is valid.")
                 return True
             except Exception as e:
                 self.log('error', f"Error during configuration validation: {e}")
+                self.stats['errors'] += 1
                 return False
         else:
             # Basic validation

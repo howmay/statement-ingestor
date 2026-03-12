@@ -15,8 +15,7 @@ from src.app import GmailExpenseParserApp
 def app():
     """Create an app instance with enhancements enabled."""
     with patch('src.app.setup_logging'), \
-         patch('src.app.get_logger') as mock_logger, \
-         patch.object(GmailExpenseParserApp, 'validate_configuration', return_value=True):
+         patch('src.app.get_logger'):
         app = GmailExpenseParserApp(use_enhancements=True)
         # Replace the logger with a mock
         app.logger = Mock()
@@ -246,7 +245,8 @@ class TestGmailExpenseParserAppRun:
     
     def test_run_success(self, app):
         """Test successful full pipeline run."""
-        with patch.object(app, 'authenticate', return_value=True), \
+        with patch.object(app, 'validate_configuration', return_value=True), \
+             patch.object(app, 'authenticate', return_value=True), \
              patch.object(app, 'fetch_emails', return_value=True), \
              patch.object(app, 'download_attachments', return_value=True), \
              patch.object(app, 'extract_texts', return_value=True), \
@@ -273,13 +273,32 @@ class TestGmailExpenseParserAppRun:
 
 class TestGmailExpenseParserAppValidateConfiguration:
     """Test configuration validation."""
-    
-    def test_validate_configuration_success(self, app):
-        """Test configuration validation success."""
+
+    def test_validate_configuration_success_bool_return(self, app):
+        """Current validator returns bool; app should handle it."""
         app.use_enhancements = True
-        result = app.validate_configuration()
+        with patch('src.utils.config_validator.ConfigValidator.validate_all', return_value=True):
+            result = app.validate_configuration()
         assert result is True
-    
+
+    def test_validate_configuration_failure_bool_return(self, app):
+        """False bool return should fail gracefully (no tuple unpack crash)."""
+        app.use_enhancements = True
+        with patch('src.utils.config_validator.ConfigValidator.validate_all', return_value=False):
+            result = app.validate_configuration()
+        assert result is False
+        assert app.stats['errors'] >= 1
+
+    def test_validate_configuration_legacy_tuple_return(self, app):
+        """Legacy tuple return should still be supported."""
+        app.use_enhancements = True
+        with patch(
+            'src.utils.config_validator.ConfigValidator.validate_all',
+            return_value=(False, ['missing TARGET_SENDERS'])
+        ):
+            result = app.validate_configuration()
+        assert result is False
+
     def test_validate_configuration_skipped(self, app):
         """Test configuration validation skipped when enhancements disabled."""
         app.use_enhancements = False
