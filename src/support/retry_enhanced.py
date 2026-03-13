@@ -33,7 +33,14 @@ class EnhancedRetryConfig:
         # JSON-specific settings
         enable_json_truncation_retry: bool = True,
         json_truncation_retry_strategy: str = 'chunk_and_retry',  # 'chunk_and_retry', 'reduce_text', 'fallback'
-        max_json_repair_attempts: int = 2
+        max_json_repair_attempts: int = 2,
+        max_attempts: Optional[int] = None,
+        retry_exceptions: Optional[Tuple[Type[Exception], ...]] = None,
+        retry_status_codes: Optional[List[int]] = None,
+        backoff_factor: Optional[float] = None,
+        json_truncation_delay_multiplier: float = 0.5,
+        max_json_retries: Optional[int] = None,
+        chunk_size_reduction_factor: float = 0.7,
     ):
         """
         Initialize enhanced retry configuration.
@@ -51,6 +58,17 @@ class EnhancedRetryConfig:
             json_truncation_retry_strategy: Strategy for handling JSON truncation
             max_json_repair_attempts: Maximum attempts to repair JSON before giving up
         """
+        if max_attempts is not None:
+            max_retries = max_attempts
+        if retry_exceptions is not None:
+            retry_on_exceptions = retry_exceptions
+        if retry_status_codes is not None:
+            retry_on_status_codes = retry_status_codes
+        if backoff_factor is not None:
+            exponential_base = backoff_factor
+        if max_json_retries is not None:
+            max_json_repair_attempts = max_json_retries
+
         self.max_retries = max_retries
         self.base_delay = base_delay
         self.max_delay = max_delay
@@ -62,6 +80,13 @@ class EnhancedRetryConfig:
         self.enable_json_truncation_retry = enable_json_truncation_retry
         self.json_truncation_retry_strategy = json_truncation_retry_strategy
         self.max_json_repair_attempts = max_json_repair_attempts
+        self.max_attempts = self.max_retries
+        self.retry_exceptions = self.retry_on_exceptions
+        self.retry_status_codes = set(self.retry_on_status_codes or [429, 500, 502, 503, 504])
+        self.backoff_factor = self.exponential_base
+        self.json_truncation_delay_multiplier = json_truncation_delay_multiplier
+        self.max_json_retries = self.max_json_repair_attempts
+        self.chunk_size_reduction_factor = chunk_size_reduction_factor
     
     def should_retry(self, exception: Exception, response: Any = None, context: Dict[str, Any] = None) -> bool:
         """
@@ -75,6 +100,18 @@ class EnhancedRetryConfig:
         Returns:
             True if retry should be attempted
         """
+        if isinstance(response, dict) and context is None:
+            context = response
+            response = None
+
+        if not isinstance(exception, Exception):
+            response = exception
+            exception = Exception(str(exception))
+
+        status_code = getattr(exception, 'status_code', None)
+        if isinstance(status_code, int):
+            return status_code in self.retry_status_codes
+
         # Check if exception type should be retried
         if not isinstance(exception, self.retry_on_exceptions):
             return False
@@ -87,7 +124,7 @@ class EnhancedRetryConfig:
         
         # Check status codes if response is available
         if response and hasattr(response, 'status_code'):
-            if response.status_code in self.retry_on_status_codes:
+            if response.status_code in self.retry_status_codes:
                 return True
         
         # Check custom conditions
@@ -153,20 +190,22 @@ class EnhancedRetryConfig:
             Delay in seconds
         """
         # For JSON truncation, use shorter delays since we're changing strategy
-        if is_json_truncation:
-            base_multiplier = 1.5
-        else:
-            base_multiplier = self.exponential_base
+        base_multiplier = self.exponential_base
         
         # Exponential backoff
         delay = self.base_delay * (base_multiplier ** attempt)
+        if is_json_truncation:
+            delay *= self.json_truncation_delay_multiplier
         
         # Apply maximum delay
         delay = min(delay, self.max_delay)
         
         # Add jitter if enabled
-        if self.jitter:
-            delay = delay * (0.5 + random.random())
+        if isinstance(self.jitter, bool):
+            if self.jitter:
+                delay = delay * (0.5 + random.random())
+        elif self.jitter:
+            delay = delay * random.uniform(1.0 - self.jitter, 1.0 + self.jitter)
         
         return delay
 
@@ -207,7 +246,12 @@ class EnhancedAPIRetry:
         )
     }
     
-    def __init__(self, config: Optional[EnhancedRetryConfig] = None, api_type: str = 'generic'):
+    def __init__(
+        self,
+        config: Optional[EnhancedRetryConfig] = None,
+        api_type: str = 'generic',
+        **compat_kwargs,
+    ):
         """
         Initialize enhanced API retry handler.
         
@@ -215,7 +259,12 @@ class EnhancedAPIRetry:
             config: Custom retry configuration
             api_type: API type for default configuration
         """
-        self.config = config or self.DEFAULT_CONFIGS.get(api_type, self.DEFAULT_CONFIGS['generic'])
+        if config is not None:
+            self.config = config
+        elif compat_kwargs:
+            self.config = EnhancedRetryConfig(**compat_kwargs)
+        else:
+            self.config = self.DEFAULT_CONFIGS.get(api_type, self.DEFAULT_CONFIGS['generic'])
         self.json_repair_attempts = 0
     
     def execute(
@@ -238,6 +287,7 @@ class EnhancedAPIRetry:
         Raises:
             Last exception if all retries fail
         """
+        local_logger = logging.getLogger(__name__)
         last_exception = None
         response = None
         context = dict(kwargs.get('context', {}) or {})
@@ -271,7 +321,7 @@ class EnhancedAPIRetry:
                     http_exception = Exception(error_msg)
 
                     if self.config.should_retry(http_exception, result, context):
-                        logger.warning(
+                        local_logger.warning(
                             f"HTTP error {result.status_code} on attempt {attempt + 1}/{self.config.max_retries}. "
                             f"Will retry."
                         )
@@ -285,67 +335,104 @@ class EnhancedAPIRetry:
                     and hasattr(result, 'text')
                     and self._is_truncated_json(result.text)
                 ):
-                    logger.warning("Response appears to contain truncated JSON")
+                    local_logger.warning("Response appears to contain truncated JSON")
                     raise JSONTruncationError("JSON response appears truncated")
 
                 if attempt > 0:
-                    logger.info(f"Operation succeeded on attempt {attempt + 1}")
+                    local_logger.info(f"Operation succeeded on attempt {attempt + 1}")
                 return result
 
             except JSONTruncationError as e:
-                last_exception = e
-                self.json_repair_attempts += 1
-
-                # Apply JSON truncation strategy
-                if self.json_repair_attempts <= self.config.max_json_repair_attempts:
-                    strategy = self.config.json_truncation_retry_strategy
-                    logger.info(f"JSON truncation detected, applying strategy: {strategy}")
-
-                    if strategy == 'reduce_text' and 'text' in base_kwargs:
-                        original_text = base_kwargs['text']
-                        if isinstance(original_text, str) and len(original_text) > 2000:
-                            base_kwargs['text'] = original_text[:2000] + "\n[Text truncated for retry]"
-                            logger.info(
-                                f"Reduced text from {len(original_text)} to {len(base_kwargs['text'])} characters"
-                            )
-
-                    elif strategy == 'chunk_and_retry':
-                        context['force_chunking'] = True
-                        logger.info("Signaled function to force chunking on next attempt")
-
-                if not self.config.should_retry(e, response, context):
-                    logger.error(f"Non-retryable JSON truncation: {e}")
-                    raise
-
-                logger.warning(
-                    f"JSON truncation on attempt {attempt + 1}/{self.config.max_retries}. "
-                    f"Will retry (repair attempt {self.json_repair_attempts}/{self.config.max_json_repair_attempts})."
-                )
-
-                if attempt < self.config.max_retries - 1:
-                    delay = self.config.calculate_delay(attempt, is_json_truncation=True)
-                    logger.info(f"Waiting {delay:.2f} seconds before JSON truncation retry...")
-                    time.sleep(delay)
+                self._handle_json_retry(e, response, context, base_kwargs, attempt, local_logger)
 
             except Exception as e:
                 last_exception = e
 
+                if self.config.enable_json_truncation_retry and is_truncated_json(e, context):
+                    self._handle_json_retry(e, response, context, base_kwargs, attempt, local_logger)
+                    continue
+
                 if not self.config.should_retry(e, response, context):
-                    logger.error(f"Non-retryable exception: {e}")
+                    local_logger.error(f"Non-retryable exception: {e}")
                     raise
 
-                logger.warning(
+                local_logger.warning(
                     f"Attempt {attempt + 1}/{self.config.max_retries} failed: {e}. "
                     f"Will retry."
                 )
 
                 if attempt < self.config.max_retries - 1:
                     delay = self.config.calculate_delay(attempt)
-                    logger.info(f"Waiting {delay:.2f} seconds before retry...")
+                    local_logger.info(f"Waiting {delay:.2f} seconds before retry...")
                     time.sleep(delay)
 
-        logger.error(f"All {self.config.max_retries} attempts failed. Last error: {last_exception}")
+        local_logger.error(f"All {self.config.max_retries} attempts failed. Last error: {last_exception}")
         raise last_exception
+
+    def _handle_json_retry(
+        self,
+        error: Exception,
+        response: Any,
+        context: Dict[str, Any],
+        base_kwargs: Dict[str, Any],
+        attempt: int,
+        local_logger: logging.Logger,
+    ) -> None:
+        self.json_repair_attempts += 1
+        context['json_truncated'] = True
+        context['json_retry_count'] = self.json_repair_attempts
+
+        if self.json_repair_attempts <= self.config.max_json_repair_attempts:
+            strategy = self.config.json_truncation_retry_strategy
+            if 'chunks' in base_kwargs:
+                strategy = 'chunk_and_retry'
+            elif 'text' in base_kwargs:
+                strategy = 'reduce_text'
+
+            local_logger.info(f"JSON truncation detected, applying strategy: {strategy}")
+
+            if strategy == 'reduce_text' and 'text' in base_kwargs:
+                context['original_text'] = base_kwargs['text']
+                base_kwargs['text'] = self._reduce_text_for_retry(context)
+                local_logger.info(
+                    f"Reduced text from {len(context['original_text'])} to {len(base_kwargs['text'])} characters"
+                )
+
+            elif strategy == 'chunk_and_retry':
+                context['force_chunking'] = True
+                context['chunking_strategy'] = 'reduce_size'
+                if 'chunks' in base_kwargs:
+                    context['original_chunks'] = base_kwargs['chunks']
+                    base_kwargs['chunks'] = self._reduce_chunk_size_for_retry(context)
+                local_logger.info("Signaled function to force chunking on next attempt")
+
+        if not self.config.should_retry(error, response, context):
+            local_logger.error(f"Non-retryable JSON truncation: {error}")
+            raise error
+
+        local_logger.warning(
+            f"JSON truncation on attempt {attempt + 1}/{self.config.max_retries}. "
+            f"Will retry (repair attempt {self.json_repair_attempts}/{self.config.max_json_repair_attempts})."
+        )
+
+        if attempt < self.config.max_retries - 1:
+            delay = self.config.calculate_delay(attempt, is_json_truncation=True)
+            local_logger.info(f"Waiting {delay:.2f} seconds before JSON truncation retry...")
+            time.sleep(delay)
+
+    def _reduce_chunk_size_for_retry(self, context: Dict[str, Any]) -> List[Any]:
+        original_chunks = list(context.get("original_chunks") or [])
+        if not original_chunks:
+            return []
+        target_size = max(1, int(len(original_chunks) * self.config.chunk_size_reduction_factor))
+        return original_chunks[:target_size]
+
+    def _reduce_text_for_retry(self, context: Dict[str, Any]) -> str:
+        original_text = str(context.get("original_text") or "")
+        if not original_text:
+            return ""
+        target_size = max(1, int(len(original_text) * self.config.chunk_size_reduction_factor))
+        return original_text[:target_size]
     
     def _is_truncated_json(self, text: str) -> bool:
         """
@@ -434,6 +521,43 @@ def enhanced_retry_openai(func: Callable):
 def enhanced_retry_generic(func: Callable):
     """Decorator for generic API calls with enhanced retry."""
     return enhanced_retry_decorator(api_type='generic')(func)
+
+
+def is_truncated_json(error: Exception, context: Optional[Dict[str, Any]] = None) -> bool:
+    """Backward-compatible helper used by comprehensive tests."""
+    response = getattr(error, 'response', None)
+    if context and context.get("json_truncated") is True:
+        return True
+
+    if any(marker in str(error).lower() for marker in [
+        'unexpected end of data',
+        'truncated',
+        'incomplete',
+        'unexpected eof',
+        'premature end',
+        'json parsing error',
+    ]):
+        return True
+
+    text = getattr(response, 'text', None)
+    if not text:
+        return False
+
+    text = str(text).strip()
+    if not text:
+        return False
+    if text.startswith('{') and not text.endswith('}'):
+        return True
+    if text.startswith('[') and not text.endswith(']'):
+        return True
+    if text.count('{') > text.count('}') or text.count('[') > text.count(']'):
+        return True
+    return False
+
+
+def retry_with_json_truncation(config: Optional[EnhancedRetryConfig] = None, **compat_kwargs):
+    """Backward-compatible decorator factory for JSON truncation aware retries."""
+    return enhanced_retry_decorator(config=config or EnhancedRetryConfig(**compat_kwargs))
 
 
 # Example usage
