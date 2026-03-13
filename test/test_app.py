@@ -240,6 +240,25 @@ class TestGmailExpenseParserAppExportResults:
             assert result is True
 
 
+def test_new_src_packages_exist():
+    import importlib
+
+    for name in [
+        "src.core",
+        "src.support",
+        "src.integrations",
+        "src.integrations.gmail",
+        "src.parsing",
+        "src.parsing.banks",
+        "src.parsing.llm",
+        "src.parsing.ocr",
+        "src.parsing.pdf",
+        "src.export",
+        "src.runtime",
+    ]:
+        assert importlib.import_module(name) is not None
+
+
 class TestGmailExpenseParserAppRun:
     """Test full pipeline run."""
     
