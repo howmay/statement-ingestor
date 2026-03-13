@@ -10,7 +10,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent / 'src'))
 
-from src.utils.retry_enhanced import (
+from src.support.retry_enhanced import (
     EnhancedRetryConfig,
     EnhancedAPIRetry,
     retry_with_json_truncation,
@@ -53,7 +53,7 @@ class TestEnhancedRetryConfigComprehensive:
     
     def test_calculate_delay_json_truncation(self):
         """Test delay calculation for JSON truncation retries."""
-        config = EnhancedRetryConfig(base_delay=1.0, json_truncation_delay_multiplier=0.5)
+        config = EnhancedRetryConfig(base_delay=1.0, json_truncation_delay_multiplier=0.5, jitter=False)
         
         # JSON truncation retry should use reduced delay
         delay = config.calculate_delay(0, is_json_truncation=True)
@@ -68,8 +68,7 @@ class TestEnhancedRetryConfigComprehensive:
     
     def test_calculate_delay_normal_vs_json(self):
         """Test delay calculation difference between normal and JSON truncation retries."""
-        config = EnhancedRetryConfig(base_delay=2.0, json_truncation_delay_multiplier=0.5)
-        config.jitter = 0.0  # Disable jitter for predictable test
+        config = EnhancedRetryConfig(base_delay=2.0, json_truncation_delay_multiplier=0.5, jitter=False)
         
         # Normal retry
         normal_delay = config.calculate_delay(0, is_json_truncation=False)

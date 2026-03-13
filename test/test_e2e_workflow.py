@@ -10,7 +10,7 @@ import os
 
 sys.path.insert(0, str(Path(__file__).parent.parent / 'src'))
 
-from src.app import GmailExpenseParserApp
+from src.runtime.app import GmailExpenseParserApp
 
 
 class TestEndToEndWorkflow:
@@ -19,8 +19,8 @@ class TestEndToEndWorkflow:
     @pytest.fixture
     def app(self):
         """Create an app instance."""
-        with patch('src.app.setup_logging'), \
-             patch('src.app.get_logger'):
+        with patch('src.runtime.app.setup_logging'), \
+             patch('src.runtime.app.get_logger'):
             app = GmailExpenseParserApp(use_enhancements=True)
             app.logger = Mock()
             yield app
@@ -28,14 +28,14 @@ class TestEndToEndWorkflow:
     def test_full_workflow_success(self, app):
         """Test complete successful workflow."""
         # Mock all dependencies
-        with patch('src.app.validate_config_util', return_value=(True, "")), \
-             patch('src.app.get_gmail_service') as mock_service, \
-             patch('src.app.search_emails') as mock_search, \
-             patch('src.app.batch_download_pdfs') as mock_download, \
-             patch('src.app.extract_text_from_pdf') as mock_extract, \
-             patch('src.app.parse_multiple_receipts') as mock_parse, \
-             patch('src.app.export_receipts_to_csv') as mock_export_receipts, \
-             patch('src.app.export_extracted_texts_to_csv') as mock_export_texts:
+        with patch.object(app, 'validate_configuration', return_value=True), \
+             patch('src.runtime.app.get_gmail_service') as mock_service, \
+             patch('src.runtime.app.search_emails') as mock_search, \
+             patch('src.runtime.app.batch_download_pdfs') as mock_download, \
+             patch('src.runtime.app.extract_text_from_pdf') as mock_extract, \
+             patch('src.runtime.app.parse_multiple_receipts') as mock_parse, \
+             patch('src.runtime.app.export_receipts_to_csv') as mock_export_receipts, \
+             patch('src.runtime.app.export_extracted_texts_to_csv') as mock_export_texts:
             
             mock_service.return_value = Mock()
             mock_search.return_value = [
@@ -56,9 +56,9 @@ class TestEndToEndWorkflow:
     
     def test_workflow_with_no_emails(self, app):
         """Test workflow when no emails found."""
-        with patch('src.app.validate_config_util', return_value=(True, "")), \
-             patch('src.app.get_gmail_service') as mock_service, \
-             patch('src.app.search_emails') as mock_search:
+        with patch.object(app, 'validate_configuration', return_value=True), \
+             patch('src.runtime.app.get_gmail_service') as mock_service, \
+             patch('src.runtime.app.search_emails') as mock_search:
             
             mock_service.return_value = Mock()
             mock_search.return_value = []
@@ -71,28 +71,28 @@ class TestEndToEndWorkflow:
     
     def test_workflow_with_config_validation_failure(self, app):
         """Test workflow when config validation fails."""
-        with patch('src.app.validate_config_util', return_value=(False, "Missing config")):
+        with patch.object(app, 'validate_configuration', return_value=False):
             result = app.run()
             
             assert isinstance(result, dict)
     
     def test_workflow_with_auth_failure(self, app):
         """Test workflow when authentication fails."""
-        with patch('src.app.validate_config_util', return_value=(True, "")), \
-             patch('src.app.get_gmail_service', side_effect=Exception("Auth failed")):
+        with patch.object(app, 'validate_configuration', return_value=True), \
+             patch('src.runtime.app.get_gmail_service', side_effect=Exception("Auth failed")):
             result = app.run()
             
             assert isinstance(result, dict)
     
     def test_workflow_partial_failure_in_extraction(self, app):
         """Test workflow with some extraction failures."""
-        with patch('src.app.validate_config_util', return_value=(True, "")), \
-             patch('src.app.get_gmail_service') as mock_service, \
-             patch('src.app.search_emails') as mock_search, \
-             patch('src.app.batch_download_pdfs') as mock_download, \
-             patch('src.app.extract_text_from_pdf') as mock_extract, \
-             patch('src.app.parse_multiple_receipts') as mock_parse, \
-             patch('src.app.export_receipts_to_csv') as mock_export:
+        with patch.object(app, 'validate_configuration', return_value=True), \
+             patch('src.runtime.app.get_gmail_service') as mock_service, \
+             patch('src.runtime.app.search_emails') as mock_search, \
+             patch('src.runtime.app.batch_download_pdfs') as mock_download, \
+             patch('src.runtime.app.extract_text_from_pdf') as mock_extract, \
+             patch('src.runtime.app.parse_multiple_receipts') as mock_parse, \
+             patch('src.runtime.app.export_receipts_to_csv') as mock_export:
             
             mock_service.return_value = Mock()
             mock_search.return_value = [{'id': 'msg1', 'subject': 'Test', 'from': 'test@example.com'}]
@@ -118,13 +118,13 @@ class TestEndToEndWorkflow:
     
     def test_workflow_with_parse_failure(self, app):
         """Test workflow when parsing fails."""
-        with patch('src.app.validate_config_util', return_value=(True, "")), \
-             patch('src.app.get_gmail_service') as mock_service, \
-             patch('src.app.search_emails') as mock_search, \
-             patch('src.app.batch_download_pdfs') as mock_download, \
-             patch('src.app.extract_text_from_pdf') as mock_extract, \
-             patch('src.app.parse_multiple_receipts') as mock_parse, \
-             patch('src.app.export_receipts_to_csv') as mock_export:
+        with patch.object(app, 'validate_configuration', return_value=True), \
+             patch('src.runtime.app.get_gmail_service') as mock_service, \
+             patch('src.runtime.app.search_emails') as mock_search, \
+             patch('src.runtime.app.batch_download_pdfs') as mock_download, \
+             patch('src.runtime.app.extract_text_from_pdf') as mock_extract, \
+             patch('src.runtime.app.parse_multiple_receipts') as mock_parse, \
+             patch('src.runtime.app.export_receipts_to_csv') as mock_export:
             
             mock_service.return_value = Mock()
             mock_search.return_value = [{'id': 'msg1', 'subject': 'Test'}]
@@ -139,13 +139,13 @@ class TestEndToEndWorkflow:
     
     def test_multiple_emails_workflow(self, app):
         """Test workflow with multiple emails."""
-        with patch('src.app.validate_config_util', return_value=(True, "")), \
-             patch('src.app.get_gmail_service') as mock_service, \
-             patch('src.app.search_emails') as mock_search, \
-             patch('src.app.batch_download_pdfs') as mock_download, \
-             patch('src.app.extract_text_from_pdf') as mock_extract, \
-             patch('src.app.parse_multiple_receipts') as mock_parse, \
-             patch('src.app.export_receipts_to_csv') as mock_export:
+        with patch.object(app, 'validate_configuration', return_value=True), \
+             patch('src.runtime.app.get_gmail_service') as mock_service, \
+             patch('src.runtime.app.search_emails') as mock_search, \
+             patch('src.runtime.app.batch_download_pdfs') as mock_download, \
+             patch('src.runtime.app.extract_text_from_pdf') as mock_extract, \
+             patch('src.runtime.app.parse_multiple_receipts') as mock_parse, \
+             patch('src.runtime.app.export_receipts_to_csv') as mock_export:
             
             mock_service.return_value = Mock()
             mock_search.return_value = [

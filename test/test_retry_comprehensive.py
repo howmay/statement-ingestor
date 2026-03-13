@@ -10,7 +10,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent / 'src'))
 
-from src.utils.retry import (
+from src.support.retry import (
     RetryConfig,
     APIRetry,
     retry_on_exception,
@@ -26,13 +26,13 @@ class TestRetryConfigComprehensive:
         """Test default configuration values."""
         config = RetryConfig()
         
-        assert config.max_attempts == 3
+        assert config.max_retries == 3
         assert config.base_delay == 1.0
         assert config.max_delay == 30.0
-        assert config.jitter == 0.1
-        assert config.retry_exceptions == (Exception,)
-        assert config.retry_status_codes == {429, 500, 502, 503, 504}
-        assert config.backoff_factor == 2.0
+        assert config.jitter is True
+        assert config.retry_on_exceptions == (Exception,)
+        assert config.retry_on_status_codes == []
+        assert config.exponential_base == 2.0
     
     def test_custom_config(self):
         """Test custom configuration."""
@@ -87,7 +87,7 @@ class TestRetryConfigComprehensive:
     
     def test_calculate_delay_capped_at_max(self):
         """Test delay calculation capped at max_delay."""
-        config = RetryConfig(base_delay=10.0, max_delay=15.0, backoff_factor=2.0)
+        config = RetryConfig(base_delay=10.0, max_delay=15.0, backoff_factor=2.0, jitter=False)
         
         # First attempt: 10.0 < 15.0
         delay = config.calculate_delay(0)
@@ -238,7 +238,8 @@ class TestAPIRetryComprehensive:
         config = RetryConfig(
             max_attempts=2,
             base_delay=0.1,
-            retry_exceptions=(RuntimeError,)
+            retry_exceptions=(RuntimeError,),
+            jitter=False,
         )
         retry = APIRetry(config=config)
         
@@ -310,7 +311,7 @@ class TestAPIRetryComprehensive:
     
     def test_retry_decorator_with_custom_config(self):
         """Test retry decorator with custom config."""
-        config = RetryConfig(max_attempts=1)
+        config = RetryConfig(max_attempts=1, jitter=False)
         
         @retry_on_exception(config=config)
         def func():

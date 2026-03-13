@@ -1,7 +1,7 @@
 from pathlib import Path
 from unittest.mock import patch
 
-import src.utils.cache as cache_mod
+import src.support.cache as cache_mod
 
 
 def test_result_cache_set_get_and_key(tmp_path):

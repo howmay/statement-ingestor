@@ -1,8 +1,8 @@
 import logging
 from datetime import datetime, timedelta
 from typing import List, Dict, Any, Optional
-from src.config import TARGET_SENDERS, TARGET_KEYWORDS
-from src.utils.retry import retry_gmail
+from src.core.config import TARGET_SENDERS, TARGET_KEYWORDS
+from src.support.retry import retry_gmail
 
 logger = logging.getLogger(__name__)
 
@@ -264,7 +264,7 @@ def list_attachments(service, message_id: str) -> List[Dict[str, Any]]:
 if __name__ == '__main__':
     # Simple test when run directly
     import sys
-    from src.auth.gmail_auth import get_gmail_service
+    from src.integrations.gmail.auth import get_gmail_service
     
     logging.basicConfig(level=logging.INFO)
     

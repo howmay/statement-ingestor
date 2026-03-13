@@ -23,7 +23,11 @@ class RetryConfig:
         jitter: bool = True,
         retry_on_exceptions: Tuple[Type[Exception], ...] = (Exception,),
         retry_on_status_codes: List[int] = None,
-        retry_on_conditions: List[Callable[[Any], bool]] = None
+        retry_on_conditions: List[Callable[[Any], bool]] = None,
+        max_attempts: Optional[int] = None,
+        retry_exceptions: Optional[Tuple[Type[Exception], ...]] = None,
+        retry_status_codes: Optional[List[int]] = None,
+        backoff_factor: Optional[float] = None,
     ):
         """
         Initialize retry configuration.
@@ -38,6 +42,15 @@ class RetryConfig:
             retry_on_status_codes: List of HTTP status codes to retry on
             retry_on_conditions: List of callable conditions for retry
         """
+        if max_attempts is not None:
+            max_retries = max_attempts
+        if retry_exceptions is not None:
+            retry_on_exceptions = retry_exceptions
+        if retry_status_codes is not None:
+            retry_on_status_codes = retry_status_codes
+        if backoff_factor is not None:
+            exponential_base = backoff_factor
+
         self.max_retries = max_retries
         self.base_delay = base_delay
         self.max_delay = max_delay
@@ -46,6 +59,11 @@ class RetryConfig:
         self.retry_on_exceptions = retry_on_exceptions
         self.retry_on_status_codes = retry_on_status_codes or []
         self.retry_on_conditions = retry_on_conditions or []
+        # Backward-compatible aliases used by older comprehensive tests.
+        self.max_attempts = self.max_retries
+        self.retry_exceptions = self.retry_on_exceptions
+        self.retry_status_codes = set(self.retry_on_status_codes or [429, 500, 502, 503, 504])
+        self.backoff_factor = self.exponential_base
     
     def should_retry(self, exception: Exception, response: Any = None) -> bool:
         """
@@ -58,6 +76,16 @@ class RetryConfig:
         Returns:
             True if retry should be attempted
         """
+        # Older call sites may pass a response-like object as the first argument.
+        if not isinstance(exception, Exception):
+            response = exception
+            status_code = getattr(response, 'status_code', None)
+            return isinstance(status_code, int) and status_code in self.retry_status_codes
+
+        status_code = getattr(exception, 'status_code', None)
+        if isinstance(status_code, int):
+            return status_code in self.retry_status_codes
+
         # Check if exception type should be retried
         if not isinstance(exception, self.retry_on_exceptions):
             return False
@@ -65,7 +93,7 @@ class RetryConfig:
         # Check status codes if response is available
         status_code = getattr(response, 'status_code', None)
         if isinstance(status_code, int) and status_code >= 400:
-            if self.retry_on_status_codes and status_code not in self.retry_on_status_codes:
+            if self.retry_status_codes and status_code not in self.retry_status_codes:
                 return False
         
         # Check custom conditions
@@ -95,8 +123,11 @@ class RetryConfig:
         delay = min(delay, self.max_delay)
         
         # Add jitter if enabled
-        if self.jitter:
-            delay = delay * (0.5 + random.random())
+        if isinstance(self.jitter, bool):
+            if self.jitter:
+                delay = delay * (0.5 + random.random())
+        elif self.jitter:
+            delay = delay * random.uniform(1.0 - self.jitter, 1.0 + self.jitter)
         
         return delay
 
@@ -134,7 +165,12 @@ class APIRetry:
         )
     }
     
-    def __init__(self, config: Optional[RetryConfig] = None, api_type: str = 'generic'):
+    def __init__(
+        self,
+        config: Optional[RetryConfig] = None,
+        api_type: str = 'generic',
+        **compat_kwargs,
+    ):
         """
         Initialize API retry handler.
         
@@ -142,7 +178,12 @@ class APIRetry:
             config: Custom retry configuration
             api_type: API type for default configuration
         """
-        self.config = config or self.DEFAULT_CONFIGS.get(api_type, self.DEFAULT_CONFIGS['generic'])
+        if config is not None:
+            self.config = config
+        elif compat_kwargs:
+            self.config = RetryConfig(**compat_kwargs)
+        else:
+            self.config = self.DEFAULT_CONFIGS.get(api_type, self.DEFAULT_CONFIGS['generic'])
     
     def execute(
         self,
@@ -164,6 +205,7 @@ class APIRetry:
         Raises:
             Last exception if all retries fail
         """
+        local_logger = logging.getLogger(__name__)
         last_exception = None
         response = None
         
@@ -181,7 +223,7 @@ class APIRetry:
                     http_exception = Exception(error_msg)
                     
                     if self.config.should_retry(http_exception, result):
-                        logger.warning(
+                        local_logger.warning(
                             f"HTTP error {result.status_code} on attempt {attempt + 1}/{self.config.max_retries}. "
                             f"Will retry."
                         )
@@ -193,7 +235,7 @@ class APIRetry:
                 
                 # Success
                 if attempt > 0:
-                    logger.info(f"Operation succeeded on attempt {attempt + 1}")
+                    local_logger.info(f"Operation succeeded on attempt {attempt + 1}")
                 return result
                 
             except Exception as e:
@@ -201,11 +243,11 @@ class APIRetry:
                 
                 # Check if we should retry
                 if not self.config.should_retry(e, response):
-                    logger.error(f"Non-retryable exception: {e}")
+                    local_logger.error(f"Non-retryable exception: {e}")
                     raise
                 
                 # Log retry attempt
-                logger.warning(
+                local_logger.warning(
                     f"Attempt {attempt + 1}/{self.config.max_retries} failed: {e}. "
                     f"Will retry."
                 )
@@ -213,11 +255,11 @@ class APIRetry:
                 # Calculate and wait for delay (except on last attempt)
                 if attempt < self.config.max_retries - 1:
                     delay = self.config.calculate_delay(attempt)
-                    logger.info(f"Waiting {delay:.2f} seconds before retry...")
+                    local_logger.info(f"Waiting {delay:.2f} seconds before retry...")
                     time.sleep(delay)
         
         # All retries failed
-        logger.error(f"All {self.config.max_retries} attempts failed. Last error: {last_exception}")
+        local_logger.error(f"All {self.config.max_retries} attempts failed. Last error: {last_exception}")
         raise last_exception
 
 
@@ -257,6 +299,18 @@ def retry_openai(func: Callable):
 def retry_generic(func: Callable):
     """Decorator for generic API calls with retry."""
     return retry_decorator(api_type='generic')(func)
+
+
+def retry_on_exception(config: Optional[RetryConfig] = None, **compat_kwargs):
+    """Backward-compatible decorator factory for exception-based retries."""
+    return retry_decorator(config=config or RetryConfig(**compat_kwargs))
+
+
+def retry_on_status_code(config: Optional[RetryConfig] = None, **compat_kwargs):
+    """Backward-compatible decorator factory for status-code retries."""
+    if config is None:
+        config = RetryConfig(**compat_kwargs)
+    return retry_decorator(config=config)
 
 
 # Example usage

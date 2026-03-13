@@ -6,10 +6,10 @@ import json
 import tempfile
 from pathlib import Path
 
-from src.utils.logger import setup_logging, get_logger
-from src.utils.config_validator import ConfigValidator
-from src.utils.retry import APIRetry, RetryConfig
-from src.utils.progress import track_progress
+from src.support.logger import setup_logging, get_logger
+from src.support.config_validator import ConfigValidator
+from src.support.retry import APIRetry, RetryConfig
+from src.support.progress import track_progress
 
 
 def test_logger_setup_and_emit():

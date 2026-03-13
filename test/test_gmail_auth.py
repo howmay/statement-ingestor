@@ -14,7 +14,7 @@ from functools import wraps
 # No more sys.modules hack here
 
 # Now import the module
-from src.auth.gmail_auth import (
+from src.integrations.gmail.auth import (
     get_gmail_service,
     _test_token_usable,
     SCOPES,
@@ -29,7 +29,7 @@ class TestGmailAuth:
     @pytest.fixture(autouse=True)
     def mock_retry(self):
         """Mock the retry decorator for all tests in this class."""
-        with patch('src.utils.retry.retry_gmail', side_effect=lambda f: f):
+        with patch('src.support.retry.retry_gmail', side_effect=lambda f: f):
             yield
             
     def test_test_token_usable_success(self):
@@ -40,7 +40,7 @@ class TestGmailAuth:
         mock_creds.expired = False
 
         # Mock the Gmail service build and API call
-        with patch('src.auth.gmail_auth.build') as mock_build:
+        with patch('src.integrations.gmail.auth.build') as mock_build:
             mock_service = Mock()
             mock_service.users().getProfile().execute.return_value = {'emailAddress': 'test@example.com'}
             mock_build.return_value = mock_service
@@ -54,17 +54,17 @@ class TestGmailAuth:
         """Test token usability check with invalid credentials."""
         mock_creds = Mock(spec=Credentials)
 
-        with patch('src.auth.gmail_auth.build') as mock_build:
+        with patch('src.integrations.gmail.auth.build') as mock_build:
             mock_build.side_effect = Exception("API Error")
 
             result = _test_token_usable(mock_creds)
 
             assert result is False
 
-    @patch('src.auth.gmail_auth.os.path.exists')
-    @patch('src.auth.gmail_auth.Credentials.from_authorized_user_file')
-    @patch('src.auth.gmail_auth._test_token_usable')
-    @patch('src.auth.gmail_auth.build')
+    @patch('src.integrations.gmail.auth.os.path.exists')
+    @patch('src.integrations.gmail.auth.Credentials.from_authorized_user_file')
+    @patch('src.integrations.gmail.auth._test_token_usable')
+    @patch('src.integrations.gmail.auth.build')
     def test_get_gmail_service_with_valid_token(
         self, mock_build, mock_test_token, mock_creds_from_file, mock_exists
     ):
@@ -95,11 +95,11 @@ class TestGmailAuth:
         mock_creds_from_file.assert_called_once()
         mock_test_token.assert_called_once_with(mock_creds)
 
-    @patch('src.auth.gmail_auth.os.path.exists')
-    @patch('src.auth.gmail_auth.Credentials.from_authorized_user_file')
-    @patch('src.auth.gmail_auth._test_token_usable')
-    @patch('src.auth.gmail_auth.InstalledAppFlow')
-    @patch('src.auth.gmail_auth.build')
+    @patch('src.integrations.gmail.auth.os.path.exists')
+    @patch('src.integrations.gmail.auth.Credentials.from_authorized_user_file')
+    @patch('src.integrations.gmail.auth._test_token_usable')
+    @patch('src.integrations.gmail.auth.InstalledAppFlow')
+    @patch('src.integrations.gmail.auth.build')
     def test_get_gmail_service_with_expired_token(
         self, mock_build, mock_flow_class, mock_test_token, mock_creds_from_file, mock_exists
     ):
@@ -131,12 +131,12 @@ class TestGmailAuth:
         mock_creds.refresh.assert_called_once()
         mock_test_token.assert_called_once_with(mock_creds)
 
-    @patch('src.auth.gmail_auth.os.path.exists')
-    @patch('src.auth.gmail_auth.pickle.load')
-    @patch('src.auth.gmail_auth._test_token_usable')
-    @patch('src.auth.gmail_auth.InstalledAppFlow')
-    @patch('src.auth.gmail_auth._save_credentials_to_token_file')
-    @patch('src.auth.gmail_auth.build')
+    @patch('src.integrations.gmail.auth.os.path.exists')
+    @patch('src.integrations.gmail.auth.pickle.load')
+    @patch('src.integrations.gmail.auth._test_token_usable')
+    @patch('src.integrations.gmail.auth.InstalledAppFlow')
+    @patch('src.integrations.gmail.auth._save_credentials_to_token_file')
+    @patch('src.integrations.gmail.auth.build')
     def test_get_gmail_service_new_authentication(
         self, mock_build, mock_save_token, mock_flow_class, mock_test_token,
         mock_pickle_load, mock_exists
@@ -175,12 +175,12 @@ class TestGmailAuth:
         mock_save_token.assert_called_once_with(mock_creds, DEFAULT_TOKEN_FILE)
         # Note: _test_token_usable is NOT called for fresh OAuth credentials
 
-    @patch('src.auth.gmail_auth.os.path.exists')
-    @patch('src.auth.gmail_auth.Credentials.from_authorized_user_file')
-    @patch('src.auth.gmail_auth._test_token_usable')
-    @patch('src.auth.gmail_auth.InstalledAppFlow')
-    @patch('src.auth.gmail_auth._save_credentials_to_token_file')
-    @patch('src.auth.gmail_auth.build')
+    @patch('src.integrations.gmail.auth.os.path.exists')
+    @patch('src.integrations.gmail.auth.Credentials.from_authorized_user_file')
+    @patch('src.integrations.gmail.auth._test_token_usable')
+    @patch('src.integrations.gmail.auth.InstalledAppFlow')
+    @patch('src.integrations.gmail.auth._save_credentials_to_token_file')
+    @patch('src.integrations.gmail.auth.build')
     def test_get_gmail_service_refresh_error(
         self, mock_build, mock_save_token, mock_flow_class, mock_test_token,
         mock_creds_from_file, mock_exists
@@ -226,10 +226,10 @@ class TestGmailAuth:
         assert 'https://www.googleapis.com/auth/gmail.readonly' in SCOPES
 
     @patch('builtins.open', new_callable=mock_open)
-    @patch('src.auth.gmail_auth.os.path.exists')
-    @patch('src.auth.gmail_auth.pickle.load')
-    @patch('src.auth.gmail_auth._test_token_usable')
-    @patch('src.auth.gmail_auth.build')
+    @patch('src.integrations.gmail.auth.os.path.exists')
+    @patch('src.integrations.gmail.auth.pickle.load')
+    @patch('src.integrations.gmail.auth._test_token_usable')
+    @patch('src.integrations.gmail.auth.build')
     def test_get_gmail_service_custom_paths(
         self, mock_build, mock_test_token, mock_pickle_load, mock_exists, mock_open_file
     ):

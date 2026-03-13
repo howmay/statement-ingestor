@@ -1,4 +1,4 @@
-from src.llm import chunking
+from src.parsing.llm import chunking
 
 
 def test_safe_env_int_clamps(monkeypatch):

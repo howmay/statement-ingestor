@@ -3,7 +3,7 @@ import re
 from typing import Dict, List, Optional
 
 from .base import BaseBankParser, BankParseResult
-from src.ocr.hsbc_ocr import enrich_hsbc_transactions_with_ocr
+from src.parsing.ocr.hsbc_ocr import enrich_hsbc_transactions_with_ocr
 
 logger = logging.getLogger(__name__)
 

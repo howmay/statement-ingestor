@@ -12,7 +12,7 @@ import threading
 
 sys.path.insert(0, str(Path(__file__).parent.parent / 'src'))
 
-from src.utils.progress import (
+from src.support.progress import (
     ProgressIndicator,
     ProgressStyle,
     track_progress,
@@ -273,7 +273,7 @@ class TestTrackProgressComprehensive:
         gen = my_generator()
 
         # Should default to total=100 when length is unknown
-        with patch('src.utils.progress.ProgressIndicator') as MockProgress:
+        with patch('src.support.progress.ProgressIndicator') as MockProgress:
             mock_indicator = MagicMock()
             MockProgress.return_value.__enter__.return_value = mock_indicator
 
@@ -287,7 +287,7 @@ class TestTrackProgressComprehensive:
         """Test track_progress with custom total parameter."""
         items = [1, 2, 3]
 
-        with patch('src.utils.progress.ProgressIndicator') as MockProgress:
+        with patch('src.support.progress.ProgressIndicator') as MockProgress:
             mock_indicator = MagicMock()
             MockProgress.return_value.__enter__.return_value = mock_indicator
 
@@ -301,7 +301,7 @@ class TestTrackProgressComprehensive:
         """Test track_progress with custom style and update_interval."""
         items = [1, 2, 3]
 
-        with patch('src.utils.progress.ProgressIndicator') as MockProgress:
+        with patch('src.support.progress.ProgressIndicator') as MockProgress:
             mock_indicator = MagicMock()
             MockProgress.return_value.__enter__.return_value = mock_indicator
 
@@ -329,7 +329,7 @@ class TestRunWithProgressComprehensive:
         # Apply decorator
         decorated_func = run_with_progress(test_func, total=10, description="Test Function")
 
-        with patch('src.utils.progress.ProgressIndicator') as MockProgress:
+        with patch('src.support.progress.ProgressIndicator') as MockProgress:
             mock_indicator = MagicMock()
             MockProgress.return_value = mock_indicator
 
@@ -351,7 +351,7 @@ class TestRunWithProgressComprehensive:
         # Apply decorator
         decorated_func = run_with_progress(test_func, total=10, description="Test Function")
 
-        with patch('src.utils.progress.ProgressIndicator') as MockProgress:
+        with patch('src.support.progress.ProgressIndicator') as MockProgress:
             mock_indicator = MagicMock()
             MockProgress.return_value = mock_indicator
 
@@ -377,7 +377,7 @@ class TestRunWithProgressComprehensive:
         # Apply decorator
         decorated_func = run_with_progress(test_func, total=10, description="Test Function")
 
-        with patch('src.utils.progress.ProgressIndicator') as MockProgress:
+        with patch('src.support.progress.ProgressIndicator') as MockProgress:
             mock_indicator = MagicMock()
             MockProgress.return_value = mock_indicator
 
@@ -397,7 +397,7 @@ class TestRunWithProgressComprehensive:
         # Apply decorator
         decorated_func = run_with_progress(test_func, total=10, description="Test Function")
 
-        with patch('src.utils.progress.ProgressIndicator') as MockProgress:
+        with patch('src.support.progress.ProgressIndicator') as MockProgress:
             mock_indicator = MagicMock()
             MockProgress.return_value = mock_indicator
 

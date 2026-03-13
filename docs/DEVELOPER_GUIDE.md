@@ -6,7 +6,7 @@ This tool automates extraction of financial transactions from Gmail. It uses a *
 ## Supported Runtime Path
 The supported execution path is:
 
-`main.py` -> `src/app.py` -> active modules under `src/`
+`main.py` -> `src/runtime/app.py` -> active modules under `src/`
 
 `legacy/` is reference-only and should not receive feature work.
 
@@ -27,20 +27,20 @@ If you write production code before a test, you must delete it and start over.
 
 ## Architecture for Agents
 
-### 1. Gmail Fetching (`src/fetch/`)
+### 1. Gmail Fetching (`src/integrations/gmail/`)
 - Uses Gmail API to search and download attachments.
 - **TDD Tip**: Mock `googleapiclient` or use sample base64 email data in tests.
 
-### 2. PDF Extraction (`src/pdf/`)
+### 2. PDF Extraction (`src/parsing/pdf/`)
 - Multi-engine fallback: `pypdfium2` -> `pdftotext` -> `pdfplumber`.
 - **TDD Tip**: Place small sample PDFs in `test/data/` (or use `test_dummy.pdf`) to verify text extraction logic.
 
-### 3. Bank Parsers (`src/bank_parsers/`)
-- **Deterministic Parsers**: Regex-based classes in `src/bank_parsers/` (e.g., `hsbc.py`, `fubon.py`).
+### 3. Bank Parsers (`src/parsing/banks/`)
+- **Deterministic Parsers**: Regex-based classes in `src/parsing/banks/` (e.g., `hsbc.py`, `fubon.py`).
 - **Base Class**: `BaseBankParser` provides utilities for date normalization and transaction building.
 - **Factory**: `ParserFactory` matches text patterns to the correct parser.
 
-### 4. LLM Parser (`src/llm/`)
+### 4. LLM Parser (`src/parsing/llm/`)
 - Used for unknown formats or as a fallback.
 - Features: Intelligent chunking and JSON repair.
 
@@ -57,10 +57,10 @@ When asked to "Add support for Bank X":
     - Assert that `BankXParser(text).parse()` returns the expected transactions.
 3.  **Verify RED**: Run `pytest test/test_bank_bankx.py`. It should fail (ImportError or NotImplementedError).
 4.  **GREEN (Code)**:
-    - Create `src/bank_parsers/bankx.py` inheriting from `BaseBankParser`.
+    - Create `src/parsing/banks/bankx.py` inheriting from `BaseBankParser`.
     - Implement the `parse()` method using Regex.
 5.  **Verify GREEN**: Run the test again.
-6.  **Integrate**: Register the parser in `src/bank_parsers/factory.py` (requires its own TDD cycle if logic is complex).
+6.  **Integrate**: Register the parser in `src/parsing/banks/factory.py` (requires its own TDD cycle if logic is complex).
 
 ---
 

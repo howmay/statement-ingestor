@@ -25,6 +25,7 @@ This document describes the technical requirements for the **Gmail Expense Parse
 - **Gmail API**: OAuth2 flow with token caching.
 - **Config**: `.env` for API keys, target senders, and keywords.
 - **Bank Passwords**: Encrypted or environment-based password support for protected PDFs.
+- **Active Paths**: `src/core/`, `src/support/`, and `src/integrations/gmail/`.
 
 ### 3.2 Email Filtering & Attachment Fetching
 - **Multi-criteria Search**: Sender allow-list, subject keywords, date ranges.
@@ -33,10 +34,10 @@ This document describes the technical requirements for the **Gmail Expense Parse
 
 ### 3.3 Multi-Strategy Parsing Engine
 - **Deterministic Bank Parsers (Priority 1)**: 
-  - Regex/Pattern-based parsers for known formats: HSBC (TW), Fubon (Bank/Card), E.SUN (Card), DBS.
+  - Regex/Pattern-based parsers under `src/parsing/banks/` for known formats: HSBC (TW), Fubon (Bank/Card), E.SUN (Card), DBS.
   - 100% accuracy for supported formats.
 - **LLM-Based Parser (Priority 2)**:
-  - Adaptive parser for unknown formats (OpenAI GPT-4o-mini or local Qwen-3.5).
+  - Adaptive parser under `src/parsing/llm/` for unknown formats (OpenAI GPT-4o-mini or local Qwen-3.5).
   - **Intelligent Chunking**: Splits large statements (30+ transactions) into smaller segments to handle context window limits.
   - **JSON Repair**: Stack-based mechanism to fix truncated JSON from LLM outputs.
 - **Heuristic Fallback (Priority 3)**: Basic regex extraction if LLM is unavailable.
@@ -65,7 +66,7 @@ Each transaction record includes:
 
 ## 4. Execution Flow
 
-1. **Initialize**: Load `.env`, validate config, and authenticate.
+1. **Initialize**: Enter through `main.py`, load `.env`, validate config, and authenticate via `src/runtime/app.py`.
 2. **Fetch**: Search Gmail for target emails within the date range.
 3. **Download**: Save unique attachments (deduped by MD5).
 4. **Extract**: Convert PDF/Images to text (using OCR if needed).
@@ -81,7 +82,7 @@ Each transaction record includes:
 
 ## 6. Maintenance Note
 
-Current implementation work targets `main.py` and `src/`. Files under `legacy/` are retained for reference and migration history only.
+Current implementation work targets `main.py`, `src/runtime/`, and the responsibility-based packages under `src/`. Files under `legacy/` are retained for reference and migration history only.
 
 ---
 

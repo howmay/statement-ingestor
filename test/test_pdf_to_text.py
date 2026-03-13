@@ -8,7 +8,7 @@ import logging
 import sys
 
 # Ensure the module is imported so we can patch its functions
-from src.pdf.pdf_to_text import (
+from src.parsing.pdf.pdf_to_text import (
     extract_text_from_pdf,
     _extract_with_pdfium,
     _extract_with_pdfplumber,
@@ -38,7 +38,7 @@ class TestPDFTextExtraction:
         non_pdf = tmp_path / "file.txt"
         non_pdf.write_bytes(b"not a pdf")
         
-        with patch("src.pdf.pdf_to_text.logger.warning") as mock_warning:
+        with patch("src.parsing.pdf.pdf_to_text.logger.warning") as mock_warning:
             try:
                 extract_text_from_pdf(str(non_pdf))
             except Exception:
@@ -47,9 +47,9 @@ class TestPDFTextExtraction:
             # Check warning was logged
             mock_warning.assert_any_call(f"File does not have .pdf extension: {str(non_pdf)}")
 
-    @patch('src.pdf.pdf_to_text._extract_with_pdfium')
-    @patch('src.pdf.pdf_to_text._extract_with_pdfplumber')
-    @patch('src.pdf.pdf_to_text._extract_with_pypdf2')
+    @patch('src.parsing.pdf.pdf_to_text._extract_with_pdfium')
+    @patch('src.parsing.pdf.pdf_to_text._extract_with_pdfplumber')
+    @patch('src.parsing.pdf.pdf_to_text._extract_with_pypdf2')
     def test_extract_text_fallback_chain(self, mock_pypdf2, mock_pdfplumber, mock_pdfium, tmp_path):
         """Test the fallback chain of PDF extractors."""
         pdf_file = tmp_path / "test.pdf"
@@ -148,21 +148,21 @@ class TestPDFTextExtraction:
         pdf_file = tmp_path / "text.pdf"
         pdf_file.write_bytes(b"%PDF-1.4 content")
         
-        with patch('src.pdf.pdf_to_text.extract_text_from_pdf') as mock_extract:
+        with patch('src.parsing.pdf.pdf_to_text.extract_text_from_pdf') as mock_extract:
             mock_extract.return_value = "Some text content"
             assert is_text_based_pdf(str(pdf_file)) is True
             
             mock_extract.return_value = "   "
             assert is_text_based_pdf(str(pdf_file)) is False
 
-    @patch('src.pdf.pdf_to_text.os.path.getsize')
+    @patch('src.parsing.pdf.pdf_to_text.os.path.getsize')
     def test_extract_text_with_password(self, mock_getsize, tmp_path):
         """Test extraction with password parameter."""
         pdf_file = tmp_path / "encrypted.pdf"
         pdf_file.write_bytes(b"%PDF-1.4 encrypted")
         mock_getsize.return_value = 100
         
-        with patch('src.pdf.pdf_to_text._extract_with_pdfium') as mock_pdfium:
+        with patch('src.parsing.pdf.pdf_to_text._extract_with_pdfium') as mock_pdfium:
             mock_pdfium.return_value = "Decrypted text"
             result = extract_text_from_pdf(str(pdf_file), password="secret")
             assert result == "Decrypted text"

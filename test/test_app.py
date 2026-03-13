@@ -8,14 +8,14 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent / 'src'))
 
-from src.app import GmailExpenseParserApp
+from src.runtime.app import GmailExpenseParserApp
 
 
 @pytest.fixture
 def app():
     """Create an app instance with enhancements enabled."""
-    with patch('src.app.setup_logging'), \
-         patch('src.app.get_logger'):
+    with patch('src.runtime.app.setup_logging'), \
+         patch('src.runtime.app.get_logger'):
         app = GmailExpenseParserApp(use_enhancements=True)
         # Replace the logger with a mock
         app.logger = Mock()
@@ -48,7 +48,7 @@ class TestGmailExpenseParserAppAuthenticate:
     def test_authenticate_success(self, app):
         """Test successful authentication."""
         mock_service = Mock()
-        with patch('src.app.get_gmail_service', return_value=mock_service):
+        with patch('src.runtime.app.get_gmail_service', return_value=mock_service):
             result = app.authenticate()
             
             assert result is True
@@ -56,7 +56,7 @@ class TestGmailExpenseParserAppAuthenticate:
     
     def test_authenticate_failure(self, app):
         """Test authentication failure."""
-        with patch('src.app.get_gmail_service', side_effect=Exception("Auth failed")):
+        with patch('src.runtime.app.get_gmail_service', side_effect=Exception("Auth failed")):
             result = app.authenticate()
             
             assert result is False
@@ -73,7 +73,7 @@ class TestGmailExpenseParserAppFetchEmails:
             {'id': 'msg1', 'subject': 'statement', 'sender': 'bank@example.com'},
             {'id': 'msg2', 'subject': 'invoice', 'sender': 'vendor@example.com'}
         ]
-        with patch('src.app.search_emails', return_value=mock_emails):
+        with patch('src.runtime.app.search_emails', return_value=mock_emails):
             result = app.fetch_emails(max_results=10)
             
             assert result is True
@@ -83,7 +83,7 @@ class TestGmailExpenseParserAppFetchEmails:
     def test_fetch_emails_no_results(self, app):
         """Test email fetching with no results."""
         app.service = Mock()
-        with patch('src.app.search_emails', return_value=[]):
+        with patch('src.runtime.app.search_emails', return_value=[]):
             result = app.fetch_emails(max_results=5)
             
             assert result is True
@@ -93,7 +93,7 @@ class TestGmailExpenseParserAppFetchEmails:
     def test_fetch_emails_error(self, app):
         """Test email fetching error."""
         app.service = Mock()
-        with patch('src.app.search_emails', side_effect=Exception("API error")):
+        with patch('src.runtime.app.search_emails', side_effect=Exception("API error")):
             result = app.fetch_emails(max_results=10)
             
             assert result is False
@@ -103,7 +103,7 @@ class TestGmailExpenseParserAppFetchEmails:
         """Email fetch should pass date range to search layer."""
         app.service = Mock()
 
-        with patch('src.app.search_emails', return_value=[]) as mock_search:
+        with patch('src.runtime.app.search_emails', return_value=[]) as mock_search:
             result = app.fetch_emails(max_results=20, date_from='2026-03-01', date_to='2026-03-31')
 
             assert result is True
@@ -128,11 +128,11 @@ class TestGmailExpenseParserAppDownloadAttachments:
         
         # batch_download_pdfs is called once per email, so 2 emails = 2 calls
         # Each call returns 1 file, so total 2 files
-        with patch('src.app.list_attachments', return_value=[
+        with patch('src.runtime.app.list_attachments', return_value=[
             [{'attachmentId': 'att1', 'filename': 'file1.pdf'}],
             [{'attachmentId': 'att2', 'filename': 'file2.pdf'}]
         ]), \
-             patch('src.app.batch_download_pdfs', return_value=[
+             patch('src.runtime.app.batch_download_pdfs', return_value=[
                  {'filepath': '/downloads/file1.pdf', 'sender_tag': 'bank'}
              ]):
             result = app.download_attachments()
@@ -146,8 +146,8 @@ class TestGmailExpenseParserAppDownloadAttachments:
         """Test download with no emails."""
         app.emails = []
         
-        with patch('src.app.list_attachments', return_value=[]), \
-             patch('src.app.batch_download_pdfs'):
+        with patch('src.runtime.app.list_attachments', return_value=[]), \
+             patch('src.runtime.app.batch_download_pdfs'):
             result = app.download_attachments()
             
             assert result is True
@@ -165,7 +165,7 @@ class TestGmailExpenseParserAppExtractTexts:
             {'filepath': '/downloads/file2.pdf', 'sender': 'vendor', 'subject': 'inv'}
         ]
         
-        with patch('src.app.extract_text_from_pdf', return_value="Extracted text"):
+        with patch('src.runtime.app.extract_text_from_pdf', return_value="Extracted text"):
             result = app.extract_texts()
             
             assert result is True
@@ -193,7 +193,7 @@ class TestGmailExpenseParserAppParseReceipts:
             {'text': 'text2', 'file_info': {'filepath': '/f2.pdf', 'sender': 'vendor', 'subject': 'inv'}}
         ]
         
-        with patch('src.app.parse_receipt_text', side_effect=[
+        with patch('src.runtime.app.parse_receipt_text', side_effect=[
             [{'date': '2024-01-01', 'amount': 100.0, 'expense_name': 'Purchase', 'expense_type': 'Food', 'source': 'bank', 'confidence': 0.95}],
             [{'date': '2024-01-01', 'amount': 100.0, 'expense_name': 'Purchase', 'expense_type': 'Food', 'source': 'bank', 'confidence': 0.95}],
         ]):
@@ -222,8 +222,8 @@ class TestGmailExpenseParserAppExportResults:
         app.parsed_receipts = [{'date': '2024-01-01', 'amount': 100}]
         app.extracted_texts = [{'text': 'raw', 'file_info': {}}]
         
-        with patch('src.app.export_receipts_to_csv', return_value='/output/receipts.csv'), \
-             patch('src.app.export_extracted_texts_to_csv', return_value='/output/texts.csv'):
+        with patch('src.runtime.app.export_receipts_to_csv', return_value='/output/receipts.csv'), \
+             patch('src.runtime.app.export_extracted_texts_to_csv', return_value='/output/texts.csv'):
             result = app.export_results()
             
             assert result is True
@@ -233,11 +233,30 @@ class TestGmailExpenseParserAppExportResults:
         app.parsed_receipts = []
         app.extracted_texts = []
         
-        with patch('src.app.export_receipts_to_csv'), \
-             patch('src.app.export_extracted_texts_to_csv'):
+        with patch('src.runtime.app.export_receipts_to_csv'), \
+             patch('src.runtime.app.export_extracted_texts_to_csv'):
             result = app.export_results()
             
             assert result is True
+
+
+def test_new_src_packages_exist():
+    import importlib
+
+    for name in [
+        "src.core",
+        "src.support",
+        "src.integrations",
+        "src.integrations.gmail",
+        "src.parsing",
+        "src.parsing.banks",
+        "src.parsing.llm",
+        "src.parsing.ocr",
+        "src.parsing.pdf",
+        "src.export",
+        "src.runtime",
+    ]:
+        assert importlib.import_module(name) is not None
 
 
 class TestGmailExpenseParserAppRun:
@@ -277,14 +296,14 @@ class TestGmailExpenseParserAppValidateConfiguration:
     def test_validate_configuration_success_bool_return(self, app):
         """Current validator returns bool; app should handle it."""
         app.use_enhancements = True
-        with patch('src.utils.config_validator.ConfigValidator.validate_all', return_value=True):
+        with patch('src.support.config_validator.ConfigValidator.validate_all', return_value=True):
             result = app.validate_configuration()
         assert result is True
 
     def test_validate_configuration_failure_bool_return(self, app):
         """False bool return should fail gracefully (no tuple unpack crash)."""
         app.use_enhancements = True
-        with patch('src.utils.config_validator.ConfigValidator.validate_all', return_value=False):
+        with patch('src.support.config_validator.ConfigValidator.validate_all', return_value=False):
             result = app.validate_configuration()
         assert result is False
         assert app.stats['errors'] >= 1
@@ -293,7 +312,7 @@ class TestGmailExpenseParserAppValidateConfiguration:
         """Legacy tuple return should still be supported."""
         app.use_enhancements = True
         with patch(
-            'src.utils.config_validator.ConfigValidator.validate_all',
+            'src.support.config_validator.ConfigValidator.validate_all',
             return_value=(False, ['missing TARGET_SENDERS'])
         ):
             result = app.validate_configuration()

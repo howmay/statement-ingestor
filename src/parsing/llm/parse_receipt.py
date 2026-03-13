@@ -7,9 +7,9 @@ from typing import Dict, List, Any, Optional, Tuple
 from datetime import datetime
 
 # Import enhanced utilities
-from src.utils.retry_enhanced import enhanced_retry_openai, JSONTruncationError
-from src.bank_parsers.factory import parse_with_bank_factory
-from src.llm.chunking import (
+from src.support.retry_enhanced import enhanced_retry_openai, JSONTruncationError
+from src.parsing.banks.factory import parse_with_bank_factory
+from src.parsing.llm.chunking import (
     safe_env_int as _safe_env_int_impl,
     get_chunking_config as _get_chunking_config_impl,
     should_enable_chunking as _should_enable_chunking_impl,
@@ -17,7 +17,7 @@ from src.llm.chunking import (
     chunk_text_by_transactions as _chunk_text_by_transactions_impl,
     merge_transaction_results as _merge_transaction_results_impl,
 )
-from src.llm.json_repair import (
+from src.parsing.llm.json_repair import (
     extract_json_payload as _extract_json_payload_impl,
     fix_truncated_json as _fix_truncated_json_impl,
     finalize_fixed_json as _finalize_fixed_json_impl,

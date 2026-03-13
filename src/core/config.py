@@ -57,7 +57,9 @@ if BANK_PASSWORDS_STR:
 else:
     logger.debug("No BANK_PASSWORDS configured")
 
-DOWNLOAD_DIR = os.path.join(os.path.dirname(__file__), "..", "downloads")
+DOWNLOAD_DIR = os.path.abspath(
+    os.path.join(os.path.dirname(__file__), "..", "..", "downloads")
+)
 os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 
 

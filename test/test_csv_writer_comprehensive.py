@@ -4,7 +4,7 @@ from unittest.mock import patch
 
 import pytest
 
-import src.output.csv_writer as cw
+import src.export.csv_writer as cw
 
 
 def test_transaction_month_and_receipt_key_helpers():
