@@ -1,19 +1,45 @@
 import logging
-from typing import List, Dict, Any
+from datetime import datetime, timedelta
+from typing import List, Dict, Any, Optional
 from src.config import TARGET_SENDERS, TARGET_KEYWORDS
 from src.utils.retry import retry_gmail
 
 logger = logging.getLogger(__name__)
 
 
-def build_gmail_query(senders: List[str], keywords: List[str]) -> str:
+def _normalize_gmail_date(date_text: Optional[str]) -> Optional[str]:
+    """Normalize date string into Gmail query format YYYY/MM/DD."""
+    if not date_text:
+        return None
+
+    raw = str(date_text).strip()
+    if not raw:
+        return None
+
+    for fmt in ("%Y-%m-%d", "%Y/%m/%d", "%Y%m%d"):
+        try:
+            return datetime.strptime(raw, fmt).strftime("%Y/%m/%d")
+        except ValueError:
+            continue
+
+    return None
+
+
+def build_gmail_query(
+    senders: List[str],
+    keywords: List[str],
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+) -> str:
     """
-    Build a Gmail API search query from senders and keywords.
-    
+    Build a Gmail API search query from senders/keywords and optional date range.
+
     Args:
         senders: List of sender email addresses.
         keywords: List of keywords to search in subject/body.
-    
+        date_from: Inclusive start date (YYYY-MM-DD, YYYY/MM/DD, or YYYYMMDD).
+        date_to: Inclusive end date (same formats). Implemented as Gmail `before` of next day.
+
     Returns:
         A Gmail search query string.
     """
@@ -34,16 +60,36 @@ def build_gmail_query(senders: List[str], keywords: List[str]) -> str:
     if keyword_query:
         query_parts.append(keyword_query)
     query_parts.append("has:attachment filename:pdf")
-    
+
+    # Date range (Gmail query: after inclusive-ish, before exclusive)
+    from_norm = _normalize_gmail_date(date_from)
+    to_norm = _normalize_gmail_date(date_to)
+
+    if from_norm:
+        query_parts.append(f"after:{from_norm}")
+
+    if to_norm:
+        to_dt = datetime.strptime(to_norm, "%Y/%m/%d") + timedelta(days=1)
+        query_parts.append(f"before:{to_dt.strftime('%Y/%m/%d')}")
+
     final_query = " ".join(query_parts)
     logger.debug(f"Built Gmail query: {final_query}")
     logger.debug(f"  - Senders: {senders}")
     logger.debug(f"  - Keywords: {keywords}")
+    logger.debug(f"  - Date from: {from_norm}")
+    logger.debug(f"  - Date to: {to_norm}")
     return final_query
 
 
 @retry_gmail
-def search_emails(service, senders=None, keywords=None, max_results=100) -> List[Dict[str, Any]]:
+def search_emails(
+    service,
+    senders=None,
+    keywords=None,
+    max_results: Optional[int] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+) -> List[Dict[str, Any]]:
     """
     Search emails using Gmail API with retry mechanism.
     
@@ -51,7 +97,9 @@ def search_emails(service, senders=None, keywords=None, max_results=100) -> List
         service: Authenticated Gmail API service object.
         senders: List of sender email addresses (defaults to TARGET_SENDERS).
         keywords: List of keywords (defaults to TARGET_KEYWORDS).
-        max_results: Maximum number of emails to return.
+        max_results: Maximum number of emails to return. None = fetch all pages.
+        date_from: Inclusive start date (YYYY-MM-DD, YYYY/MM/DD, or YYYYMMDD).
+        date_to: Inclusive end date (same formats).
     
     Returns:
         List of email metadata dictionaries with keys:
@@ -69,74 +117,87 @@ def search_emails(service, senders=None, keywords=None, max_results=100) -> List
     logger.info(f"Starting email search with:")
     logger.info(f"  - Senders: {senders}")
     logger.info(f"  - Keywords: {keywords}")
-    logger.info(f"  - Max results: {max_results}")
-    
-    query = build_gmail_query(senders, keywords)
+    logger.info(f"  - Max results: {max_results if max_results is not None else 'ALL'}")
+    logger.info(f"  - Date range: {date_from or '-'} ~ {date_to or '-'}")
+
+    query = build_gmail_query(senders, keywords, date_from=date_from, date_to=date_to)
     logger.info(f"Searching emails with query: {query}")
     
     emails = []
+    seen_ids = set()
     page_token = None
     page_count = 0
-    
+
     try:
         while True:
             page_count += 1
-            page_max_results = min(50, max_results - len(emails))
-            logger.debug(f"Fetching page {page_count} (max {page_max_results} results)")
-            
-            # Call the Gmail API
+
+            if max_results is None:
+                page_max_results = 50
+            else:
+                remaining = max_results - len(emails)
+                if remaining <= 0:
+                    logger.info(f"Reached maximum results limit: {max_results}")
+                    break
+                page_max_results = min(50, remaining)
+
+            logger.debug(f"Fetching page {page_count} (page_size={page_max_results})")
+
             response = service.users().messages().list(
                 userId='me',
                 q=query,
                 maxResults=page_max_results,
                 pageToken=page_token
             ).execute()
-            
+
             messages = response.get('messages', [])
-            logger.info(f"Page {page_count}: Found {len(messages)} messages")
-            
+            logger.info(f"Page {page_count}: Found {len(messages)} message(s)")
+
             for i, msg in enumerate(messages):
-                logger.debug(f"Processing message {i+1}/{len(messages)}: {msg['id']}")
-                # Get full message metadata (lightweight, not full content)
+                msg_id = msg['id']
+                if msg_id in seen_ids:
+                    continue
+                seen_ids.add(msg_id)
+
+                logger.debug(f"Processing message {i+1}/{len(messages)}: {msg_id}")
                 msg_detail = service.users().messages().get(
                     userId='me',
-                    id=msg['id'],
+                    id=msg_id,
                     format='metadata',
                     metadataHeaders=['From', 'Subject']
                 ).execute()
-                
-                # Extract headers
+
                 headers = {h['name'].lower(): h['value'] for h in msg_detail.get('payload', {}).get('headers', [])}
                 sender = headers.get('from', 'Unknown')
                 subject = headers.get('subject', 'No Subject')
-                
+
                 emails.append({
-                    'id': msg['id'],
+                    'id': msg_id,
                     'threadId': msg.get('threadId'),
                     'sender': sender,
                     'subject': subject,
                     'internalDate': msg_detail.get('internalDate')
                 })
                 logger.debug(f"  Added: {sender[:50]}... - {subject[:50]}...")
-            
-            # Check if we have enough results or reached end
-            if len(emails) >= max_results:
+
+            if max_results is not None and len(emails) >= max_results:
                 logger.info(f"Reached maximum results limit: {max_results}")
                 break
-                
+
             page_token = response.get('nextPageToken')
             if not page_token:
-                logger.debug(f"No more pages available")
+                logger.debug("No more pages available")
                 break
-                
+
     except Exception as e:
         logger.error(f"Error searching emails: {e}")
         raise
-    
-    logger.info(f"Email search completed. Total emails found: {len(emails)}")
-    return emails[:max_results]
+
+    logger.info(f"Email search completed. Total unique emails found: {len(emails)}")
+    return emails if max_results is None else emails[:max_results]
 
 
+@retry_gmail
 def list_attachments(service, message_id: str) -> List[Dict[str, Any]]:
     """
     List PDF attachments in a message.
@@ -160,7 +221,7 @@ def list_attachments(service, message_id: str) -> List[Dict[str, Any]]:
         ).execute()
     except Exception as e:
         logger.error(f"Error retrieving message {message_id}: {e}")
-        return []
+        raise
     
     attachments = []
     

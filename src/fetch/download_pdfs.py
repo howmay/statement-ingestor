@@ -3,10 +3,12 @@ import logging
 import re
 import hashlib
 import base64
+import json
 from email.utils import parseaddr
 from typing import List, Dict, Any, Optional
 from src.config import DOWNLOAD_DIR
 from src.utils.retry import retry_gmail
+from src.fetch.fetch_emails import list_attachments
 
 logger = logging.getLogger(__name__)
 
@@ -197,6 +199,7 @@ def compute_md5_hash(data: bytes) -> str:
 def get_existing_file_by_md5(target_md5: str, directory: str = DOWNLOAD_DIR) -> Optional[str]:
     """
     Check if a file with the same MD5 hash already exists in directory.
+    Uses an efficient local cache to avoid re-scanning all files.
     
     Args:
         target_md5: MD5 hash to search for.
@@ -208,18 +211,57 @@ def get_existing_file_by_md5(target_md5: str, directory: str = DOWNLOAD_DIR) -> 
     if not os.path.exists(directory):
         return None
     
+    cache_path = os.path.join(directory, ".md5_cache.json")
+    md5_cache = {}
+    
+    if os.path.exists(cache_path):
+        try:
+            with open(cache_path, 'r') as f:
+                md5_cache = json.load(f)
+        except Exception:
+            pass
+            
+    # Check if target_md5 is in cache
+    for filename, cached_md5 in md5_cache.items():
+        if cached_md5 == target_md5:
+            filepath = os.path.join(directory, filename)
+            if os.path.isfile(filepath):
+                return filepath
+
+    # If not in cache, scan directory but only for files not in cache
+    # or whose mtime has changed. For simplicity, we'll just scan missing files.
+    updated = False
     for filename in os.listdir(directory):
+        if filename.startswith('.') or filename == ".md5_cache.json":
+            continue
+            
         filepath = os.path.join(directory, filename)
-        if os.path.isfile(filepath):
+        if os.path.isfile(filepath) and filename not in md5_cache:
             try:
                 with open(filepath, 'rb') as f:
                     file_md5 = hashlib.md5(f.read()).hexdigest()
+                    md5_cache[filename] = file_md5
+                    updated = True
                     if file_md5 == target_md5:
-                        return filepath
-            except Exception as e:
-                logger.debug(f"Error reading file {filepath} for MD5 check: {e}")
+                        # Continue scanning to build cache but we found it
+                        pass 
+            except Exception:
                 continue
     
+    if updated:
+        try:
+            with open(cache_path, 'w') as f:
+                json.dump(md5_cache, f)
+        except Exception:
+            pass
+            
+    # Re-check after update
+    for filename, cached_md5 in md5_cache.items():
+        if cached_md5 == target_md5:
+            filepath = os.path.join(directory, filename)
+            if os.path.isfile(filepath):
+                return filepath
+                
     return None
 
 
@@ -306,8 +348,6 @@ def download_pdf_attachments(service, message_id: str, email_metadata: Dict[str,
         - 'subject': Email subject (from metadata)
         - 'message_id': Gmail message ID
     """
-    from .fetch_emails import list_attachments
-    
     if email_metadata is None:
         email_metadata = {}
     
@@ -359,7 +399,8 @@ def batch_download_pdfs(service, email_list: List[Dict[str, Any]]) -> List[Dict[
             all_downloaded.extend(downloaded)
         except Exception as e:
             logger.error(f"Failed to process email {email['id']}: {e}")
-            continue
+            # Propagate to caller so run summary can reflect errors accurately
+            raise
     
     logger.info(f"Total downloaded PDFs: {len(all_downloaded)}")
     return all_downloaded

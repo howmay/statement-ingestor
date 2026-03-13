@@ -15,8 +15,7 @@ from src.app import GmailExpenseParserApp
 def app():
     """Create an app instance with enhancements enabled."""
     with patch('src.app.setup_logging'), \
-         patch('src.app.get_logger') as mock_logger, \
-         patch.object(GmailExpenseParserApp, 'validate_configuration', return_value=True):
+         patch('src.app.get_logger'):
         app = GmailExpenseParserApp(use_enhancements=True)
         # Replace the logger with a mock
         app.logger = Mock()
@@ -100,6 +99,21 @@ class TestGmailExpenseParserAppFetchEmails:
             assert result is False
             assert app.stats['errors'] > 0
 
+    def test_fetch_emails_with_date_range(self, app):
+        """Email fetch should pass date range to search layer."""
+        app.service = Mock()
+
+        with patch('src.app.search_emails', return_value=[]) as mock_search:
+            result = app.fetch_emails(max_results=20, date_from='2026-03-01', date_to='2026-03-31')
+
+            assert result is True
+            mock_search.assert_called_once_with(
+                app.service,
+                max_results=20,
+                date_from='2026-03-01',
+                date_to='2026-03-31',
+            )
+
 
 class TestGmailExpenseParserAppDownloadAttachments:
     """Test attachment download."""
@@ -124,8 +138,9 @@ class TestGmailExpenseParserAppDownloadAttachments:
             result = app.download_attachments()
             
             assert result is True
-            assert len(app.downloaded_files) == 2  # 1 file per email * 2 emails
-            assert app.stats['pdfs_downloaded'] == 2
+            # dedupe by filepath -> only one unique file kept
+            assert len(app.downloaded_files) == 1
+            assert app.stats['pdfs_downloaded'] == 1
     
     def test_download_attachments_no_emails(self, app):
         """Test download with no emails."""
@@ -178,8 +193,9 @@ class TestGmailExpenseParserAppParseReceipts:
             {'text': 'text2', 'file_info': {'filepath': '/f2.pdf', 'sender': 'vendor', 'subject': 'inv'}}
         ]
         
-        with patch('src.app.parse_receipt_text', return_value=[
-            {'date': '2024-01-01', 'amount': 100.0, 'expense_name': 'Purchase', 'expense_type': 'Food', 'source': 'bank', 'confidence': 0.95}
+        with patch('src.app.parse_receipt_text', side_effect=[
+            [{'date': '2024-01-01', 'amount': 100.0, 'expense_name': 'Purchase', 'expense_type': 'Food', 'source': 'bank', 'confidence': 0.95}],
+            [{'date': '2024-01-01', 'amount': 100.0, 'expense_name': 'Purchase', 'expense_type': 'Food', 'source': 'bank', 'confidence': 0.95}],
         ]):
             result = app.parse_receipts()
             
@@ -229,7 +245,8 @@ class TestGmailExpenseParserAppRun:
     
     def test_run_success(self, app):
         """Test successful full pipeline run."""
-        with patch.object(app, 'authenticate', return_value=True), \
+        with patch.object(app, 'validate_configuration', return_value=True), \
+             patch.object(app, 'authenticate', return_value=True), \
              patch.object(app, 'fetch_emails', return_value=True), \
              patch.object(app, 'download_attachments', return_value=True), \
              patch.object(app, 'extract_texts', return_value=True), \
@@ -256,13 +273,32 @@ class TestGmailExpenseParserAppRun:
 
 class TestGmailExpenseParserAppValidateConfiguration:
     """Test configuration validation."""
-    
-    def test_validate_configuration_success(self, app):
-        """Test configuration validation success."""
+
+    def test_validate_configuration_success_bool_return(self, app):
+        """Current validator returns bool; app should handle it."""
         app.use_enhancements = True
-        result = app.validate_configuration()
+        with patch('src.utils.config_validator.ConfigValidator.validate_all', return_value=True):
+            result = app.validate_configuration()
         assert result is True
-    
+
+    def test_validate_configuration_failure_bool_return(self, app):
+        """False bool return should fail gracefully (no tuple unpack crash)."""
+        app.use_enhancements = True
+        with patch('src.utils.config_validator.ConfigValidator.validate_all', return_value=False):
+            result = app.validate_configuration()
+        assert result is False
+        assert app.stats['errors'] >= 1
+
+    def test_validate_configuration_legacy_tuple_return(self, app):
+        """Legacy tuple return should still be supported."""
+        app.use_enhancements = True
+        with patch(
+            'src.utils.config_validator.ConfigValidator.validate_all',
+            return_value=(False, ['missing TARGET_SENDERS'])
+        ):
+            result = app.validate_configuration()
+        assert result is False
+
     def test_validate_configuration_skipped(self, app):
         """Test configuration validation skipped when enhancements disabled."""
         app.use_enhancements = False

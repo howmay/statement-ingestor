@@ -62,30 +62,28 @@ class TestGmailAuth:
             assert result is False
 
     @patch('src.auth.gmail_auth.os.path.exists')
-    @patch('src.auth.gmail_auth.pickle.load')
+    @patch('src.auth.gmail_auth.Credentials.from_authorized_user_file')
     @patch('src.auth.gmail_auth._test_token_usable')
     @patch('src.auth.gmail_auth.build')
     def test_get_gmail_service_with_valid_token(
-        self, mock_build, mock_test_token, mock_pickle_load, mock_exists
+        self, mock_build, mock_test_token, mock_creds_from_file, mock_exists
     ):
         """Test getting Gmail service with valid existing token."""
         # Mock file existence
         mock_exists.return_value = True
 
-        # Mock token loading
+        # Mock token loading - simulate JSON credentials
         mock_creds = Mock(spec=Credentials)
         mock_creds.valid = True
         mock_creds.expired = False
         mock_creds.refresh_token = "refresh_token"
-        mock_pickle_load.return_value = mock_creds
+        mock_creds_from_file.return_value = mock_creds
 
-        # Mock token test
+        # Mock token test - should return True so we don't re-auth
         mock_test_token.return_value = True
 
         # Mock service build
         mock_service = Mock()
-        # Mocking execute() to return something that doesn't trigger the status_code check
-        # or has a valid status_code < 400
         mock_service.status_code = 200
         mock_build.return_value = mock_service
 
@@ -94,15 +92,16 @@ class TestGmailAuth:
 
         assert result == mock_service
         mock_exists.assert_called()
+        mock_creds_from_file.assert_called_once()
         mock_test_token.assert_called_once_with(mock_creds)
 
     @patch('src.auth.gmail_auth.os.path.exists')
-    @patch('src.auth.gmail_auth.pickle.load')
+    @patch('src.auth.gmail_auth.Credentials.from_authorized_user_file')
     @patch('src.auth.gmail_auth._test_token_usable')
     @patch('src.auth.gmail_auth.InstalledAppFlow')
     @patch('src.auth.gmail_auth.build')
     def test_get_gmail_service_with_expired_token(
-        self, mock_build, mock_flow_class, mock_test_token, mock_pickle_load, mock_exists
+        self, mock_build, mock_flow_class, mock_test_token, mock_creds_from_file, mock_exists
     ):
         """Test getting Gmail service with expired but refreshable token."""
         # Mock file existence
@@ -113,12 +112,12 @@ class TestGmailAuth:
         mock_creds.valid = False
         mock_creds.expired = True
         mock_creds.refresh_token = "refresh_token"
-        mock_pickle_load.return_value = mock_creds
+        mock_creds_from_file.return_value = mock_creds
 
-        # Mock refresh
+        # Mock refresh - should be called
         mock_creds.refresh.return_value = None
 
-        # Mock token test
+        # Mock token test - after refresh, token should be usable
         mock_test_token.return_value = True
 
         # Mock service build
@@ -136,10 +135,10 @@ class TestGmailAuth:
     @patch('src.auth.gmail_auth.pickle.load')
     @patch('src.auth.gmail_auth._test_token_usable')
     @patch('src.auth.gmail_auth.InstalledAppFlow')
-    @patch('src.auth.gmail_auth.pickle.dump')
+    @patch('src.auth.gmail_auth._save_credentials_to_token_file')
     @patch('src.auth.gmail_auth.build')
     def test_get_gmail_service_new_authentication(
-        self, mock_build, mock_pickle_dump, mock_flow_class, mock_test_token,
+        self, mock_build, mock_save_token, mock_flow_class, mock_test_token,
         mock_pickle_load, mock_exists
     ):
         """Test getting Gmail service with new authentication (no token file)."""
@@ -167,58 +166,58 @@ class TestGmailAuth:
         mock_service = Mock()
         mock_build.return_value = mock_service
 
-        # Mock file opening for token saving
-        with patch('builtins.open', mock_open()) as mock_file:
-            # Call the function
-            result = get_gmail_service()
+        # Call the function
+        result = get_gmail_service()
 
-            assert result == mock_service
-            mock_flow_class.from_client_secrets_file.assert_called_once()
-            mock_flow.run_local_server.assert_called_once()
-            mock_pickle_dump.assert_called_once_with(mock_creds, mock_file())
-            # Note: _test_token_usable is NOT called for fresh OAuth credentials
+        assert result == mock_service
+        mock_flow_class.from_client_secrets_file.assert_called_once()
+        mock_flow.run_local_server.assert_called_once()
+        mock_save_token.assert_called_once_with(mock_creds, DEFAULT_TOKEN_FILE)
+        # Note: _test_token_usable is NOT called for fresh OAuth credentials
 
     @patch('src.auth.gmail_auth.os.path.exists')
-    @patch('src.auth.gmail_auth.pickle.load')
+    @patch('src.auth.gmail_auth.Credentials.from_authorized_user_file')
     @patch('src.auth.gmail_auth._test_token_usable')
     @patch('src.auth.gmail_auth.InstalledAppFlow')
+    @patch('src.auth.gmail_auth._save_credentials_to_token_file')
     @patch('src.auth.gmail_auth.build')
     def test_get_gmail_service_refresh_error(
-        self, mock_build, mock_flow_class, mock_test_token, mock_pickle_load, mock_exists
+        self, mock_build, mock_save_token, mock_flow_class, mock_test_token,
+        mock_creds_from_file, mock_exists
     ):
         """Test getting Gmail service when token refresh fails."""
         # Mock file existence
         mock_exists.return_value = True
 
-        # Mock expired credentials
+        # Mock expired credentials with no refresh token
         mock_creds = Mock(spec=Credentials)
         mock_creds.valid = False
         mock_creds.expired = True
         mock_creds.refresh_token = None  # No refresh token
-        mock_pickle_load.return_value = mock_creds
+        mock_creds_from_file.return_value = mock_creds
 
+        # Since no refresh token, it should jump to new auth flow
         # Mock new authentication flow
         mock_flow = Mock()
         mock_flow_class.from_client_secrets_file.return_value = mock_flow
         mock_new_creds = Mock(spec=Credentials)
+        # Set valid=True so we skip refresh test
+        mock_new_creds.valid = True
         mock_flow.run_local_server.return_value = mock_new_creds
 
-        # Mock token test
+        # Mock token test - for new credentials
         mock_test_token.return_value = True
 
         # Mock service build
         mock_service = Mock()
         mock_build.return_value = mock_service
 
-        # Mock file opening for token saving
-        with patch('builtins.open', mock_open()):
-            with patch('src.auth.gmail_auth.pickle.dump'):
-                # Call the function
-                result = get_gmail_service()
+        # Call the function
+        result = get_gmail_service()
 
-                assert result == mock_service
-                # Should have created new flow since refresh token was missing
-                mock_flow_class.from_client_secrets_file.assert_called_once()
+        assert result == mock_service
+        # Should have created new flow since refresh token was missing
+        mock_flow_class.from_client_secrets_file.assert_called_once()
 
     def test_scopes_constant(self):
         """Test that SCOPES constant is correctly defined."""

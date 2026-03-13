@@ -7,3 +7,12 @@ config/client_secrets.json
 .DS_Store
 venv/
 output/
+logs/
+*.log
+.coverage
+.vscode
+.pytest_cache/
+.cache
+.worktrees/
+htmlcov/
+tmp*
