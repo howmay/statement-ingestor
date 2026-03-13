@@ -6,6 +6,7 @@ from .base import BankParseResult, BaseBankParser
 from .hsbc import HsbcTwCardParser
 from .fubon import FubonBankParser, FubonCreditCardParser
 from .esun import EsunCardParser
+from .dbs import DbsSgCardParser
 
 
 def get_bank_parser(text: str, source_info: Optional[Dict[str, Any]] = None) -> Optional[BaseBankParser]:
@@ -28,6 +29,9 @@ def get_bank_parser(text: str, source_info: Optional[Dict[str, Any]] = None) -> 
 
     if 'esun' in bank_hint or sender_tag == '_bank':
         return EsunCardParser(text, source_info)
+
+    if 'dbs' in bank_hint:
+        return DbsSgCardParser(text, source_info)
 
     return None
 
