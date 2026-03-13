@@ -4,9 +4,9 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-import src.llm.parse_receipt as pr
-from src.bank_parsers.base import BankParseResult
-from src.llm.parse_receipt import ReceiptParsingError
+import src.parsing.llm.parse_receipt as pr
+from src.parsing.banks.base import BankParseResult
+from src.parsing.llm.parse_receipt import ReceiptParsingError
 
 
 def test_get_llm_runtime_config_local_and_ollama(monkeypatch):

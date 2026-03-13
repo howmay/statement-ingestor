@@ -9,7 +9,7 @@ import sys
 import tempfile
 import json
 
-from src.ocr.hsbc_ocr import (
+from src.parsing.ocr.hsbc_ocr import (
     enrich_hsbc_transactions_with_ocr,
     _get_tesseract_langs,
     _normalize_md,
@@ -179,7 +179,7 @@ class TestHSBCOCRComprehensive:
         result = _run_tesseract_text("test.png")
         assert result == ""
 
-    @patch('src.ocr.hsbc_ocr.pdfium', create=True)
+    @patch('src.parsing.ocr.hsbc_ocr.pdfium', create=True)
     @patch('tempfile.TemporaryDirectory')
     def test_ocr_statement_rows(self, mock_tempdir, mock_pdfium):
         """Test OCR statement rows extraction."""
@@ -209,14 +209,14 @@ class TestHSBCOCRComprehensive:
         mock_tempdir.return_value.__enter__.return_value = "/tmp/test"
         
         # Mock tesseract
-        with patch('src.ocr.hsbc_ocr._run_tesseract_text') as mock_tesseract:
+        with patch('src.parsing.ocr.hsbc_ocr._run_tesseract_text') as mock_tesseract:
             mock_tesseract.side_effect = [
                 "01/05 02/05 STARBUCKS 150.00\n02/05 03/05 UBER 200.00",
                 ""  # Second page empty
             ]
             
             # Mock _open_pdf_with_password_candidates to return our mock PDF
-            with patch('src.ocr.hsbc_ocr._open_pdf_with_password_candidates') as mock_open_pdf:
+            with patch('src.parsing.ocr.hsbc_ocr._open_pdf_with_password_candidates') as mock_open_pdf:
                 mock_open_pdf.return_value = mock_pdf
                 rows = _ocr_statement_rows("test.pdf", {})
             assert len(rows) == 2
@@ -236,7 +236,7 @@ class TestHSBCOCRComprehensive:
             _ocr_statement_rows("test.pdf", {})
 
     @patch('src.core.config.get_bank_password')
-    @patch('src.ocr.hsbc_ocr.pdfium', create=True)
+    @patch('src.parsing.ocr.hsbc_ocr.pdfium', create=True)
     def test_open_pdf_with_password_candidates(self, mock_pdfium, mock_get_password):
         """Test PDF opening with password candidates."""
         mock_pdf = MagicMock()
@@ -278,9 +278,9 @@ class TestHSBCOCRComprehensive:
         # Should have tried without password
         mock_pdfium.PdfDocument.assert_called_with("test.pdf")
 
-    @patch('src.ocr.hsbc_ocr._ocr_statement_rows')
-    @patch('src.ocr.hsbc_ocr.shutil.which')
-    @patch('src.ocr.hsbc_ocr.os.path.exists')
+    @patch('src.parsing.ocr.hsbc_ocr._ocr_statement_rows')
+    @patch('src.parsing.ocr.hsbc_ocr.shutil.which')
+    @patch('src.parsing.ocr.hsbc_ocr.os.path.exists')
     @patch('src.core.config.get_bank_password')
     def test_enrich_hsbc_chi_tra_not_required(self, mock_get_password, mock_exists, mock_which, mock_ocr_rows):
         """Test OCR when chi_tra is not required."""
@@ -313,10 +313,10 @@ class TestHSBCOCRComprehensive:
             
             assert count == 1
 
-    @patch('src.ocr.hsbc_ocr._ocr_statement_rows')
-    @patch('src.ocr.hsbc_ocr.shutil.which')
+    @patch('src.parsing.ocr.hsbc_ocr._ocr_statement_rows')
+    @patch('src.parsing.ocr.hsbc_ocr.shutil.which')
     @patch('src.core.config.get_bank_password')
-    @patch('src.ocr.hsbc_ocr.os.path.exists')
+    @patch('src.parsing.ocr.hsbc_ocr.os.path.exists')
     def test_enrich_hsbc_candidate_selection(self, mock_exists, mock_get_password, mock_which, mock_ocr_rows):
         """Test transaction candidate selection logic."""
         mock_exists.return_value = True
@@ -376,9 +376,9 @@ class TestHSBCOCRComprehensive:
         assert transactions[2]['expense_name'] == 'UBER'
         assert transactions[1]['expense_name'] == 'STARBUCKS 150.00'  # Unchanged
 
-    @patch('src.ocr.hsbc_ocr._ocr_statement_rows')
-    @patch('src.ocr.hsbc_ocr.shutil.which')
-    @patch('src.ocr.hsbc_ocr.os.path.exists')
+    @patch('src.parsing.ocr.hsbc_ocr._ocr_statement_rows')
+    @patch('src.parsing.ocr.hsbc_ocr.shutil.which')
+    @patch('src.parsing.ocr.hsbc_ocr.os.path.exists')
     def test_enrich_hsbc_matching_logic(self, mock_exists, mock_which, mock_ocr_rows):
         """Test OCR matching logic with exact and absolute value matches."""
         mock_exists.return_value = True
@@ -427,10 +427,10 @@ class TestHSBCOCRComprehensive:
         assert transactions[1]['expense_name'] == 'UBER REFUND'
         assert transactions[1]['confidence'] == 0.93  # Should be max(0.6, 0.93)
 
-    @patch('src.ocr.hsbc_ocr._ocr_statement_rows')
-    @patch('src.ocr.hsbc_ocr.shutil.which')
-    @patch('src.ocr.hsbc_ocr.os.path.exists')
-    @patch('src.ocr.hsbc_ocr._get_tesseract_langs')
+    @patch('src.parsing.ocr.hsbc_ocr._ocr_statement_rows')
+    @patch('src.parsing.ocr.hsbc_ocr.shutil.which')
+    @patch('src.parsing.ocr.hsbc_ocr.os.path.exists')
+    @patch('src.parsing.ocr.hsbc_ocr._get_tesseract_langs')
     def test_enrich_hsbc_no_candidates(self, mock_langs, mock_exists, mock_which, mock_ocr_rows):
         """Test when no transactions are candidates for enrichment."""
         mock_exists.return_value = True
@@ -454,10 +454,10 @@ class TestHSBCOCRComprehensive:
         assert count == 0
         mock_ocr_rows.assert_not_called()  # Should not even attempt OCR
 
-    @patch('src.ocr.hsbc_ocr._ocr_statement_rows')
-    @patch('src.ocr.hsbc_ocr.shutil.which')
-    @patch('src.ocr.hsbc_ocr.os.path.exists')
-    @patch('src.ocr.hsbc_ocr._get_tesseract_langs')
+    @patch('src.parsing.ocr.hsbc_ocr._ocr_statement_rows')
+    @patch('src.parsing.ocr.hsbc_ocr.shutil.which')
+    @patch('src.parsing.ocr.hsbc_ocr.os.path.exists')
+    @patch('src.parsing.ocr.hsbc_ocr._get_tesseract_langs')
     def test_enrich_hsbc_ocr_failure(self, mock_langs, mock_exists, mock_which, mock_ocr_rows):
         """Test when OCR fails."""
         mock_exists.return_value = True
@@ -482,10 +482,10 @@ class TestHSBCOCRComprehensive:
         assert count == 0
         assert transactions[0]['expense_name'] == '01/05 02/05 150.00'  # Unchanged
 
-    @patch('src.ocr.hsbc_ocr._ocr_statement_rows')
-    @patch('src.ocr.hsbc_ocr.shutil.which')
-    @patch('src.ocr.hsbc_ocr.os.path.exists')
-    @patch('src.ocr.hsbc_ocr._get_tesseract_langs')
+    @patch('src.parsing.ocr.hsbc_ocr._ocr_statement_rows')
+    @patch('src.parsing.ocr.hsbc_ocr.shutil.which')
+    @patch('src.parsing.ocr.hsbc_ocr.os.path.exists')
+    @patch('src.parsing.ocr.hsbc_ocr._get_tesseract_langs')
     def test_enrich_hsbc_no_ocr_rows(self, mock_langs, mock_exists, mock_which, mock_ocr_rows):
         """Test when OCR returns no rows."""
         mock_exists.return_value = True
@@ -509,10 +509,10 @@ class TestHSBCOCRComprehensive:
         
         assert count == 0
 
-    @patch('src.ocr.hsbc_ocr._ocr_statement_rows')
-    @patch('src.ocr.hsbc_ocr.shutil.which')
-    @patch('src.ocr.hsbc_ocr.os.path.exists')
-    @patch('src.ocr.hsbc_ocr._get_tesseract_langs')
+    @patch('src.parsing.ocr.hsbc_ocr._ocr_statement_rows')
+    @patch('src.parsing.ocr.hsbc_ocr.shutil.which')
+    @patch('src.parsing.ocr.hsbc_ocr.os.path.exists')
+    @patch('src.parsing.ocr.hsbc_ocr._get_tesseract_langs')
     def test_enrich_hsbc_partial_matching(self, mock_langs, mock_exists, mock_which, mock_ocr_rows):
         """Test when only some candidates match OCR rows."""
         mock_exists.return_value = True
@@ -570,10 +570,10 @@ class TestHSBCOCRComprehensive:
         ]
         
         # Mock the minimum required functions
-        with patch('src.ocr.hsbc_ocr.os.path.exists', return_value=True):
-            with patch('src.ocr.hsbc_ocr.shutil.which', return_value='/usr/bin/tesseract'):
-                with patch('src.ocr.hsbc_ocr._get_tesseract_langs', return_value={'chi_tra', 'eng'}):
-                    with patch('src.ocr.hsbc_ocr._ocr_statement_rows') as mock_ocr_rows:
+        with patch('src.parsing.ocr.hsbc_ocr.os.path.exists', return_value=True):
+            with patch('src.parsing.ocr.hsbc_ocr.shutil.which', return_value='/usr/bin/tesseract'):
+                with patch('src.parsing.ocr.hsbc_ocr._get_tesseract_langs', return_value={'chi_tra', 'eng'}):
+                    with patch('src.parsing.ocr.hsbc_ocr._ocr_statement_rows') as mock_ocr_rows:
                         # Create a very long description
                         long_desc = 'A' * 150
                         mock_ocr_rows.return_value = [

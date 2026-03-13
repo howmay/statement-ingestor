@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-import src.pdf.pdf_to_text as pdfmod
+import src.parsing.pdf.pdf_to_text as pdfmod
 
 
 class TestExtractTextFromPdfBranches:
@@ -13,8 +13,8 @@ class TestExtractTextFromPdfBranches:
         pdf_file = tmp_path / "a.pdf"
         pdf_file.write_bytes(b"%PDF-1.4 test")
 
-        with patch("src.pdf.pdf_to_text._extract_with_pdfium", side_effect=ImportError("no pdfium")), \
-             patch("src.pdf.pdf_to_text._extract_with_pdftotext", return_value="from pdftotext"):
+        with patch("src.parsing.pdf.pdf_to_text._extract_with_pdfium", side_effect=ImportError("no pdfium")), \
+             patch("src.parsing.pdf.pdf_to_text._extract_with_pdftotext", return_value="from pdftotext"):
             out = pdfmod.extract_text_from_pdf(str(pdf_file))
 
         assert out == "from pdftotext"
@@ -23,9 +23,9 @@ class TestExtractTextFromPdfBranches:
         pdf_file = tmp_path / "a.pdf"
         pdf_file.write_bytes(b"%PDF-1.4 test")
 
-        with patch("src.pdf.pdf_to_text._extract_with_pdfium", return_value=""), \
-             patch("src.pdf.pdf_to_text._extract_with_pdftotext", side_effect=RuntimeError("cli fail")), \
-             patch("src.pdf.pdf_to_text._extract_with_pdfplumber", return_value="from pdfplumber"):
+        with patch("src.parsing.pdf.pdf_to_text._extract_with_pdfium", return_value=""), \
+             patch("src.parsing.pdf.pdf_to_text._extract_with_pdftotext", side_effect=RuntimeError("cli fail")), \
+             patch("src.parsing.pdf.pdf_to_text._extract_with_pdfplumber", return_value="from pdfplumber"):
             out = pdfmod.extract_text_from_pdf(str(pdf_file))
 
         assert out == "from pdfplumber"
@@ -34,10 +34,10 @@ class TestExtractTextFromPdfBranches:
         pdf_file = tmp_path / "a.pdf"
         pdf_file.write_bytes(b"%PDF-1.4 test")
 
-        with patch("src.pdf.pdf_to_text._extract_with_pdfium", return_value=""), \
-             patch("src.pdf.pdf_to_text._extract_with_pdftotext", return_value=""), \
-             patch("src.pdf.pdf_to_text._extract_with_pdfplumber", side_effect=ImportError("no pdfplumber")), \
-             patch("src.pdf.pdf_to_text._extract_with_pypdf2", return_value="from pypdf2"):
+        with patch("src.parsing.pdf.pdf_to_text._extract_with_pdfium", return_value=""), \
+             patch("src.parsing.pdf.pdf_to_text._extract_with_pdftotext", return_value=""), \
+             patch("src.parsing.pdf.pdf_to_text._extract_with_pdfplumber", side_effect=ImportError("no pdfplumber")), \
+             patch("src.parsing.pdf.pdf_to_text._extract_with_pypdf2", return_value="from pypdf2"):
             out = pdfmod.extract_text_from_pdf(str(pdf_file))
 
         assert out == "from pypdf2"
@@ -46,10 +46,10 @@ class TestExtractTextFromPdfBranches:
         pdf_file = tmp_path / "a.pdf"
         pdf_file.write_bytes(b"%PDF-1.4 test")
 
-        with patch("src.pdf.pdf_to_text._extract_with_pdfium", return_value=""), \
-             patch("src.pdf.pdf_to_text._extract_with_pdftotext", return_value=""), \
-             patch("src.pdf.pdf_to_text._extract_with_pdfplumber", return_value=""), \
-             patch("src.pdf.pdf_to_text._extract_with_pypdf2", side_effect=ImportError("missing")):
+        with patch("src.parsing.pdf.pdf_to_text._extract_with_pdfium", return_value=""), \
+             patch("src.parsing.pdf.pdf_to_text._extract_with_pdftotext", return_value=""), \
+             patch("src.parsing.pdf.pdf_to_text._extract_with_pdfplumber", return_value=""), \
+             patch("src.parsing.pdf.pdf_to_text._extract_with_pypdf2", side_effect=ImportError("missing")):
             with pytest.raises(ImportError):
                 pdfmod.extract_text_from_pdf(str(pdf_file))
 
@@ -57,10 +57,10 @@ class TestExtractTextFromPdfBranches:
         pdf_file = tmp_path / "enc.pdf"
         pdf_file.write_bytes(b"%PDF-1.4 encrypted")
 
-        with patch("src.pdf.pdf_to_text._extract_with_pdfium", return_value=""), \
-             patch("src.pdf.pdf_to_text._extract_with_pdftotext", return_value=""), \
-             patch("src.pdf.pdf_to_text._extract_with_pdfplumber", return_value=""), \
-             patch("src.pdf.pdf_to_text._extract_with_pypdf2", return_value=""):
+        with patch("src.parsing.pdf.pdf_to_text._extract_with_pdfium", return_value=""), \
+             patch("src.parsing.pdf.pdf_to_text._extract_with_pdftotext", return_value=""), \
+             patch("src.parsing.pdf.pdf_to_text._extract_with_pdfplumber", return_value=""), \
+             patch("src.parsing.pdf.pdf_to_text._extract_with_pypdf2", return_value=""):
             out = pdfmod.extract_text_from_pdf(str(pdf_file), password="secret")
 
         assert out is None
@@ -220,45 +220,45 @@ class TestPdfplumberAndPypdf2Branches:
 
 class TestIsTextBasedAndCliMain:
     def test_is_text_based_none_and_exception(self):
-        with patch("src.pdf.pdf_to_text.extract_text_from_pdf", return_value=None):
+        with patch("src.parsing.pdf.pdf_to_text.extract_text_from_pdf", return_value=None):
             assert pdfmod.is_text_based_pdf("/tmp/a.pdf") is False
 
-        with patch("src.pdf.pdf_to_text.extract_text_from_pdf", side_effect=RuntimeError("x")):
+        with patch("src.parsing.pdf.pdf_to_text.extract_text_from_pdf", side_effect=RuntimeError("x")):
             assert pdfmod.is_text_based_pdf("/tmp/a.pdf") is False
 
     def test_main_usage_and_success_and_error_paths(self, capsys):
         assert pdfmod.main([]) == 1
         assert "Usage:" in capsys.readouterr().out
 
-        with patch("src.pdf.pdf_to_text.extract_text_from_pdf", return_value="hello"):
+        with patch("src.parsing.pdf.pdf_to_text.extract_text_from_pdf", return_value="hello"):
             assert pdfmod.main(["a.pdf"]) == 0
             out = capsys.readouterr().out
             assert "Extracted text from: a.pdf" in out
             assert "Total:" in out
 
         long_text = "x" * 600
-        with patch("src.pdf.pdf_to_text.extract_text_from_pdf", return_value=long_text):
+        with patch("src.parsing.pdf.pdf_to_text.extract_text_from_pdf", return_value=long_text):
             assert pdfmod.main(["a.pdf", "pw"]) == 0
             out = capsys.readouterr().out
             assert "Using password:" in out
             assert "more characters" in out
 
-        with patch("src.pdf.pdf_to_text.extract_text_from_pdf", return_value=None):
+        with patch("src.parsing.pdf.pdf_to_text.extract_text_from_pdf", return_value=None):
             assert pdfmod.main(["a.pdf"]) == 1
             out = capsys.readouterr().out
             assert "No text could be extracted" in out
 
-        with patch("src.pdf.pdf_to_text.extract_text_from_pdf", side_effect=FileNotFoundError("missing")):
+        with patch("src.parsing.pdf.pdf_to_text.extract_text_from_pdf", side_effect=FileNotFoundError("missing")):
             assert pdfmod.main(["a.pdf"]) == 1
             out = capsys.readouterr().out
             assert "Error: missing" in out
 
-        with patch("src.pdf.pdf_to_text.extract_text_from_pdf", side_effect=ValueError("bad")):
+        with patch("src.parsing.pdf.pdf_to_text.extract_text_from_pdf", side_effect=ValueError("bad")):
             assert pdfmod.main(["a.pdf"]) == 1
             out = capsys.readouterr().out
             assert "Error: bad" in out
 
-        with patch("src.pdf.pdf_to_text.extract_text_from_pdf", side_effect=RuntimeError("boom")):
+        with patch("src.parsing.pdf.pdf_to_text.extract_text_from_pdf", side_effect=RuntimeError("boom")):
             assert pdfmod.main(["a.pdf"]) == 1
             out = capsys.readouterr().out
             assert "Unexpected error: boom" in out

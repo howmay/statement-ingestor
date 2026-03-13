@@ -7,7 +7,7 @@ import os
 from datetime import datetime
 from unittest.mock import MagicMock, patch
 
-from src.llm.parse_receipt import (
+from src.parsing.llm.parse_receipt import (
     _chunk_text_by_transactions,
     _fix_truncated_json_enhanced,
     _should_enable_chunking,

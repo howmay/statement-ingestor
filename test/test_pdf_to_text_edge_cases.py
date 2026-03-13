@@ -9,7 +9,7 @@ import os
 
 sys.path.insert(0, str(Path(__file__).parent.parent / 'src'))
 
-from src.pdf.pdf_to_text import extract_text_from_pdf, is_text_based_pdf
+from src.parsing.pdf.pdf_to_text import extract_text_from_pdf, is_text_based_pdf
 
 
 class TestPDFToTextEdgeCases:
@@ -34,9 +34,9 @@ class TestPDFToTextEdgeCases:
         bad_file = tmp_path / "bad.pdf"
         bad_file.write_text("This is not a PDF")
         
-        with patch('src.pdf.pdf_to_text._extract_with_pdfium', side_effect=Exception("PDFium failed")), \
-             patch('src.pdf.pdf_to_text._extract_with_pdfplumber', side_effect=Exception("PDFplumber failed")), \
-             patch('src.pdf.pdf_to_text._extract_with_pypdf2', side_effect=Exception("PyPDF2 failed")):
+        with patch('src.parsing.pdf.pdf_to_text._extract_with_pdfium', side_effect=Exception("PDFium failed")), \
+             patch('src.parsing.pdf.pdf_to_text._extract_with_pdfplumber', side_effect=Exception("PDFplumber failed")), \
+             patch('src.parsing.pdf.pdf_to_text._extract_with_pypdf2', side_effect=Exception("PyPDF2 failed")):
             
             result = extract_text_from_pdf(str(bad_file))
             assert result is None
@@ -91,7 +91,7 @@ class TestPDFToTextEdgeCases:
         test_file = tmp_path / "test.pdf"
         test_file.write_text("Test content")
         
-        with patch('src.pdf.pdf_to_text._extract_with_pdfium') as mock_pdfium:
+        with patch('src.parsing.pdf.pdf_to_text._extract_with_pdfium') as mock_pdfium:
             mock_pdfium.return_value = "Extracted text"
             
             result = extract_text_from_pdf(str(test_file), password="test123")
@@ -109,7 +109,7 @@ class TestPDFToTextEdgeCases:
         # Mock pdfium to return very long text
         long_text = "A" * 10000  # 10k characters
         
-        with patch('src.pdf.pdf_to_text._extract_with_pdfium', return_value=long_text):
+        with patch('src.parsing.pdf.pdf_to_text._extract_with_pdfium', return_value=long_text):
             result = extract_text_from_pdf(str(test_file))
             
             # Text should not be truncated in the basic extractor
@@ -120,8 +120,8 @@ class TestPDFToTextEdgeCases:
         test_file = tmp_path / "test.pdf"
         test_file.write_text("Test content")
         
-        with patch('src.pdf.pdf_to_text._extract_with_pdfium', side_effect=ImportError("No module named 'pypdfium2'")), \
-             patch('src.pdf.pdf_to_text._extract_with_pdfplumber', return_value="PDFplumber text"):
+        with patch('src.parsing.pdf.pdf_to_text._extract_with_pdfium', side_effect=ImportError("No module named 'pypdfium2'")), \
+             patch('src.parsing.pdf.pdf_to_text._extract_with_pdfplumber', return_value="PDFplumber text"):
             
             result = extract_text_from_pdf(str(test_file))
             assert result == "PDFplumber text"
@@ -131,8 +131,8 @@ class TestPDFToTextEdgeCases:
         test_file = tmp_path / "test.pdf"
         test_file.write_text("Test content")
         
-        with patch('src.pdf.pdf_to_text._extract_with_pdfplumber', side_effect=ImportError("No module named 'pdfplumber'")), \
-             patch('src.pdf.pdf_to_text._extract_with_pypdf2', return_value="PyPDF2 text"):
+        with patch('src.parsing.pdf.pdf_to_text._extract_with_pdfplumber', side_effect=ImportError("No module named 'pdfplumber'")), \
+             patch('src.parsing.pdf.pdf_to_text._extract_with_pypdf2', return_value="PyPDF2 text"):
             
             result = extract_text_from_pdf(str(test_file))
             assert result == "PyPDF2 text"
@@ -142,8 +142,8 @@ class TestPDFToTextEdgeCases:
         test_file = tmp_path / "test.pdf"
         test_file.write_text("Test content")
         
-        with patch('src.pdf.pdf_to_text._extract_with_pdftotext', side_effect=FileNotFoundError()), \
-             patch('src.pdf.pdf_to_text._extract_with_pypdf2', return_value="PyPDF2 text"):
+        with patch('src.parsing.pdf.pdf_to_text._extract_with_pdftotext', side_effect=FileNotFoundError()), \
+             patch('src.parsing.pdf.pdf_to_text._extract_with_pypdf2', return_value="PyPDF2 text"):
             
             result = extract_text_from_pdf(str(test_file))
             assert result == "PyPDF2 text"

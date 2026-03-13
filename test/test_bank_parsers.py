@@ -7,8 +7,8 @@ from pathlib import Path
 project_root = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(project_root))
 
-from src.bank_parsers.factory import parse_with_bank_factory
-from src.ocr.hsbc_ocr import _extract_rows_from_ocr_text, _clean_ocr_desc
+from src.parsing.banks.factory import parse_with_bank_factory
+from src.parsing.ocr.hsbc_ocr import _extract_rows_from_ocr_text, _clean_ocr_desc
 
 
 def test_hsbc_parse():

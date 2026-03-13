@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from src.llm.parse_receipt import parse_receipt_text
+from src.parsing.llm.parse_receipt import parse_receipt_text
 
 
 def test_bank_statement_parsing(monkeypatch):
