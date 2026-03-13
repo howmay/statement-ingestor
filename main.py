@@ -10,6 +10,7 @@ from src.app import GmailExpenseParserApp
 
 def main():
     """Main entry point for the Gmail Expense Parser."""
+    # Canonical CLI entry point for the maintained application path.
     parser = argparse.ArgumentParser(description='Gmail Expense Parser')
     parser.add_argument(
         '--no-enhancements', 

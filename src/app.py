@@ -3,6 +3,7 @@
 Gmail Expense Parser - Application Core
 Enhanced version with comprehensive error handling and logging.
 """
+# Orchestrates the supported end-to-end pipeline used by main.py.
 import os
 import sys
 import traceback
