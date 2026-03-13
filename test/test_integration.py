@@ -12,7 +12,7 @@ def test_core_modules_importable():
         'src.support.retry',
         'src.support.progress',
         'src.support.config_validator',
-        'src.app',
+        'src.runtime.app',
     ]
 
     for name in modules:
@@ -30,5 +30,5 @@ def test_main_entrypoint_exists():
 
 def test_refactored_app_class_exists():
     project_root = Path(__file__).resolve().parent.parent
-    content = (project_root / 'src' / 'app.py').read_text()
+    content = (project_root / 'src' / 'runtime' / 'app.py').read_text()
     assert 'class GmailExpenseParserApp' in content

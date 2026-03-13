@@ -5,7 +5,7 @@ Gmail Expense Parser - Entry Point
 import sys
 import argparse
 import logging
-from src.app import GmailExpenseParserApp
+from src.runtime.app import GmailExpenseParserApp
 
 
 def main():

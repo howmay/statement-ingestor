@@ -10,7 +10,7 @@ import os
 
 sys.path.insert(0, str(Path(__file__).parent.parent / 'src'))
 
-from src.app import GmailExpenseParserApp
+from src.runtime.app import GmailExpenseParserApp
 
 
 class TestGmailExpenseParserAppComprehensive:
@@ -19,15 +19,15 @@ class TestGmailExpenseParserAppComprehensive:
     @pytest.fixture
     def app_without_enhancements(self):
         """Create an app instance without enhancements."""
-        with patch('src.app.ENHANCEMENTS_AVAILABLE', False):
+        with patch('src.runtime.app.ENHANCEMENTS_AVAILABLE', False):
             app = GmailExpenseParserApp(use_enhancements=True)
             yield app
     
     @pytest.fixture
     def app_with_enhancements(self):
         """Create an app instance with enhancements."""
-        with patch('src.app.setup_logging'), \
-             patch('src.app.get_logger'):
+        with patch('src.runtime.app.setup_logging'), \
+             patch('src.runtime.app.get_logger'):
             app = GmailExpenseParserApp(use_enhancements=True)
             app.logger = Mock()
             yield app
@@ -41,8 +41,8 @@ class TestGmailExpenseParserAppComprehensive:
     
     def test_init_with_enhancements_disabled(self):
         """Test initialization with enhancements explicitly disabled."""
-        with patch('src.app.setup_logging'), \
-             patch('src.app.get_logger'):
+        with patch('src.runtime.app.setup_logging'), \
+             patch('src.runtime.app.get_logger'):
             app = GmailExpenseParserApp(use_enhancements=False)
             assert app.use_enhancements is False
     
@@ -50,7 +50,7 @@ class TestGmailExpenseParserAppComprehensive:
         """Test authentication when get_gmail_service raises an exception."""
         app = app_with_enhancements
         
-        with patch('src.app.get_gmail_service', side_effect=Exception("Auth failed")):
+        with patch('src.runtime.app.get_gmail_service', side_effect=Exception("Auth failed")):
             result = app.authenticate()
             
             assert result is False
@@ -63,7 +63,7 @@ class TestGmailExpenseParserAppComprehensive:
         app = app_with_enhancements
         app.service = Mock()
         
-        with patch('src.app.search_emails', side_effect=Exception("Search failed")):
+        with patch('src.runtime.app.search_emails', side_effect=Exception("Search failed")):
             result = app.fetch_emails()
             
             assert result is False
@@ -89,7 +89,7 @@ class TestGmailExpenseParserAppComprehensive:
         app.emails = [{'id': 'msg1', 'subject': 'Test'}]
         app.service = Mock()
         
-        with patch('src.app.batch_download_pdfs', side_effect=Exception("Download failed")):
+        with patch('src.runtime.app.batch_download_pdfs', side_effect=Exception("Download failed")):
             result = app.download_attachments()
             
             # The method catches exceptions per email and still returns True
@@ -113,7 +113,7 @@ class TestGmailExpenseParserAppComprehensive:
         app = app_with_enhancements
         app.downloaded_files = [{'filepath': '/path/to/file1.pdf', 'filename': 'file1.pdf'}]
         
-        with patch('src.app.extract_text_from_pdf', side_effect=Exception("Extraction failed")):
+        with patch('src.runtime.app.extract_text_from_pdf', side_effect=Exception("Extraction failed")):
             result = app.extract_texts()
             
             # extract_texts handles exceptions in process_file and returns True (but increments errors)
@@ -143,7 +143,7 @@ class TestGmailExpenseParserAppComprehensive:
             {'text': 'text2', 'file_info': {'filepath': '/path/to/file2.pdf', 'filename': 'file2.pdf'}}
         ]
         
-        with patch('src.app.parse_receipt_text', side_effect=Exception("Parsing failed")):
+        with patch('src.runtime.app.parse_receipt_text', side_effect=Exception("Parsing failed")):
             result = app.parse_receipts()
             
             assert result is True  # parse_receipts returns True even if individual parsing fails
@@ -167,7 +167,7 @@ class TestGmailExpenseParserAppComprehensive:
         app.parsed_receipts = [{'date': '2024-01-01', 'amount': 100.0}]
         app.extracted_texts = ['text1']
         
-        with patch('src.app.export_receipts_to_csv', side_effect=Exception("Export failed")):
+        with patch('src.runtime.app.export_receipts_to_csv', side_effect=Exception("Export failed")):
             result = app.export_results()
             
             assert result is False
@@ -282,7 +282,9 @@ class TestGmailExpenseParserAppComprehensive:
         """Test validate_configuration with legacy tuple return."""
         app = app_with_enhancements
         
-        with patch('src.app.validate_config_util', return_value=(True, "Config OK")):
+        with patch('src.support.config_validator.ConfigValidator') as mock_validator_class:
+            mock_validator = mock_validator_class.return_value
+            mock_validator.validate_all.return_value = (True, "Config OK")
             result = app.validate_configuration()
             
             assert result is True
@@ -291,7 +293,9 @@ class TestGmailExpenseParserAppComprehensive:
         """Test validate_configuration with boolean return."""
         app = app_with_enhancements
         
-        with patch('src.app.validate_config_util', return_value=True):
+        with patch('src.support.config_validator.ConfigValidator') as mock_validator_class:
+            mock_validator = mock_validator_class.return_value
+            mock_validator.validate_all.return_value = True
             result = app.validate_configuration()
             
             assert result is True
