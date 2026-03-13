@@ -62,33 +62,34 @@ class TestGmailAuthSimple:
             assert result is False
     
     @patch('src.auth.gmail_auth.os.path.exists')
-    @patch('src.auth.gmail_auth.pickle.load')
+    @patch('src.auth.gmail_auth.Credentials.from_authorized_user_file')
     @patch('src.auth.gmail_auth._test_token_usable')
     @patch('src.auth.gmail_auth.build')
-    def test_get_gmail_service_flow(self, mock_build, mock_test_token, mock_pickle_load, mock_exists):
+    def test_get_gmail_service_flow(self, mock_build, mock_test_token, mock_creds_from_file, mock_exists):
         """Test the main get_gmail_service function with mocked dependencies."""
         # Import here to avoid circular issues
         from src.auth.gmail_auth import get_gmail_service
-        
+
         # Setup mocks
         mock_exists.return_value = True
-        
+
         mock_creds = Mock()
         mock_creds.valid = True
         mock_creds.expired = False
         mock_creds.refresh_token = "refresh_token"
-        mock_pickle_load.return_value = mock_creds
-        
+        mock_creds_from_file.return_value = mock_creds
+
         mock_test_token.return_value = True
-        
+
         mock_service = Mock()
         mock_build.return_value = mock_service
-        
+
         # Test the function
         result = get_gmail_service()
-        
+
         assert result == mock_service
         mock_exists.assert_called()
+        mock_creds_from_file.assert_called_once()
         mock_test_token.assert_called_once_with(mock_creds)
     
     def test_default_paths(self):
