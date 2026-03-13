@@ -323,22 +323,25 @@ def is_text_based_pdf(pdf_path: str, password: str = None) -> bool:
         return False
 
 
-if __name__ == '__main__':
+def main(argv=None) -> int:
+    """CLI entrypoint for standalone PDF text extraction."""
     import sys
-    
+
+    args = argv if argv is not None else sys.argv[1:]
+
     logging.basicConfig(level=logging.INFO)
-    
-    if len(sys.argv) < 2:
+
+    if len(args) < 1:
         print("Usage: python src/pdf/pdf_to_text.py <pdf_file> [password]")
         print("")
         print("Examples:")
         print("  python src/pdf/pdf_to_text.py document.pdf")
         print("  python src/pdf/pdf_to_text.py encrypted.pdf mypassword")
-        sys.exit(1)
-    
-    pdf_file = sys.argv[1]
-    password = sys.argv[2] if len(sys.argv) >= 3 else None
-    
+        return 1
+
+    pdf_file = args[0]
+    password = args[1] if len(args) >= 2 else None
+
     try:
         text = extract_text_from_pdf(pdf_file, password)
         if text:
@@ -347,7 +350,6 @@ if __name__ == '__main__':
             if password:
                 print(f"Using password: {'*' * len(password)}")
             print(f"{'='*60}\n")
-            # Show first 500 characters as preview
             preview = text[:500]
             print(preview)
             if len(text) > 500:
@@ -355,19 +357,26 @@ if __name__ == '__main__':
             print(f"\n{'='*60}")
             print(f"Total: {len(text)} characters")
             print(f"{'='*60}")
+            return 0
+
+        print("No text could be extracted from this PDF.")
+        if password:
+            print("Possible reasons: incorrect password, or PDF is scanned/image-based.")
         else:
-            print("No text could be extracted from this PDF.")
-            if password:
-                print("Possible reasons: incorrect password, or PDF is scanned/image-based.")
-            else:
-                print("Possible reasons: PDF is encrypted (needs password), or scanned/image-based.")
-            sys.exit(1)
+            print("Possible reasons: PDF is encrypted (needs password), or scanned/image-based.")
+        return 1
+
     except FileNotFoundError as e:
         print(f"Error: {e}")
-        sys.exit(1)
+        return 1
     except ValueError as e:
         print(f"Error: {e}")
-        sys.exit(1)
+        return 1
     except Exception as e:
         print(f"Unexpected error: {e}")
-        sys.exit(1)
+        return 1
+
+
+if __name__ == '__main__':
+    import sys
+    sys.exit(main())
