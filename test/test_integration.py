@@ -8,10 +8,10 @@ from pathlib import Path
 
 def test_core_modules_importable():
     modules = [
-        'src.utils.logger',
-        'src.utils.retry',
-        'src.utils.progress',
-        'src.utils.config_validator',
+        'src.support.logger',
+        'src.support.retry',
+        'src.support.progress',
+        'src.support.config_validator',
         'src.app',
     ]
 

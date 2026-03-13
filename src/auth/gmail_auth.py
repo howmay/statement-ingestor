@@ -10,8 +10,8 @@ from google_auth_oauthlib.flow import Flow
 from google.auth.transport.requests import AuthorizedSession
 from googleapiclient.discovery import build
 import logging
-from src.config import OAUTH_CLIENT_SECRETS_PATH, OAUTH_TOKEN_PATH, OAUTH_PORT
-from src.utils.retry import retry_gmail
+from src.core.config import OAUTH_CLIENT_SECRETS_PATH, OAUTH_TOKEN_PATH, OAUTH_PORT
+from src.support.retry import retry_gmail
 
 # Setup logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')

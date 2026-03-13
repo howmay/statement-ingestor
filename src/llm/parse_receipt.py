@@ -7,7 +7,7 @@ from typing import Dict, List, Any, Optional, Tuple
 from datetime import datetime
 
 # Import enhanced utilities
-from src.utils.retry_enhanced import enhanced_retry_openai, JSONTruncationError
+from src.support.retry_enhanced import enhanced_retry_openai, JSONTruncationError
 from src.bank_parsers.factory import parse_with_bank_factory
 from src.llm.chunking import (
     safe_env_int as _safe_env_int_impl,

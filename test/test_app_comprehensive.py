@@ -300,7 +300,7 @@ class TestGmailExpenseParserAppComprehensive:
         """Test validate_configuration when it fails."""
         app = app_with_enhancements
         
-        with patch('src.utils.config_validator.ConfigValidator') as mock_validator_class:
+        with patch('src.support.config_validator.ConfigValidator') as mock_validator_class:
             mock_validator = mock_validator_class.return_value
             mock_validator.validate_all.return_value = False
             

@@ -235,7 +235,7 @@ class TestHSBCOCRComprehensive:
         with pytest.raises(RuntimeError, match="pypdfium2 is required for OCR fallback"):
             _ocr_statement_rows("test.pdf", {})
 
-    @patch('src.config.get_bank_password')
+    @patch('src.core.config.get_bank_password')
     @patch('src.ocr.hsbc_ocr.pdfium', create=True)
     def test_open_pdf_with_password_candidates(self, mock_pdfium, mock_get_password):
         """Test PDF opening with password candidates."""
@@ -281,7 +281,7 @@ class TestHSBCOCRComprehensive:
     @patch('src.ocr.hsbc_ocr._ocr_statement_rows')
     @patch('src.ocr.hsbc_ocr.shutil.which')
     @patch('src.ocr.hsbc_ocr.os.path.exists')
-    @patch('src.config.get_bank_password')
+    @patch('src.core.config.get_bank_password')
     def test_enrich_hsbc_chi_tra_not_required(self, mock_get_password, mock_exists, mock_which, mock_ocr_rows):
         """Test OCR when chi_tra is not required."""
         mock_exists.return_value = True
@@ -315,7 +315,7 @@ class TestHSBCOCRComprehensive:
 
     @patch('src.ocr.hsbc_ocr._ocr_statement_rows')
     @patch('src.ocr.hsbc_ocr.shutil.which')
-    @patch('src.config.get_bank_password')
+    @patch('src.core.config.get_bank_password')
     @patch('src.ocr.hsbc_ocr.os.path.exists')
     def test_enrich_hsbc_candidate_selection(self, mock_exists, mock_get_password, mock_which, mock_ocr_rows):
         """Test transaction candidate selection logic."""

@@ -6,8 +6,8 @@ import base64
 import json
 from email.utils import parseaddr
 from typing import List, Dict, Any, Optional
-from src.config import DOWNLOAD_DIR
-from src.utils.retry import retry_gmail
+from src.core.config import DOWNLOAD_DIR
+from src.support.retry import retry_gmail
 from src.fetch.fetch_emails import list_attachments
 
 logger = logging.getLogger(__name__)

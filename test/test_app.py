@@ -296,14 +296,14 @@ class TestGmailExpenseParserAppValidateConfiguration:
     def test_validate_configuration_success_bool_return(self, app):
         """Current validator returns bool; app should handle it."""
         app.use_enhancements = True
-        with patch('src.utils.config_validator.ConfigValidator.validate_all', return_value=True):
+        with patch('src.support.config_validator.ConfigValidator.validate_all', return_value=True):
             result = app.validate_configuration()
         assert result is True
 
     def test_validate_configuration_failure_bool_return(self, app):
         """False bool return should fail gracefully (no tuple unpack crash)."""
         app.use_enhancements = True
-        with patch('src.utils.config_validator.ConfigValidator.validate_all', return_value=False):
+        with patch('src.support.config_validator.ConfigValidator.validate_all', return_value=False):
             result = app.validate_configuration()
         assert result is False
         assert app.stats['errors'] >= 1
@@ -312,7 +312,7 @@ class TestGmailExpenseParserAppValidateConfiguration:
         """Legacy tuple return should still be supported."""
         app.use_enhancements = True
         with patch(
-            'src.utils.config_validator.ConfigValidator.validate_all',
+            'src.support.config_validator.ConfigValidator.validate_all',
             return_value=(False, ['missing TARGET_SENDERS'])
         ):
             result = app.validate_configuration()

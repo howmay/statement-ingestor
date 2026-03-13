@@ -10,7 +10,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent / 'src'))
 
-from src.utils.retry_enhanced import (
+from src.support.retry_enhanced import (
     EnhancedRetryConfig,
     EnhancedAPIRetry,
     retry_with_json_truncation,

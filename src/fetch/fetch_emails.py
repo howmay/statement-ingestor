@@ -1,8 +1,8 @@
 import logging
 from datetime import datetime, timedelta
 from typing import List, Dict, Any, Optional
-from src.config import TARGET_SENDERS, TARGET_KEYWORDS
-from src.utils.retry import retry_gmail
+from src.core.config import TARGET_SENDERS, TARGET_KEYWORDS
+from src.support.retry import retry_gmail
 
 logger = logging.getLogger(__name__)
 

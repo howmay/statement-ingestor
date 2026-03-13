@@ -19,7 +19,7 @@ class TestDownloadPDFs:
     @pytest.fixture(autouse=True)
     def mock_retry(self):
         """Mock the retry decorator for all tests in this class."""
-        with patch('src.utils.retry.retry_gmail', side_effect=lambda f: f):
+        with patch('src.support.retry.retry_gmail', side_effect=lambda f: f):
             yield
 
     def test_extract_sender_tag(self):

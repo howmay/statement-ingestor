@@ -11,7 +11,7 @@ import src.auth.gmail_auth as gmail_auth
 @pytest.fixture(autouse=True)
 def disable_retry_sleep(monkeypatch):
     # Avoid waiting when retry wrappers are active.
-    monkeypatch.setattr("src.utils.retry.time.sleep", lambda *_: None)
+    monkeypatch.setattr("src.support.retry.time.sleep", lambda *_: None)
 
 
 def _wrapped_get_gmail_service():

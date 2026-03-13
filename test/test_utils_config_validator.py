@@ -11,7 +11,7 @@ from tempfile import TemporaryDirectory
 
 sys.path.insert(0, str(Path(__file__).parent.parent / 'src'))
 
-from src.utils.config_validator import (
+from src.support.config_validator import (
     ConfigValidator,
     ConfigValidationError,
     REQUIRED_ENV_VARS,
