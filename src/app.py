@@ -27,12 +27,12 @@ except ImportError:
 
 # Import project modules
 from src.core.config import TARGET_SENDERS, TARGET_KEYWORDS, DOWNLOAD_DIR, get_bank_password
-from src.auth.gmail_auth import get_gmail_service
-from src.fetch.fetch_emails import search_emails, list_attachments
-from src.fetch.download_pdfs import batch_download_pdfs
+from src.integrations.gmail.auth import get_gmail_service
+from src.integrations.gmail.fetch import search_emails, list_attachments
+from src.integrations.gmail.downloads import batch_download_pdfs
 from src.pdf.pdf_to_text import extract_text_from_pdf
 from src.llm.parse_receipt import parse_receipt_text, parse_multiple_receipts, ReceiptParsingError
-from src.output.csv_writer import export_receipts_to_csv, export_extracted_texts_to_csv
+from src.export.csv_writer import export_receipts_to_csv, export_extracted_texts_to_csv
 
 
 class GmailExpenseParserApp:

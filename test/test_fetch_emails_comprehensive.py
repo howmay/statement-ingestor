@@ -2,7 +2,7 @@ from unittest.mock import Mock
 
 import pytest
 
-import src.fetch.fetch_emails as fe
+import src.integrations.gmail.fetch as fe
 
 
 def _wrapped_search_emails():

@@ -15,7 +15,7 @@ import sys
 from functools import wraps
 
 # Now import the module
-from src.auth.gmail_auth import (
+from src.integrations.gmail.auth import (
     _test_token_usable,
     SCOPES
 )
@@ -47,7 +47,7 @@ class TestGmailAuthSimple:
         mock_service = Mock()
         mock_service.users().getProfile().execute.return_value = {'emailAddress': 'test@example.com'}
         
-        with patch('src.auth.gmail_auth.build', return_value=mock_service):
+        with patch('src.integrations.gmail.auth.build', return_value=mock_service):
             result = _test_token_usable(mock_creds)
             
             assert result is True
@@ -56,19 +56,19 @@ class TestGmailAuthSimple:
         """Test token usability check when API call fails."""
         mock_creds = Mock()
         
-        with patch('src.auth.gmail_auth.build', side_effect=Exception("API Error")):
+        with patch('src.integrations.gmail.auth.build', side_effect=Exception("API Error")):
             result = _test_token_usable(mock_creds)
             
             assert result is False
     
-    @patch('src.auth.gmail_auth.os.path.exists')
-    @patch('src.auth.gmail_auth.Credentials.from_authorized_user_file')
-    @patch('src.auth.gmail_auth._test_token_usable')
-    @patch('src.auth.gmail_auth.build')
+    @patch('src.integrations.gmail.auth.os.path.exists')
+    @patch('src.integrations.gmail.auth.Credentials.from_authorized_user_file')
+    @patch('src.integrations.gmail.auth._test_token_usable')
+    @patch('src.integrations.gmail.auth.build')
     def test_get_gmail_service_flow(self, mock_build, mock_test_token, mock_creds_from_file, mock_exists):
         """Test the main get_gmail_service function with mocked dependencies."""
         # Import here to avoid circular issues
-        from src.auth.gmail_auth import get_gmail_service
+        from src.integrations.gmail.auth import get_gmail_service
 
         # Setup mocks
         mock_exists.return_value = True
@@ -94,7 +94,7 @@ class TestGmailAuthSimple:
     
     def test_default_paths(self):
         """Test that default paths are imported correctly."""
-        from src.auth.gmail_auth import DEFAULT_CLIENT_SECRETS_FILE, DEFAULT_TOKEN_FILE
+        from src.integrations.gmail.auth import DEFAULT_CLIENT_SECRETS_FILE, DEFAULT_TOKEN_FILE
         
         # These should be strings (paths)
         assert isinstance(DEFAULT_CLIENT_SECRETS_FILE, str)

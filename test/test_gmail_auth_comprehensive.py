@@ -5,7 +5,7 @@ from unittest.mock import Mock, mock_open, patch
 
 import pytest
 
-import src.auth.gmail_auth as gmail_auth
+import src.integrations.gmail.auth as gmail_auth
 
 
 @pytest.fixture(autouse=True)
@@ -35,24 +35,24 @@ def test_is_json_token_path_and_atomic_writes(tmp_path):
 def test_load_credentials_from_token_file_json_and_pickle_paths():
     fake_creds = Mock()
 
-    with patch("src.auth.gmail_auth.os.path.exists", return_value=True), \
-         patch("src.auth.gmail_auth.Credentials.from_authorized_user_file", return_value=fake_creds):
+    with patch("src.integrations.gmail.auth.os.path.exists", return_value=True), \
+         patch("src.integrations.gmail.auth.Credentials.from_authorized_user_file", return_value=fake_creds):
         assert gmail_auth._load_credentials_from_token_file("token.json") is fake_creds
 
-    with patch("src.auth.gmail_auth.os.path.exists", return_value=True), \
-         patch("src.auth.gmail_auth.Credentials.from_authorized_user_file", side_effect=ValueError("bad json")), \
+    with patch("src.integrations.gmail.auth.os.path.exists", return_value=True), \
+         patch("src.integrations.gmail.auth.Credentials.from_authorized_user_file", side_effect=ValueError("bad json")), \
          patch("builtins.open", mock_open(read_data=b"x")), \
-         patch("src.auth.gmail_auth.pickle.load", return_value=fake_creds):
+         patch("src.integrations.gmail.auth.pickle.load", return_value=fake_creds):
         assert gmail_auth._load_credentials_from_token_file("token.json") is fake_creds
 
 
 def test_load_credentials_corrupted_token_quarantine():
-    with patch("src.auth.gmail_auth.os.path.exists", return_value=True), \
-         patch("src.auth.gmail_auth.Credentials.from_authorized_user_file", side_effect=ValueError("bad json")), \
+    with patch("src.integrations.gmail.auth.os.path.exists", return_value=True), \
+         patch("src.integrations.gmail.auth.Credentials.from_authorized_user_file", side_effect=ValueError("bad json")), \
          patch("builtins.open", mock_open(read_data=b"x")), \
-         patch("src.auth.gmail_auth.pickle.load", side_effect=Exception("bad pickle")), \
-         patch("src.auth.gmail_auth.os.replace") as mock_replace, \
-         patch("src.auth.gmail_auth.os.remove"):
+         patch("src.integrations.gmail.auth.pickle.load", side_effect=Exception("bad pickle")), \
+         patch("src.integrations.gmail.auth.os.replace") as mock_replace, \
+         patch("src.integrations.gmail.auth.os.remove"):
         out = gmail_auth._load_credentials_from_token_file("token.json")
 
     assert out is None
@@ -64,8 +64,8 @@ def test_save_credentials_to_token_file_json_and_pickle():
     json_creds.to_json.return_value = '{"token":"x"}'
     pickle_creds = {"token": "x"}
 
-    with patch("src.auth.gmail_auth._atomic_write_text") as mock_text, \
-         patch("src.auth.gmail_auth._atomic_write_bytes") as mock_bytes:
+    with patch("src.integrations.gmail.auth._atomic_write_text") as mock_text, \
+         patch("src.integrations.gmail.auth._atomic_write_bytes") as mock_bytes:
         gmail_auth._save_credentials_to_token_file(json_creds, "token.json")
         gmail_auth._save_credentials_to_token_file(pickle_creds, "token.pickle")
 
@@ -82,11 +82,11 @@ def test_get_oauth2_client_id_secret_env_file_and_missing(monkeypatch):
     monkeypatch.delenv("GOOGLE_CLIENT_SECRET", raising=False)
 
     payload = {"web": {"client-id": "file-cid", "client-secret": "file-secret"}}
-    with patch("src.auth.gmail_auth.os.path.exists", return_value=True), \
+    with patch("src.integrations.gmail.auth.os.path.exists", return_value=True), \
          patch("builtins.open", mock_open(read_data=json.dumps(payload))):
         assert gmail_auth._get_oauth2_client_id_secret() == ("file-cid", "file-secret")
 
-    with patch("src.auth.gmail_auth.os.path.exists", return_value=False):
+    with patch("src.integrations.gmail.auth.os.path.exists", return_value=False):
         with pytest.raises(ValueError):
             gmail_auth._get_oauth2_client_id_secret()
 
@@ -98,10 +98,10 @@ def test_get_gmail_service_with_valid_token():
     creds = Mock(valid=True, expired=False)
     service = Mock()
 
-    with patch("src.auth.gmail_auth.os.path.exists", return_value=True), \
-         patch("src.auth.gmail_auth._load_credentials_from_token_file", return_value=creds), \
-         patch("src.auth.gmail_auth._test_token_usable", return_value=True), \
-         patch("src.auth.gmail_auth.build", return_value=service):
+    with patch("src.integrations.gmail.auth.os.path.exists", return_value=True), \
+         patch("src.integrations.gmail.auth._load_credentials_from_token_file", return_value=creds), \
+         patch("src.integrations.gmail.auth._test_token_usable", return_value=True), \
+         patch("src.integrations.gmail.auth.build", return_value=service):
         out = fn(client_secrets_path="client_secrets.json", token_path="token.json", port=8080)
 
     assert out is service
@@ -115,10 +115,10 @@ def test_get_gmail_service_with_expired_token_refresh_success():
     creds.refresh.side_effect = lambda *_: setattr(creds, "valid", True)
     service = Mock()
 
-    with patch("src.auth.gmail_auth.os.path.exists", return_value=True), \
-         patch("src.auth.gmail_auth._load_credentials_from_token_file", return_value=creds), \
-         patch("src.auth.gmail_auth._test_token_usable", return_value=True), \
-         patch("src.auth.gmail_auth.build", return_value=service):
+    with patch("src.integrations.gmail.auth.os.path.exists", return_value=True), \
+         patch("src.integrations.gmail.auth._load_credentials_from_token_file", return_value=creds), \
+         patch("src.integrations.gmail.auth._test_token_usable", return_value=True), \
+         patch("src.integrations.gmail.auth.build", return_value=service):
         out = fn(client_secrets_path="client_secrets.json", token_path="token.json", port=8080)
 
     creds.refresh.assert_called_once()
@@ -138,13 +138,13 @@ def test_get_gmail_service_new_authentication_oob_flow(monkeypatch):
     def exists_side_effect(path):
         return path == "client_secrets.json"
 
-    with patch("src.auth.gmail_auth.os.path.exists", side_effect=exists_side_effect), \
-         patch("src.auth.gmail_auth._load_credentials_from_token_file", return_value=None), \
-         patch("src.auth.gmail_auth._get_oauth2_client_id_secret", return_value=("cid", "sec")), \
-         patch("src.auth.gmail_auth.Flow.from_client_config", return_value=flow), \
+    with patch("src.integrations.gmail.auth.os.path.exists", side_effect=exists_side_effect), \
+         patch("src.integrations.gmail.auth._load_credentials_from_token_file", return_value=None), \
+         patch("src.integrations.gmail.auth._get_oauth2_client_id_secret", return_value=("cid", "sec")), \
+         patch("src.integrations.gmail.auth.Flow.from_client_config", return_value=flow), \
          patch("builtins.input", return_value="auth-code"), \
-         patch("src.auth.gmail_auth._save_credentials_to_token_file") as mock_save, \
-         patch("src.auth.gmail_auth.build", return_value=service):
+         patch("src.integrations.gmail.auth._save_credentials_to_token_file") as mock_save, \
+         patch("src.integrations.gmail.auth.build", return_value=service):
         out = fn(
             client_secrets_path="client_secrets.json",
             token_path="token.json",
@@ -167,11 +167,11 @@ def test_get_gmail_service_manual_token_flow():
     def exists_side_effect(path):
         return path == "client_secrets.json"
 
-    with patch("src.auth.gmail_auth.os.path.exists", side_effect=exists_side_effect), \
-         patch("src.auth.gmail_auth._load_credentials_from_token_file", return_value=None), \
-         patch("src.auth.gmail_auth.Credentials", return_value=creds), \
-         patch("src.auth.gmail_auth._test_token_usable", return_value=True), \
-         patch("src.auth.gmail_auth.build", return_value=service):
+    with patch("src.integrations.gmail.auth.os.path.exists", side_effect=exists_side_effect), \
+         patch("src.integrations.gmail.auth._load_credentials_from_token_file", return_value=None), \
+         patch("src.integrations.gmail.auth.Credentials", return_value=creds), \
+         patch("src.integrations.gmail.auth._test_token_usable", return_value=True), \
+         patch("src.integrations.gmail.auth.build", return_value=service):
         out = fn(
             client_secrets_path="client_secrets.json",
             token_path="token.json",
@@ -187,8 +187,8 @@ def test_get_gmail_service_token_save_failure(monkeypatch):
     creds = Mock()
     creds.to_json.return_value = '{"token":"x"}'
 
-    with patch("src.auth.gmail_auth._atomic_write_text", side_effect=OSError("permission denied")), \
-         patch("src.auth.gmail_auth.logger.warning") as mock_warn:
+    with patch("src.integrations.gmail.auth._atomic_write_text", side_effect=OSError("permission denied")), \
+         patch("src.integrations.gmail.auth.logger.warning") as mock_warn:
         # Should not raise
         gmail_auth._save_credentials_to_token_file(creds, "token.json")
 
@@ -198,25 +198,25 @@ def test_get_gmail_service_token_save_failure(monkeypatch):
 def test_get_gmail_service_missing_client_secrets_and_build_failure():
     fn = _wrapped_get_gmail_service()
 
-    with patch("src.auth.gmail_auth.os.path.exists", return_value=False):
+    with patch("src.integrations.gmail.auth.os.path.exists", return_value=False):
         with pytest.raises(FileNotFoundError):
             fn(client_secrets_path="missing.json", token_path="token.json", port=8080)
 
     creds = Mock(valid=True, expired=False)
-    with patch("src.auth.gmail_auth.os.path.exists", return_value=True), \
-         patch("src.auth.gmail_auth._load_credentials_from_token_file", return_value=creds), \
-         patch("src.auth.gmail_auth._test_token_usable", return_value=True), \
-         patch("src.auth.gmail_auth.build", side_effect=RuntimeError("build fail")):
+    with patch("src.integrations.gmail.auth.os.path.exists", return_value=True), \
+         patch("src.integrations.gmail.auth._load_credentials_from_token_file", return_value=creds), \
+         patch("src.integrations.gmail.auth._test_token_usable", return_value=True), \
+         patch("src.integrations.gmail.auth.build", side_effect=RuntimeError("build fail")):
         with pytest.raises(ValueError):
             fn(client_secrets_path="client_secrets.json", token_path="token.json", port=8080)
 
 
 def test_test_auth_helper_success_and_failure():
-    with patch("src.auth.gmail_auth.get_gmail_service") as mock_get:
+    with patch("src.integrations.gmail.auth.get_gmail_service") as mock_get:
         svc = Mock()
         svc.users().getProfile().execute.return_value = {"emailAddress": "x@y.com"}
         mock_get.return_value = svc
         assert gmail_auth.test_auth() is True
 
-    with patch("src.auth.gmail_auth.get_gmail_service", side_effect=RuntimeError("no auth")):
+    with patch("src.integrations.gmail.auth.get_gmail_service", side_effect=RuntimeError("no auth")):
         assert gmail_auth.test_auth() is False

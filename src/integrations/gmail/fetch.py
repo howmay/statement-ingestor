@@ -264,7 +264,7 @@ def list_attachments(service, message_id: str) -> List[Dict[str, Any]]:
 if __name__ == '__main__':
     # Simple test when run directly
     import sys
-    from src.auth.gmail_auth import get_gmail_service
+    from src.integrations.gmail.auth import get_gmail_service
     
     logging.basicConfig(level=logging.INFO)
     

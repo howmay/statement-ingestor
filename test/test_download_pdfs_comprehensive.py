@@ -12,7 +12,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent / 'src'))
 
-from src.fetch.download_pdfs import (
+from src.integrations.gmail.downloads import (
     extract_sender_tag,
     download_attachment,
     batch_download_pdfs,
@@ -117,7 +117,7 @@ class TestDownloadPDFsComprehensive:
         """Test get_existing_file_by_md5 function."""
         with patch('os.listdir') as mock_listdir:
             with patch('os.path.join') as mock_join:
-                with patch('src.fetch.download_pdfs.compute_md5_hash') as mock_compute_md5:
+                with patch('src.integrations.gmail.downloads.compute_md5_hash') as mock_compute_md5:
                     # Setup mock
                     mock_listdir.return_value = ["file1.pdf", "file2.pdf", "not_a_pdf.txt"]
                     mock_join.side_effect = lambda dir, file: f"{dir}/{file}"
@@ -145,11 +145,11 @@ class TestDownloadPDFsComprehensive:
             'data': base64.urlsafe_b64encode(b'fake pdf data').decode('UTF-8')
         }
         
-        with patch('src.fetch.download_pdfs.DOWNLOAD_DIR', '/tmp/downloads'):
+        with patch('src.integrations.gmail.downloads.DOWNLOAD_DIR', '/tmp/downloads'):
             with patch('os.makedirs'):
-                with patch('src.fetch.download_pdfs.compute_md5_hash') as mock_compute_md5:
-                    with patch('src.fetch.download_pdfs.get_existing_file_by_md5') as mock_get_existing:
-                        with patch('src.fetch.download_pdfs.build_pdf_filename_by_sender') as mock_build_filename:
+                with patch('src.integrations.gmail.downloads.compute_md5_hash') as mock_compute_md5:
+                    with patch('src.integrations.gmail.downloads.get_existing_file_by_md5') as mock_get_existing:
+                        with patch('src.integrations.gmail.downloads.build_pdf_filename_by_sender') as mock_build_filename:
                             with patch('os.path.exists', return_value=True):
                                 # File already exists by MD5
                                 mock_compute_md5.return_value = "existing_hash"
@@ -182,11 +182,11 @@ class TestDownloadPDFsComprehensive:
             'data': base64.urlsafe_b64encode(b'fake pdf data').decode('UTF-8')
         }
         
-        with patch('src.fetch.download_pdfs.DOWNLOAD_DIR', '/tmp/downloads'):
+        with patch('src.integrations.gmail.downloads.DOWNLOAD_DIR', '/tmp/downloads'):
             with patch('os.makedirs'):
-                with patch('src.fetch.download_pdfs.compute_md5_hash') as mock_compute_md5:
-                    with patch('src.fetch.download_pdfs.get_existing_file_by_md5') as mock_get_existing:
-                        with patch('src.fetch.download_pdfs.build_pdf_filename_by_sender') as mock_build_filename:
+                with patch('src.integrations.gmail.downloads.compute_md5_hash') as mock_compute_md5:
+                    with patch('src.integrations.gmail.downloads.get_existing_file_by_md5') as mock_get_existing:
+                        with patch('src.integrations.gmail.downloads.build_pdf_filename_by_sender') as mock_build_filename:
                             with patch('os.path.exists', return_value=False):
                                 with patch('builtins.open', side_effect=IOError("Disk full")):
                                     # File write should fail
@@ -212,8 +212,8 @@ class TestDownloadPDFsComprehensive:
         }
         
         # Mock list_attachments to return attachment list
-        with patch('src.fetch.download_pdfs.list_attachments') as mock_list_attachments:
-            with patch('src.fetch.download_pdfs.download_attachment') as mock_download:
+        with patch('src.integrations.gmail.downloads.list_attachments') as mock_list_attachments:
+            with patch('src.integrations.gmail.downloads.download_attachment') as mock_download:
                 mock_list_attachments.return_value = [
                     {'attachmentId': 'att1', 'filename': 'test1.pdf'},
                     {'attachmentId': 'att2', 'filename': 'test2.pdf'}
@@ -243,7 +243,7 @@ class TestDownloadPDFsComprehensive:
             'sender': 'bank@example.com'
         }
         
-        with patch('src.fetch.download_pdfs.list_attachments') as mock_list_attachments:
+        with patch('src.integrations.gmail.downloads.list_attachments') as mock_list_attachments:
             mock_list_attachments.return_value = []
             
             results = download_pdf_attachments(mock_service, email_info)
@@ -259,8 +259,8 @@ class TestDownloadPDFsComprehensive:
             'sender': 'bank@example.com'
         }
         
-        with patch('src.fetch.download_pdfs.list_attachments') as mock_list_attachments:
-            with patch('src.fetch.download_pdfs.download_attachment') as mock_download:
+        with patch('src.integrations.gmail.downloads.list_attachments') as mock_list_attachments:
+            with patch('src.integrations.gmail.downloads.download_attachment') as mock_download:
                 mock_list_attachments.return_value = [
                     {'attachmentId': 'att1', 'filename': 'test1.pdf'},
                     {'attachmentId': 'att2', 'filename': 'test2.pdf'},
@@ -291,7 +291,7 @@ class TestDownloadPDFsComprehensive:
             }
         ]
         
-        with patch('src.fetch.download_pdfs.download_pdf_attachments') as mock_download_pdfs:
+        with patch('src.integrations.gmail.downloads.download_pdf_attachments') as mock_download_pdfs:
             # First email has 2 attachments, second has 1
             mock_download_pdfs.side_effect = [
                 ['/tmp/file1.pdf', '/tmp/file2.pdf'],
@@ -322,7 +322,7 @@ class TestDownloadPDFsComprehensive:
             }
         ]
         
-        with patch('src.fetch.download_pdfs.download_pdf_attachments') as mock_download_pdfs:
+        with patch('src.integrations.gmail.downloads.download_pdf_attachments') as mock_download_pdfs:
             # First succeeds, second raises exception
             mock_download_pdfs.side_effect = [
                 ['/tmp/file1.pdf'],

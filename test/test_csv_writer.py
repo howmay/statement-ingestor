@@ -2,7 +2,7 @@
 
 import os
 import csv
-from src.output.csv_writer import export_receipts_to_csv, export_extracted_texts_to_csv
+from src.export.csv_writer import export_receipts_to_csv, export_extracted_texts_to_csv
 
 
 class TestCSVWriter:

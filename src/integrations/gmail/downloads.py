@@ -8,7 +8,7 @@ from email.utils import parseaddr
 from typing import List, Dict, Any, Optional
 from src.core.config import DOWNLOAD_DIR
 from src.support.retry import retry_gmail
-from src.fetch.fetch_emails import list_attachments
+from src.integrations.gmail.fetch import list_attachments
 
 logger = logging.getLogger(__name__)
 
@@ -409,7 +409,7 @@ def batch_download_pdfs(service, email_list: List[Dict[str, Any]]) -> List[Dict[
 if __name__ == '__main__':
     # Simple test when run directly
     import sys
-    from src.auth.gmail_auth import get_gmail_service
+    from src.integrations.gmail.auth import get_gmail_service
     from .fetch_emails import search_emails
     
     logging.basicConfig(level=logging.INFO)
