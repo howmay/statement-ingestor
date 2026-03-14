@@ -5,10 +5,30 @@ import pytest
 from unittest.mock import Mock, patch, MagicMock
 import sys
 from pathlib import Path
+import re
 
 sys.path.insert(0, str(Path(__file__).parent.parent / 'src'))
 
 from src.runtime.app import GmailExpenseParserApp
+
+
+def test_active_code_does_not_use_legacy_src_import_paths():
+    """Active code should only import from the refactored src package layout."""
+    project_root = Path(__file__).parent.parent
+    active_paths = [project_root / "main.py", project_root / "src"]
+    legacy_imports = re.compile(
+        r"(from|import)\s+src\.(config|auth|fetch|output|bank_parsers|llm|ocr|pdf|utils)\b"
+    )
+    offenders = []
+
+    for active_path in active_paths:
+        files = [active_path] if active_path.is_file() else active_path.rglob("*.py")
+        for file_path in files:
+            text = file_path.read_text(encoding="utf-8")
+            if legacy_imports.search(text):
+                offenders.append(str(file_path.relative_to(project_root)))
+
+    assert offenders == []
 
 
 @pytest.fixture
