@@ -26,12 +26,14 @@ def test_parse_csv_statement_maps_known_columns():
     assert float(exchange["amount"]) == 2742.04
     assert exchange["currency"] == "TRY"
     assert exchange["source"] == "CSV Attachment"
+    assert exchange["cashflow_side"] == "income"
 
     payment = transactions[1]
     assert payment["date"] == "2025-03-17"
     assert payment["expense_name"] == "turgame"
     assert float(payment["amount"]) == -312.94
     assert payment["currency"] == "TRY"
+    assert payment["cashflow_side"] == "expense"
 
 
 def test_parse_csv_statement_skips_non_completed_rows():

@@ -29,6 +29,7 @@ def parse_csv_statement(text: str, source_info: Optional[Dict[str, Any]] = None)
             {
                 "date": date,
                 "amount": amount,
+                "cashflow_side": _infer_cashflow_side(amount),
                 "currency": currency,
                 "expense_name": description[:120],
                 "expense_type": "Other",
@@ -55,6 +56,14 @@ def _parse_float(value: Any) -> Optional[float]:
         return float(raw)
     except ValueError:
         return None
+
+
+def _infer_cashflow_side(amount: float) -> Optional[str]:
+    if amount > 0:
+        return "income"
+    if amount < 0:
+        return "expense"
+    return None
 
 
 def _parse_datetime_to_date(value: Any) -> Optional[str]:
