@@ -131,6 +131,27 @@ class TestFetchEmails:
         mock_list_call.assert_called()
         mock_get_call.assert_called_with(userId='me', id='msg1', format='metadata', metadataHeaders=['From', 'Subject'])
 
+    @patch('src.integrations.gmail.fetch.STATEMENT_SEARCH_PROFILES', [
+        {
+            "name": "fubon-bank",
+            "senders": ["service@bhu.taipeifubon.com.tw"],
+            "subject_keywords": ["對帳單", "電子對帳單"],
+            "exclude_keywords": ["OTP"],
+            "has_pdf_attachment": True,
+        }
+    ])
+    def test_search_emails_uses_statement_profiles_by_default(self):
+        mock_service = Mock()
+
+        mock_service.users().messages().list().execute.return_value = {'messages': []}
+
+        search_emails(mock_service, max_results=10)
+
+        query = mock_service.users().messages().list.call_args.kwargs['q']
+        assert 'from:"service@bhu.taipeifubon.com.tw"' in query
+        assert 'subject:"對帳單"' in query
+        assert 'filename:pdf' in query
+
     def test_search_emails_no_results(self):
         """Test searching emails when no results are found."""
         mock_service = Mock()
