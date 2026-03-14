@@ -92,6 +92,7 @@ class FubonBankParser(BaseBankParser):
                 raw_line=line,
                 parser_name='FubonBankParser',
             ))
+            txs[-1]['cashflow_side'] = 'expense'
 
         return BankParseResult(
             matched=True,
