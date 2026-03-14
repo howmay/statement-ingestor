@@ -1,0 +1,6 @@
+Type,Product,Started Date,Completed Date,Description,Amount,Fee,Currency,State,Balance
+Exchange,Current,2025-03-16 23:12:00,2025-03-16 23:12:00,Exchanged to TRY,2742.04,27.42,TRY,COMPLETED,2714.62
+Card Payment,Current,2025-06-17 21:36:40,2025-06-18 09:19:47,Eneba,-1212.24,0.00,TRY,COMPLETED,563.57
+Exchange,Current,2025-11-01 21:08:41,2025-11-01 21:08:41,Exchanged to SGD,-563.57,0.00,TRY,COMPLETED,0.00
+Topup,Current,2025-03-16 23:10:23,2025-03-16 23:10:31,Transfer from *6221,100.00,0.00,SGD,COMPLETED,100.36
+Card Payment,Current,2025-01-06 11:58:08,,Uber,-3496,0,JPY,REVERTED,
