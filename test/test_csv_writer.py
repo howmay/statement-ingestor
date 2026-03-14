@@ -8,6 +8,32 @@ from src.export.csv_writer import export_receipts_to_csv, export_extracted_texts
 class TestCSVWriter:
     """Test suite for CSV output writer functions."""
 
+    def test_export_receipts_uses_income_and_expense_columns(self, tmp_path):
+        receipts = [
+            {
+                'date': '2026-03-01',
+                'amount': 100.0,
+                'currency': 'TWD',
+                'expense_name': 'Card Spend',
+                'expense_type': 'Shopping',
+                'source': 'Sinopac Credit Card',
+                'source_file': 'card.pdf',
+            }
+        ]
+
+        output_dir = tmp_path / 'output'
+        filepath = export_receipts_to_csv(receipts, output_dir=str(output_dir)).split(',')[0]
+
+        with open(filepath, 'r', encoding='utf-8-sig') as csvfile:
+            reader = csv.DictReader(csvfile)
+            rows = list(reader)
+
+        assert 'income' in reader.fieldnames
+        assert 'expense' in reader.fieldnames
+        assert 'amount' not in reader.fieldnames
+        assert rows[0]['income'] == ''
+        assert rows[0]['expense'] == '100.00'
+
     def test_export_receipts_to_csv_success_month_partition(self, tmp_path):
         """Receipts should be exported into month-partitioned CSV file."""
         receipts = [
@@ -36,10 +62,77 @@ class TestCSVWriter:
             rows = list(reader)
             assert len(rows) == 1
             assert rows[0]['date'] == '2023-01-01'
-            assert rows[0]['amount'] == '100.50'
+            assert rows[0]['income'] == ''
+            assert rows[0]['expense'] == '100.50'
             assert rows[0]['currency'] == 'TWD'
             assert rows[0]['expense_name'] == 'Test Expense'
             assert rows[0]['source_file'] == 'a.pdf'
+
+    def test_credit_card_negative_amount_exports_to_income(self, tmp_path):
+        receipts = [
+            {
+                'date': '2026-03-01',
+                'amount': -11.0,
+                'currency': 'TWD',
+                'expense_name': 'Cashback',
+                'expense_type': 'Reward',
+                'source': 'Sinopac Credit Card',
+                'source_file': 'card.pdf',
+            }
+        ]
+
+        output_dir = tmp_path / 'output'
+        filepath = export_receipts_to_csv(receipts, output_dir=str(output_dir)).split(',')[0]
+
+        with open(filepath, 'r', encoding='utf-8-sig') as csvfile:
+            rows = list(csv.DictReader(csvfile))
+
+        assert rows[0]['income'] == '11.00'
+        assert rows[0]['expense'] == ''
+
+    def test_bank_positive_amount_exports_to_income(self, tmp_path):
+        receipts = [
+            {
+                'date': '2026-03-01',
+                'amount': 2500.0,
+                'currency': 'TWD',
+                'expense_name': 'Salary',
+                'expense_type': 'Income',
+                'source': 'Fubon Bank',
+                'source_file': 'bank.pdf',
+            }
+        ]
+
+        output_dir = tmp_path / 'output'
+        filepath = export_receipts_to_csv(receipts, output_dir=str(output_dir)).split(',')[0]
+
+        with open(filepath, 'r', encoding='utf-8-sig') as csvfile:
+            rows = list(csv.DictReader(csvfile))
+
+        assert rows[0]['income'] == '2500.00'
+        assert rows[0]['expense'] == ''
+
+    def test_bank_negative_amount_exports_to_expense(self, tmp_path):
+        receipts = [
+            {
+                'date': '2026-03-01',
+                'amount': -2500.0,
+                'currency': 'TWD',
+                'expense_name': 'Transfer Out',
+                'expense_type': 'Transfer',
+                'source': 'Fubon Bank',
+                'source_file': 'bank.pdf',
+            }
+        ]
+
+        output_dir = tmp_path / 'output'
+        filepath = export_receipts_to_csv(receipts, output_dir=str(output_dir)).split(',')[0]
+
+        with open(filepath, 'r', encoding='utf-8-sig') as csvfile:
+            rows = list(csv.DictReader(csvfile))
+
+        assert rows[0]['income'] == ''
+        assert rows[0]['expense'] == '2500.00'
 
     def test_export_receipts_to_csv_dedupe_on_rerun(self, tmp_path):
         """Same rows should not be appended repeatedly across reruns."""

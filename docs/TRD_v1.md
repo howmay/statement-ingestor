@@ -45,9 +45,9 @@ This document describes the technical requirements for the **Gmail Expense Parse
 ### 3.4 Data Schema & Normalization
 Each transaction record includes:
 - `Date` (YYYY-MM-DD)
-- `Amount` (Numeric, normalized)
+- `收入` (Populated only when the exported row is classified as income)
+- `支出` (Populated only when the exported row is classified as expense)
 - `Currency` (TWD, USD, etc.)
-- `Category` (Income / Expense)
 - `Description` / `Expense Name`
 - `Transaction Type` (Withdrawal, Deposit, Payment, etc.)
 - `Source` (Bank/Card name)
@@ -57,11 +57,14 @@ Each transaction record includes:
 ### 3.5 Deduplication & Quality Control
 - **Dual-Layer Deduplication**:
   - **File Level**: Skip previously processed PDF MD5s.
-  - **Transaction Level**: Deduplicate using a composite key `(Date, Amount, Currency, Description, Source)`.
+  - **Transaction Level**: Deduplicate using a composite key `(Date, 收入, 支出, Currency, Description, Source)`.
 - **Validation**: Strict mode (`STRICT_BANK_PARSER`) to ensure high-quality extraction from known formats.
 
 ### 3.6 Output & Delivery
 - **CSV Export**: Grouped by month (`YYYY-MM_expenses.csv`).
+- **Classification Rule**:
+  - Credit-card statements: negative signed amounts export to `收入`, positive signed amounts export to `支出`
+  - Bank statements: positive signed amounts export to `收入`, negative signed amounts export to `支出`
 - **Group Delivery**: (Planned) Automated sync to designated group chat via Webhook.
 
 ## 4. Execution Flow

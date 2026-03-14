@@ -11,7 +11,8 @@ logger = logging.getLogger(__name__)
 
 CSV_COLUMNS = [
     ('date', '日期'),
-    ('amount', '金額'),
+    ('income', '收入'),
+    ('expense', '支出'),
     ('currency', '幣別'),
     ('expense_name', '消費名目'),
     ('expense_type', '類型'),
@@ -30,38 +31,74 @@ def _transaction_month(receipt: Dict[str, Any]) -> str:
     return 'unknown'
 
 
-def _receipt_key(receipt: Dict[str, Any]) -> Tuple[str, str, str, str, str]:
+def _receipt_key(receipt: Dict[str, Any]) -> Tuple[str, str, str, str, str, str]:
     """Stable key for de-duplication across reruns."""
-    amount_value = receipt.get('amount')
-    amount_str = ''
-    if amount_value is not None:
-        try:
-            amount_str = f"{float(amount_value):.2f}"
-        except Exception:
-            amount_str = str(amount_value)
+    income_str, expense_str = _split_income_and_expense(receipt)
 
     return (
         str(receipt.get('date') or '').strip(),
-        amount_str,
+        income_str,
+        expense_str,
         str(receipt.get('currency') or '').strip(),
         str(receipt.get('expense_name') or '').strip(),
         str(receipt.get('source_file') or receipt.get('original_file') or '').strip(),
     )
 
 
+def _detect_statement_kind(receipt: Dict[str, Any]) -> str:
+    source = str(receipt.get('source') or '').lower()
+    sender_tag = str(receipt.get('sender_tag') or '').lower()
+    source_file = str(receipt.get('source_file') or receipt.get('original_file') or '').lower()
+    hint = ' '.join([source, sender_tag, source_file])
+
+    if any(token in hint for token in ['credit card', '信用卡', 'hsbc', 'sinopac credit', 'first bank credit']):
+        return 'credit_card'
+    if any(token in hint for token in [' bank', '銀行', '對帳單', 'fubon bank']):
+        return 'bank'
+    return 'unknown'
+
+
+def _split_income_and_expense(receipt: Dict[str, Any]) -> Tuple[str, str]:
+    amount = receipt.get('amount')
+    if amount is None:
+        return '', ''
+
+    try:
+        value = float(amount)
+    except Exception:
+        return '', ''
+
+    if value == 0:
+        return '', ''
+
+    statement_kind = _detect_statement_kind(receipt)
+
+    if statement_kind == 'credit_card':
+        if value < 0:
+            return f"{abs(value):.2f}", ''
+        return '', f"{abs(value):.2f}"
+
+    if statement_kind == 'bank':
+        if value > 0:
+            return f"{abs(value):.2f}", ''
+        return '', f"{abs(value):.2f}"
+
+    return '', ''
+
+
 def _format_export_row(receipt: Dict[str, Any]) -> Dict[str, str]:
     row: Dict[str, str] = {}
     source_file = receipt.get('source_file') or receipt.get('original_file') or ''
+    income_str, expense_str = _split_income_and_expense(receipt)
 
     for key, _display in CSV_COLUMNS:
         value = source_file if key == 'source_file' else receipt.get(key)
-        if value is None:
+        if key == 'income':
+            row[key] = income_str
+        elif key == 'expense':
+            row[key] = expense_str
+        elif value is None:
             row[key] = ''
-        elif key == 'amount':
-            try:
-                row[key] = f"{float(value):.2f}"
-            except Exception:
-                row[key] = str(value)
         else:
             row[key] = str(value)
 
@@ -109,7 +146,8 @@ def export_receipts_to_csv(receipts: List[Dict[str, Any]], output_dir: str = "ou
         for row in existing_rows:
             existing_keys.add((
                 str(row.get('date') or '').strip(),
-                str(row.get('amount') or '').strip(),
+                str(row.get('income') or '').strip(),
+                str(row.get('expense') or '').strip(),
                 str(row.get('currency') or '').strip(),
                 str(row.get('expense_name') or '').strip(),
                 str(row.get('source_file') or '').strip(),
@@ -120,7 +158,8 @@ def export_receipts_to_csv(receipts: List[Dict[str, Any]], output_dir: str = "ou
             row = _format_export_row(receipt)
             key = (
                 row.get('date', '').strip(),
-                row.get('amount', '').strip(),
+                row.get('income', '').strip(),
+                row.get('expense', '').strip(),
                 row.get('currency', '').strip(),
                 row.get('expense_name', '').strip(),
                 row.get('source_file', '').strip(),

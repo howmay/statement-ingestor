@@ -6,10 +6,12 @@ from unittest.mock import Mock, patch, MagicMock
 import sys
 from pathlib import Path
 import re
+import csv
 
 sys.path.insert(0, str(Path(__file__).parent.parent / 'src'))
 
 from src.runtime.app import GmailExpenseParserApp
+from src.export.csv_writer import export_receipts_to_csv
 
 
 def test_active_code_does_not_use_legacy_src_import_paths():
@@ -258,6 +260,25 @@ class TestGmailExpenseParserAppExportResults:
             result = app.export_results()
             
             assert result is True
+
+    def test_export_receipts_to_csv_writes_bank_income_columns(self, tmp_path):
+        receipts = [{
+            'date': '2026-03-01',
+            'amount': 2500.0,
+            'currency': 'TWD',
+            'expense_name': 'Salary',
+            'expense_type': 'Income',
+            'source': 'Fubon Bank',
+            'source_file': 'bank.pdf',
+        }]
+
+        filepath = export_receipts_to_csv(receipts, output_dir=str(tmp_path)).split(',')[0]
+
+        with open(filepath, 'r', encoding='utf-8-sig') as csvfile:
+            rows = list(csv.DictReader(csvfile))
+
+        assert rows[0]['income'] == '2500.00'
+        assert rows[0]['expense'] == ''
 
 
 def test_new_src_packages_exist():
