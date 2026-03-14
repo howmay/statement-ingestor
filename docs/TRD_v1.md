@@ -9,7 +9,7 @@
 
 ## 1. Overview
 
-This document describes the technical requirements for the **Gmail Expense Parser**, an automated tool to extract **all income and expense transactions** from credit card statements, bank accounts, and third-party payments found in Gmail. It exports structured CSV data for personal finance tracking.
+This document describes the technical requirements for the **Gmail Expense Parser**, an automated tool to extract income and expense transactions from **monthly credit-card statements and bank statements** found in Gmail. Merchant receipts are intentionally excluded from the primary search path to reduce duplicate counting.
 
 ## 2. Technical Stack
 
@@ -23,13 +23,14 @@ This document describes the technical requirements for the **Gmail Expense Parse
 
 ### 3.1 Authentication & Configuration
 - **Gmail API**: OAuth2 flow with token caching.
-- **Config**: `.env` for API keys, target senders, and keywords.
+- **Config**: `.env` for API keys and statement search profiles.
 - **Bank Passwords**: Encrypted or environment-based password support for protected PDFs.
 - **Active Paths**: `src/core/`, `src/support/`, and `src/integrations/gmail/`.
 
 ### 3.2 Email Filtering & Attachment Fetching
-- **Multi-criteria Search**: Sender allow-list, subject keywords, date ranges.
-- **Attachment Support**: PDF, Images, and Plain Text emails.
+- **Statement-Only Search**: Gmail query generation is driven by `STATEMENT_SEARCH_PROFILES`, with each profile defining sender constraints, statement subject keywords, optional exclusion keywords, and PDF attachment requirements.
+- **Legacy Fallback**: `TARGET_SENDERS` and `TARGET_KEYWORDS` remain available only as compatibility fallback when statement profiles are absent.
+- **Attachment Support**: Statement emails with PDF attachments are the primary target.
 - **Deduplication (Fetch Level)**: File-level deduplication using MD5 hashes to avoid redundant processing.
 
 ### 3.3 Multi-Strategy Parsing Engine
@@ -70,7 +71,7 @@ Each transaction record includes:
 ## 4. Execution Flow
 
 1. **Initialize**: Enter through `main.py`, load `.env`, validate config, and authenticate via `src/runtime/app.py`.
-2. **Fetch**: Search Gmail for target emails within the date range.
+2. **Fetch**: Search Gmail for target monthly statement emails within the date range.
 3. **Download**: Save unique attachments (deduped by MD5).
 4. **Extract**: Convert PDF/Images to text (using OCR if needed).
 5. **Parse**: Execute parsing strategy (Bank Factory -> LLM -> Heuristics).
