@@ -59,6 +59,40 @@ class TestFetchEmails:
         # before is exclusive, so date_to + 1 day
         assert 'before:2026/04/01' in query
 
+    def test_build_gmail_query_from_statement_profiles(self):
+        profiles = [
+            {
+                "name": "fubon-bank",
+                "senders": ["service@bhu.taipeifubon.com.tw"],
+                "subject_keywords": ["對帳單", "電子對帳單"],
+                "exclude_keywords": ["OTP", "驗證"],
+                "has_pdf_attachment": True,
+            },
+            {
+                "name": "hsbc-card",
+                "senders": ["cards@estatements.hsbc.com.tw"],
+                "subject_keywords": ["信用卡帳單", "eStatement"],
+                "exclude_keywords": [],
+                "has_pdf_attachment": True,
+            },
+        ]
+
+        query = build_gmail_query(
+            senders=[],
+            keywords=[],
+            statement_profiles=profiles,
+            date_from="2026-03-01",
+            date_to="2026-03-31",
+        )
+
+        assert 'from:"service@bhu.taipeifubon.com.tw"' in query
+        assert 'from:"cards@estatements.hsbc.com.tw"' in query
+        assert 'subject:"對帳單"' in query
+        assert 'subject:"信用卡帳單"' in query
+        assert '-"OTP"' in query
+        assert "filename:pdf" in query
+        assert 'before:2026/04/01' in query
+
     @patch('src.integrations.gmail.fetch.TARGET_SENDERS', ["default@example.com"])
     @patch('src.integrations.gmail.fetch.TARGET_KEYWORDS', ["default"])
     def test_search_emails_success(self):
