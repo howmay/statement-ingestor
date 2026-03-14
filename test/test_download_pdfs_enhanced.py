@@ -8,7 +8,7 @@ import hashlib
 from unittest.mock import Mock, patch, mock_open
 import sys
 
-from src.fetch.download_pdfs import (
+from src.integrations.gmail.downloads import (
     extract_sender_tag,
     extract_sender_display_name,
     build_sender_base64_suffix,
@@ -27,7 +27,7 @@ class TestDownloadPDFsEnhanced:
     @pytest.fixture(autouse=True)
     def mock_retry(self):
         """Mock the retry decorator."""
-        with patch('src.utils.retry.retry_gmail', side_effect=lambda f: f):
+        with patch('src.support.retry.retry_gmail', side_effect=lambda f: f):
             yield
 
     def test_extract_sender_tag_variations(self):
@@ -71,8 +71,8 @@ class TestDownloadPDFsEnhanced:
         expected = hashlib.md5(data).hexdigest()
         assert compute_md5_hash(data) == expected
 
-    @patch('src.fetch.download_pdfs.os.path.exists')
-    @patch('src.fetch.download_pdfs.os.listdir')
+    @patch('src.integrations.gmail.downloads.os.path.exists')
+    @patch('src.integrations.gmail.downloads.os.listdir')
     def test_get_existing_file_by_md5(self, mock_listdir, mock_exists):
         """Test finding existing file by MD5."""
         mock_exists.return_value = True
@@ -83,14 +83,14 @@ class TestDownloadPDFsEnhanced:
 
         with patch('builtins.open', mock_open(read_data=data)):
             # Mock os.path.isfile to return True for the existing file
-            with patch('src.fetch.download_pdfs.os.path.isfile', return_value=True):
+            with patch('src.integrations.gmail.downloads.os.path.isfile', return_value=True):
                 result = get_existing_file_by_md5(target_md5, "/tmp/dir")
                 assert result == "/tmp/dir/existing.pdf"
 
-    @patch('src.fetch.download_pdfs.DOWNLOAD_DIR', '/tmp/downloads')
-    @patch('src.fetch.download_pdfs.os.makedirs')
-    @patch('src.fetch.download_pdfs.get_existing_file_by_md5')
-    @patch('src.fetch.download_pdfs.os.path.exists')
+    @patch('src.integrations.gmail.downloads.DOWNLOAD_DIR', '/tmp/downloads')
+    @patch('src.integrations.gmail.downloads.os.makedirs')
+    @patch('src.integrations.gmail.downloads.get_existing_file_by_md5')
+    @patch('src.integrations.gmail.downloads.os.path.exists')
     @patch('builtins.open', new_callable=mock_open)
     def test_download_attachment_already_exists(self, mock_file, mock_exists, mock_get_existing, mock_makedirs):
         """Test skipping download if file exists."""
@@ -106,9 +106,9 @@ class TestDownloadPDFsEnhanced:
         assert result == "/tmp/downloads/existing.pdf"
         mock_file.assert_not_called()
 
-    @patch('src.fetch.download_pdfs.download_attachment')
-    @patch('src.fetch.download_pdfs.extract_sender_tag')
-    @patch('src.fetch.download_pdfs.list_attachments')
+    @patch('src.integrations.gmail.downloads.download_attachment')
+    @patch('src.integrations.gmail.downloads.extract_sender_tag')
+    @patch('src.integrations.gmail.downloads.list_attachments')
     def test_download_pdf_attachments(self, mock_list, mock_tag, mock_download_att):
         """Test downloading attachments from a message."""
         mock_service = Mock()
@@ -123,7 +123,7 @@ class TestDownloadPDFsEnhanced:
         assert results[0]['filepath'] == "/path/to/f1.pdf"
         assert results[0]['sender_tag'] == "tag"
 
-    @patch('src.fetch.download_pdfs.download_pdf_attachments')
+    @patch('src.integrations.gmail.downloads.download_pdf_attachments')
     def test_batch_download_pdfs(self, mock_download):
         """Test batch downloading."""
         mock_service = Mock()

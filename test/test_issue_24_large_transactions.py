@@ -13,7 +13,7 @@ from datetime import datetime
 # Add project root to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
-from src.llm.parse_receipt import (
+from src.parsing.llm.parse_receipt import (
     parse_receipt_text,
     _fix_truncated_json,
     _fix_truncated_json_enhanced,

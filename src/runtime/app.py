@@ -14,11 +14,12 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # Import enhanced utilities
 try:
-    from src.utils.logger import setup_logging, get_logger
-    from src.utils.config_validator import validate_configuration as validate_config_util
-    from src.utils.progress import ProgressIndicator, ProgressStyle, track_progress
-    from src.utils.retry import retry_gmail, retry_openai
-    from src.utils.cache import ResultCache
+    from src.support.logger import setup_logging, get_logger
+    from src.support.config_validator import validate_configuration as validate_config_util
+    from src.support.config_validator import ConfigValidator
+    from src.support.progress import ProgressIndicator, ProgressStyle, track_progress
+    from src.support.retry import retry_gmail, retry_openai
+    from src.support.cache import ResultCache
     ENHANCEMENTS_AVAILABLE = True
 except ImportError:
     # Fallback to basic logging if enhancements not available
@@ -26,13 +27,13 @@ except ImportError:
     print("⚠ Enhancement modules not found. Running in compatibility mode.")
 
 # Import project modules
-from src.config import TARGET_SENDERS, TARGET_KEYWORDS, DOWNLOAD_DIR, get_bank_password
-from src.auth.gmail_auth import get_gmail_service
-from src.fetch.fetch_emails import search_emails, list_attachments
-from src.fetch.download_pdfs import batch_download_pdfs
-from src.pdf.pdf_to_text import extract_text_from_pdf
-from src.llm.parse_receipt import parse_receipt_text, parse_multiple_receipts, ReceiptParsingError
-from src.output.csv_writer import export_receipts_to_csv, export_extracted_texts_to_csv
+from src.core.config import TARGET_SENDERS, TARGET_KEYWORDS, DOWNLOAD_DIR, get_bank_password
+from src.integrations.gmail.auth import get_gmail_service
+from src.integrations.gmail.fetch import search_emails, list_attachments
+from src.integrations.gmail.downloads import batch_download_pdfs
+from src.parsing.pdf.pdf_to_text import extract_text_from_pdf
+from src.parsing.llm.parse_receipt import parse_receipt_text, parse_multiple_receipts, ReceiptParsingError
+from src.export.csv_writer import export_receipts_to_csv, export_extracted_texts_to_csv
 
 
 class GmailExpenseParserApp:
@@ -107,7 +108,6 @@ class GmailExpenseParserApp:
         if self.use_enhancements:
             try:
                 # Use the enhanced validator
-                from src.utils.config_validator import ConfigValidator
                 validator = ConfigValidator()
                 validation_result = validator.validate_all()
 

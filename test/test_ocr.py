@@ -6,7 +6,7 @@ from unittest.mock import Mock, MagicMock, patch
 import os
 import sys
 
-from src.ocr.hsbc_ocr import (
+from src.parsing.ocr.hsbc_ocr import (
     enrich_hsbc_transactions_with_ocr,
     _get_tesseract_langs,
     _normalize_md,
@@ -72,8 +72,8 @@ class TestHSBCOCR:
         assert rows[2]['tx_md'] == "10/05"
         assert rows[2]['amount'] == -50.0   # CR should be negative (Refund)
 
-    @patch('src.ocr.hsbc_ocr.shutil.which')
-    @patch('src.ocr.hsbc_ocr.os.path.exists')
+    @patch('src.parsing.ocr.hsbc_ocr.shutil.which')
+    @patch('src.parsing.ocr.hsbc_ocr.os.path.exists')
     def test_enrich_hsbc_skipped_conditions(self, mock_exists, mock_which):
         """Test conditions where OCR is skipped."""
         transactions = [{'expense_name': '01/05 01/05 100.00'}]
@@ -90,10 +90,10 @@ class TestHSBCOCR:
         mock_which.return_value = None
         assert enrich_hsbc_transactions_with_ocr(transactions, {'filepath': 'test.pdf'}) == 0
 
-    @patch('src.ocr.hsbc_ocr._ocr_statement_rows')
-    @patch('src.ocr.hsbc_ocr.shutil.which')
-    @patch('src.ocr.hsbc_ocr.os.path.exists')
-    @patch('src.ocr.hsbc_ocr._get_tesseract_langs')
+    @patch('src.parsing.ocr.hsbc_ocr._ocr_statement_rows')
+    @patch('src.parsing.ocr.hsbc_ocr.shutil.which')
+    @patch('src.parsing.ocr.hsbc_ocr.os.path.exists')
+    @patch('src.parsing.ocr.hsbc_ocr._get_tesseract_langs')
     def test_enrich_hsbc_success(self, mock_langs, mock_exists, mock_which, mock_ocr_rows):
         """Test successful enrichment."""
         mock_exists.return_value = True

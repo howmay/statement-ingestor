@@ -3,11 +3,11 @@ Comprehensive tests for bank parsers.
 """
 import pytest
 from datetime import datetime
-from src.bank_parsers.hsbc import HsbcTwCardParser
-from src.bank_parsers.fubon import FubonBankParser, FubonCreditCardParser
-from src.bank_parsers.esun import EsunCardParser
-from src.bank_parsers.dbs import DbsSgCardParser
-from src.bank_parsers.factory import get_bank_parser, parse_with_bank_factory
+from src.parsing.banks.hsbc import HsbcTwCardParser
+from src.parsing.banks.fubon import FubonBankParser, FubonCreditCardParser
+from src.parsing.banks.esun import EsunCardParser
+from src.parsing.banks.dbs import DbsSgCardParser
+from src.parsing.banks.factory import get_bank_parser, parse_with_bank_factory
 
 class TestHSBCParser:
     def test_hsbc_tw_format(self):

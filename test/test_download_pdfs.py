@@ -10,7 +10,7 @@ from functools import wraps
 
 # No more sys.modules hack here
 
-from src.fetch.download_pdfs import extract_sender_tag, download_attachment, batch_download_pdfs
+from src.integrations.gmail.downloads import extract_sender_tag, download_attachment, batch_download_pdfs
 
 
 class TestDownloadPDFs:
@@ -19,7 +19,7 @@ class TestDownloadPDFs:
     @pytest.fixture(autouse=True)
     def mock_retry(self):
         """Mock the retry decorator for all tests in this class."""
-        with patch('src.utils.retry.retry_gmail', side_effect=lambda f: f):
+        with patch('src.support.retry.retry_gmail', side_effect=lambda f: f):
             yield
 
     def test_extract_sender_tag(self):
@@ -30,11 +30,11 @@ class TestDownloadPDFs:
         assert extract_sender_tag("bank@example.com") == "example_com"
         assert extract_sender_tag("unknown") == "unknown"
 
-    @patch('src.fetch.download_pdfs.DOWNLOAD_DIR', '/tmp/downloads')
-    @patch('src.fetch.download_pdfs.os.makedirs')
-    @patch('src.fetch.download_pdfs.compute_md5_hash')
-    @patch('src.fetch.download_pdfs.get_existing_file_by_md5')
-    @patch('src.fetch.download_pdfs.build_pdf_filename_by_sender')
+    @patch('src.integrations.gmail.downloads.DOWNLOAD_DIR', '/tmp/downloads')
+    @patch('src.integrations.gmail.downloads.os.makedirs')
+    @patch('src.integrations.gmail.downloads.compute_md5_hash')
+    @patch('src.integrations.gmail.downloads.get_existing_file_by_md5')
+    @patch('src.integrations.gmail.downloads.build_pdf_filename_by_sender')
     @patch('builtins.open', new_callable=Mock)
     def test_download_attachment_success(
         self, mock_open_func, mock_build_filename, mock_get_existing, mock_hash, mock_makedirs, tmp_path
@@ -60,7 +60,7 @@ class TestDownloadPDFs:
         mock_build_filename.return_value = "bank_test_123.pdf"
         
         # We need to mock os.path.exists to return False so it doesn't try to increment suffix
-        with patch('src.fetch.download_pdfs.os.path.exists', return_value=False):
+        with patch('src.integrations.gmail.downloads.os.path.exists', return_value=False):
             filepath = download_attachment(mock_service, 'msg1', attachment_info, 'bank@example.com')
             
             assert filepath == '/tmp/downloads/bank_test_123.pdf'

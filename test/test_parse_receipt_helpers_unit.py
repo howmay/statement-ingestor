@@ -1,4 +1,4 @@
-from src.llm.parse_receipt import (
+from src.parsing.llm.parse_receipt import (
     _calculate_max_tokens,
     _extract_json_payload,
     _fix_truncated_json_enhanced,

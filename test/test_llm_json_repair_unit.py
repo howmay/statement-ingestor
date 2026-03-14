@@ -1,6 +1,6 @@
 import json
 
-from src.llm import json_repair
+from src.parsing.llm import json_repair
 
 
 def test_extract_json_payload_from_fenced_text():

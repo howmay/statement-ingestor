@@ -9,7 +9,7 @@ from functools import wraps
 # No more sys.modules hack here
 
 # Now import the module
-from src.fetch.fetch_emails import build_gmail_query, search_emails
+from src.integrations.gmail.fetch import build_gmail_query, search_emails
 
 
 class TestFetchEmails:
@@ -18,7 +18,7 @@ class TestFetchEmails:
     @pytest.fixture(autouse=True)
     def mock_retry(self):
         """Mock the retry decorator for all tests in this class."""
-        with patch('src.utils.retry.retry_gmail', side_effect=lambda f: f):
+        with patch('src.support.retry.retry_gmail', side_effect=lambda f: f):
             yield
 
     def test_build_gmail_query_single_sender_single_keyword(self):
@@ -59,8 +59,8 @@ class TestFetchEmails:
         # before is exclusive, so date_to + 1 day
         assert 'before:2026/04/01' in query
 
-    @patch('src.fetch.fetch_emails.TARGET_SENDERS', ["default@example.com"])
-    @patch('src.fetch.fetch_emails.TARGET_KEYWORDS', ["default"])
+    @patch('src.integrations.gmail.fetch.TARGET_SENDERS', ["default@example.com"])
+    @patch('src.integrations.gmail.fetch.TARGET_KEYWORDS', ["default"])
     def test_search_emails_success(self):
         """Test searching emails with mocked Gmail API service."""
         mock_service = Mock()

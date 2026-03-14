@@ -11,7 +11,7 @@ from pathlib import Path
 # We need to set up the environment properly for import
 sys.path.insert(0, str(Path(__file__).parent.parent / 'src'))
 
-from src.utils.logger import setup_logging, get_logger
+from src.support.logger import setup_logging, get_logger
 
 
 class TestLogger:

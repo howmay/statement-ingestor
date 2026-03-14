@@ -221,7 +221,7 @@ def _open_pdf_with_password_candidates(pdfium, pdf_path: str, source_info: Dict)
 
     # Fallback to configured password list for this sender
     try:
-        from src.config import get_bank_password
+        from src.core.config import get_bank_password
         for pw in get_bank_password(sender) or []:
             if pw and pw not in candidates:
                 candidates.append(pw)

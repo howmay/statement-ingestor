@@ -186,6 +186,10 @@ class APIRetry:
                             f"Will retry."
                         )
                         last_exception = http_exception
+                        if attempt < self.config.max_retries - 1:
+                            delay = self.config.calculate_delay(attempt)
+                            logger.info(f"Waiting {delay:.2f} seconds before retry...")
+                            time.sleep(delay)
                         continue
                     else:
                         # Not a retryable error
