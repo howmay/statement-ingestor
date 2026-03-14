@@ -136,6 +136,16 @@ class TestGmailExpenseParserAppFetchEmails:
                 date_to='2026-03-31',
             )
 
+    def test_fetch_emails_logs_statement_search_scope(self, app):
+        app.service = Mock()
+
+        with patch('src.runtime.app.search_emails', return_value=[]):
+            result = app.fetch_emails(max_results=5)
+
+            assert result is True
+            log_messages = [call.args[0] for call in app.logger.info.call_args_list]
+            assert any('statement' in message.lower() for message in log_messages)
+
 
 class TestGmailExpenseParserAppDownloadAttachments:
     """Test attachment download."""

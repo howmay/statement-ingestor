@@ -167,7 +167,7 @@ class GmailExpenseParserApp:
         max_text = max_results if max_results is not None else 'ALL'
         self.log(
             'info',
-            f"Step 2: Searching for emails (max {max_text}, range {date_from or '-'} ~ {date_to or '-'})..."
+            f"Step 2: Searching for monthly statement emails (max {max_text}, range {date_from or '-'} ~ {date_to or '-'})..."
         )
         try:
             self.emails = search_emails(

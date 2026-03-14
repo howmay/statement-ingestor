@@ -1,10 +1,43 @@
 import logging
 from datetime import datetime, timedelta
 from typing import List, Dict, Any, Optional
-from src.core.config import TARGET_SENDERS, TARGET_KEYWORDS
 from src.support.retry import retry_gmail
 
 logger = logging.getLogger(__name__)
+
+GENERIC_STATEMENT_TERMS = [
+    "credit card statement",
+    "card statement",
+    "bank statement",
+    "account statement",
+    "monthly statement",
+    "billing statement",
+    "eStatement",
+    "consolidated statement",
+    "consolidated_statement",
+    "信用卡帳單",
+    "電子帳單",
+    "銀行對帳單",
+    "對帳單",
+]
+
+GENERIC_STATEMENT_FILE_TERMS = [
+    "filename:pdf",
+    "filename:xls",
+    "filename:xlsx",
+    "filename:csv",
+]
+
+GENERIC_STATEMENT_EXCLUDE_TERMS = [
+    "invoice",
+    "receipt",
+    "order",
+    "shipment",
+    "ticket",
+    "tax",
+    "subscription",
+    "人壽",
+]
 
 
 def _normalize_gmail_date(date_text: Optional[str]) -> Optional[str]:
@@ -28,6 +61,7 @@ def _normalize_gmail_date(date_text: Optional[str]) -> Optional[str]:
 def build_gmail_query(
     senders: List[str],
     keywords: List[str],
+    statement_profiles: Optional[List[Dict[str, Any]]] = None,
     date_from: Optional[str] = None,
     date_to: Optional[str] = None,
 ) -> str:
@@ -43,23 +77,16 @@ def build_gmail_query(
     Returns:
         A Gmail search query string.
     """
-    # Build sender part: (from:sender1 OR from:sender2 ...)
-    sender_query = " OR ".join([f'from:"{sender}"' for sender in senders])
-    if len(senders) > 1:
-        sender_query = f"({sender_query})"
-    
-    # Build keyword part: (keyword1 OR keyword2 ...)
-    keyword_query = " OR ".join([f'"{keyword}"' for keyword in keywords])
-    if len(keywords) > 1:
-        keyword_query = f"({keyword_query})"
-    
-    # Combine with PDF attachment requirement
     query_parts = []
-    if sender_query:
-        query_parts.append(sender_query)
-    if keyword_query:
-        query_parts.append(keyword_query)
-    query_parts.append("has:attachment filename:pdf")
+    profile_query = _build_statement_profiles_query(statement_profiles or [])
+    if profile_query:
+        query_parts.append(profile_query)
+    elif not senders and not keywords:
+        query_parts.append(_build_generic_statement_query())
+    else:
+        legacy_query = _build_legacy_query(senders, keywords)
+        if legacy_query:
+            query_parts.append(legacy_query)
 
     # Date range (Gmail query: after inclusive-ish, before exclusive)
     from_norm = _normalize_gmail_date(date_from)
@@ -76,9 +103,69 @@ def build_gmail_query(
     logger.debug(f"Built Gmail query: {final_query}")
     logger.debug(f"  - Senders: {senders}")
     logger.debug(f"  - Keywords: {keywords}")
+    logger.debug(f"  - Statement profiles: {statement_profiles or []}")
     logger.debug(f"  - Date from: {from_norm}")
     logger.debug(f"  - Date to: {to_norm}")
     return final_query
+
+
+def _quote_gmail_term(term: str) -> str:
+    return f'"{str(term).strip()}"'
+
+
+def _join_or(terms: List[str]) -> str:
+    if not terms:
+        return ""
+    if len(terms) == 1:
+        return terms[0]
+    return f"({' OR '.join(terms)})"
+
+
+def _build_legacy_query(senders: List[str], keywords: List[str]) -> str:
+    sender_query = _join_or([f'from:{_quote_gmail_term(sender)}' for sender in senders if str(sender).strip()])
+    keyword_query = _join_or([_quote_gmail_term(keyword) for keyword in keywords if str(keyword).strip()])
+
+    query_parts = []
+    if sender_query:
+        query_parts.append(sender_query)
+    if keyword_query:
+        query_parts.append(keyword_query)
+    query_parts.append("has:attachment filename:pdf")
+    return " ".join(query_parts).strip()
+
+
+def _build_profile_query(profile: Dict[str, Any]) -> str:
+    sender_terms = [f'from:{_quote_gmail_term(sender)}' for sender in profile.get('senders', []) if str(sender).strip()]
+    subject_terms = [f'subject:{_quote_gmail_term(keyword)}' for keyword in profile.get('subject_keywords', []) if str(keyword).strip()]
+    exclude_terms = [f'-{_quote_gmail_term(keyword)}' for keyword in profile.get('exclude_keywords', []) if str(keyword).strip()]
+
+    query_parts = []
+    sender_query = _join_or(sender_terms)
+    subject_query = _join_or(subject_terms)
+    if sender_query:
+        query_parts.append(sender_query)
+    if subject_query:
+        query_parts.append(subject_query)
+    if profile.get('has_pdf_attachment', True):
+        query_parts.append("has:attachment filename:pdf")
+    query_parts.extend(exclude_terms)
+
+    if not query_parts:
+        return ""
+    return f"({' '.join(query_parts)})"
+
+
+def _build_statement_profiles_query(statement_profiles: List[Dict[str, Any]]) -> str:
+    subqueries = [_build_profile_query(profile) for profile in statement_profiles]
+    subqueries = [query for query in subqueries if query]
+    return _join_or(subqueries)
+
+
+def _build_generic_statement_query() -> str:
+    statement_query = _join_or([_quote_gmail_term(term) for term in GENERIC_STATEMENT_TERMS])
+    file_query = _join_or(GENERIC_STATEMENT_FILE_TERMS)
+    exclude_query = f"-({' OR '.join(GENERIC_STATEMENT_EXCLUDE_TERMS)})"
+    return f"{statement_query} {file_query} {exclude_query}"
 
 
 @retry_gmail
@@ -86,6 +173,7 @@ def search_emails(
     service,
     senders=None,
     keywords=None,
+    statement_profiles: Optional[List[Dict[str, Any]]] = None,
     max_results: Optional[int] = None,
     date_from: Optional[str] = None,
     date_to: Optional[str] = None,
@@ -110,17 +198,26 @@ def search_emails(
         - 'internalDate': Internal date timestamp
     """
     if senders is None:
-        senders = TARGET_SENDERS
+        senders = []
     if keywords is None:
-        keywords = TARGET_KEYWORDS
+        keywords = []
+    if statement_profiles is None:
+        statement_profiles = []
     
     logger.info(f"Starting email search with:")
     logger.info(f"  - Senders: {senders}")
     logger.info(f"  - Keywords: {keywords}")
+    logger.info(f"  - Statement profiles: {len(statement_profiles)}")
     logger.info(f"  - Max results: {max_results if max_results is not None else 'ALL'}")
     logger.info(f"  - Date range: {date_from or '-'} ~ {date_to or '-'}")
 
-    query = build_gmail_query(senders, keywords, date_from=date_from, date_to=date_to)
+    query = build_gmail_query(
+        senders,
+        keywords,
+        statement_profiles=statement_profiles,
+        date_from=date_from,
+        date_to=date_to,
+    )
     logger.info(f"Searching emails with query: {query}")
     
     emails = []

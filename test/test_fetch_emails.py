@@ -44,7 +44,8 @@ class TestFetchEmails:
     def test_build_gmail_query_no_senders_no_keywords(self):
         """Test building Gmail query with no senders or keywords."""
         query = build_gmail_query([], [])
-        assert query == "has:attachment filename:pdf"
+        assert '"credit card statement"' in query
+        assert 'filename:pdf' in query
 
     def test_build_gmail_query_with_date_range(self):
         """Test building query with date range filters."""
@@ -59,8 +60,23 @@ class TestFetchEmails:
         # before is exclusive, so date_to + 1 day
         assert 'before:2026/04/01' in query
 
-    @patch('src.integrations.gmail.fetch.TARGET_SENDERS', ["default@example.com"])
-    @patch('src.integrations.gmail.fetch.TARGET_KEYWORDS', ["default"])
+    def test_build_gmail_query_uses_generic_statement_terms_by_default(self):
+        query = build_gmail_query(
+            senders=[],
+            keywords=[],
+            statement_profiles=[],
+            date_from="2026-03-01",
+            date_to="2026-03-31",
+        )
+
+        assert '"credit card statement"' in query
+        assert '"bank statement"' in query
+        assert '"信用卡帳單"' in query
+        assert '"對帳單"' in query
+        assert '(filename:pdf OR filename:xls OR filename:xlsx OR filename:csv)' in query
+        assert '-(invoice OR receipt OR order OR shipment OR ticket OR tax OR subscription OR 人壽)' in query
+        assert 'before:2026/04/01' in query
+
     def test_search_emails_success(self):
         """Test searching emails with mocked Gmail API service."""
         mock_service = Mock()
@@ -86,7 +102,12 @@ class TestFetchEmails:
         }
         
         # Call the function
-        emails = search_emails(mock_service, max_results=1)
+        emails = search_emails(
+            mock_service,
+            senders=["default@example.com"],
+            keywords=["default"],
+            max_results=1,
+        )
         
         assert len(emails) == 1
         assert emails[0]['id'] == 'msg1'
@@ -96,6 +117,19 @@ class TestFetchEmails:
         # Verify API calls
         mock_list_call.assert_called()
         mock_get_call.assert_called_with(userId='me', id='msg1', format='metadata', metadataHeaders=['From', 'Subject'])
+
+    def test_search_emails_uses_generic_statement_query_by_default(self):
+        mock_service = Mock()
+
+        mock_service.users().messages().list().execute.return_value = {'messages': []}
+
+        search_emails(mock_service, max_results=10)
+
+        query = mock_service.users().messages().list.call_args.kwargs['q']
+        assert '"credit card statement"' in query
+        assert '"銀行對帳單"' in query
+        assert 'filename:xlsx' in query
+        assert '-(invoice OR receipt OR order OR shipment OR ticket OR tax OR subscription OR 人壽)' in query
 
     def test_search_emails_no_results(self):
         """Test searching emails when no results are found."""
