@@ -115,3 +115,43 @@ def test_sinopac_sample_pdf_export_classification():
     amazon_row = _format_export_row(amazon)
     assert amazon_row["income"] == ""
     assert amazon_row["expense"] == "89.03"
+
+
+def test_fubon_bank_sample_pdf_export_uses_statement_columns():
+    sender = "service@bhu.taipeifubon.com.tw"
+    pdf_path = Path("example/bank/台北富邦銀行_7qTb_9E=.pdf")
+
+    text = _extract_sample_pdf_text(sender, str(pdf_path))
+    result = parse_with_bank_factory(
+        text,
+        {
+            "sender": sender,
+            "subject": "台北富邦銀行2026年2月 銀行對帳單",
+            "filename": pdf_path.name,
+        },
+    )
+
+    assert result.matched
+    assert result.parser_name == "FubonBankParser"
+    assert len(result.transactions) == 4
+
+    transfer_in = next(
+        tx for tx in result.transactions
+        if tx["expense_name"] == "ＣＤ轉收 ********68331388"
+    )
+    assert float(transfer_in["amount"]) == 10000.0
+    assert transfer_in["cashflow_side"] == "income"
+
+    transfer_in_row = _format_export_row(transfer_in)
+    assert transfer_in_row["income"] == "10000.00"
+    assert transfer_in_row["expense"] == ""
+
+    card_payment = next(
+        tx for tx in result.transactions
+        if tx["expense_name"] == "信用卡轉" and float(tx["amount"]) == 2580.0
+    )
+    assert card_payment["cashflow_side"] == "expense"
+
+    card_payment_row = _format_export_row(card_payment)
+    assert card_payment_row["income"] == ""
+    assert card_payment_row["expense"] == "2580.00"

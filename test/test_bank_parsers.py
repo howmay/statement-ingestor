@@ -199,6 +199,38 @@ def test_fubon_transaction_detail_section_only():
     assert result.transactions[1]['cashflow_side'] == 'expense'
 
 
+def test_fubon_statement_infers_income_and_expense_from_running_balance():
+    text = """
+帳號 日期 摘要 支出 收入 餘額
+00766168****65 2026/02/01 承轉結餘 3,580.00
+2026/02/12 委代扣 1,000.00 台新銀行轉存款 2,580.00
+2026/02/24 信用卡轉 2,580.00 台北富邦信用卡款 0.00
+2026/02/24 ＣＤ轉收 ********68331388 10,000.00 10,000.00
+2026/02/25 信用卡轉 3,836.00 台北富邦信用卡款 6,164.00
+"""
+    source = {
+        'sender_tag': 'fubon',
+        'sender': 'service@bhu.taipeifubon.com.tw',
+        'subject': '台北富邦銀行2026年2月 銀行對帳單',
+    }
+
+    result = parse_with_bank_factory(text, source)
+
+    assert result.matched
+    assert result.parser_name == 'FubonBankParser'
+    assert len(result.transactions) == 4
+
+    transfer_in = next(tx for tx in result.transactions if tx['expense_name'] == 'ＣＤ轉收 ********68331388')
+    assert float(transfer_in['amount']) == 10000.0
+    assert transfer_in['cashflow_side'] == 'income'
+
+    card_payment = next(
+        tx for tx in result.transactions
+        if tx['expense_name'] == '信用卡轉' and float(tx['amount']) == 2580.0
+    )
+    assert card_payment['cashflow_side'] == 'expense'
+
+
 def test_fubon_credit_card_statement():
     text = """
 台北富邦銀行信用卡電子帳單

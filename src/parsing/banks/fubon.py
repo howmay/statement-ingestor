@@ -16,10 +16,12 @@ class FubonBankParser(BaseBankParser):
         r'^(?:\S+\s+)?(?P<date>\d{4}/\d{1,2}/\d{1,2})\s+(?P<body>.+?)$'
     )
 
-    AMOUNT_PATTERN = re.compile(r'(?P<amount>-?[0-9,]+(?:\.[0-9]+)?)')
+    AMOUNT_PATTERN = re.compile(
+        r'(?P<amount>-?(?:\d{1,3}(?:,\d{3})+|\d+)\.\d{2})'
+    )
 
     NON_EXPENSE_KEYWORDS = [
-        '承轉結餘', '對帳單期間', '帳 戶 總 覽', '資產', '本月餘額', '貸款', '信用貸款',
+        '對帳單期間', '帳 戶 總 覽', '資產', '本月餘額', '貸款', '信用貸款',
         '分期型房貸', '循環型貸款', '定存', '信託', '透支', '組合式商品',
     ]
 
@@ -33,6 +35,7 @@ class FubonBankParser(BaseBankParser):
 
     def parse(self) -> BankParseResult:
         txs: List[Dict] = []
+        running_balance = None
 
         lines = [line.strip() for line in self.text.splitlines()]
         has_detail_heading = any(
@@ -58,27 +61,37 @@ class FubonBankParser(BaseBankParser):
                 if not in_detail_section:
                     continue
 
-            if any(k in line for k in self.NON_EXPENSE_KEYWORDS):
-                continue
-
             m = self.LINE_PATTERN.match(line)
             if not m:
+                if any(k in line for k in self.NON_EXPENSE_KEYWORDS):
+                    continue
                 continue
 
             date = _date_slash_to_iso(m.group('date'))
             body = m.group('body').strip()
 
+            if any(k in body for k in self.NON_EXPENSE_KEYWORDS):
+                continue
+
             # 富邦交易明細通常至少包含「交易金額 + 餘額」兩個數字欄位。
             amount_matches = list(self.AMOUNT_PATTERN.finditer(body))
+            if len(amount_matches) == 1 and '承轉結餘' in body:
+                running_balance = self._parse_amount(amount_matches[0].group('amount'))
+                continue
+
             if len(amount_matches) < 2:
                 continue
 
             amount = self._parse_amount(amount_matches[0].group('amount'))
+            current_balance = self._parse_amount(amount_matches[-1].group('amount'))
             if amount is None:
+                continue
+            if current_balance is None:
                 continue
 
             desc = body[:amount_matches[0].start()].strip() or body
             expense_type = _classify_expense_type(desc)
+            cashflow_side = _infer_cashflow_side(running_balance, amount, current_balance)
 
             txs.append(self._build_transaction(
                 date=date,
@@ -92,7 +105,9 @@ class FubonBankParser(BaseBankParser):
                 raw_line=line,
                 parser_name='FubonBankParser',
             ))
-            txs[-1]['cashflow_side'] = 'expense'
+            if cashflow_side:
+                txs[-1]['cashflow_side'] = cashflow_side
+            running_balance = current_balance
 
         return BankParseResult(
             matched=True,
@@ -222,3 +237,20 @@ def _classify_expense_type(desc: str) -> str:
     if any(k in d for k in ['amazon', 'pchome', 'momo', '購物']):
         return 'Shopping'
     return 'Other'
+
+
+def _infer_cashflow_side(
+    previous_balance: float | None,
+    amount: float,
+    current_balance: float,
+) -> str | None:
+    if previous_balance is None:
+        return None
+
+    if abs((previous_balance - amount) - current_balance) < 0.01:
+        return 'expense'
+
+    if abs((previous_balance + amount) - current_balance) < 0.01:
+        return 'income'
+
+    return None
