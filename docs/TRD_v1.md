@@ -28,8 +28,9 @@ This document describes the technical requirements for the **Gmail Expense Parse
 - **Active Paths**: `src/core/`, `src/support/`, and `src/integrations/gmail/`.
 
 ### 3.2 Email Filtering & Attachment Fetching
-- **Statement-Only Search**: Gmail query generation is driven by `STATEMENT_SEARCH_PROFILES`, with each profile defining sender constraints, statement subject keywords, optional exclusion keywords, and PDF attachment requirements.
-- **Legacy Fallback**: `TARGET_SENDERS` and `TARGET_KEYWORDS` remain available only as compatibility fallback when statement profiles are absent.
+- **Statement-Only Search**: Gmail query generation now defaults to a generic statement query containing broad statement keywords, supported attachment file types (`pdf`, `xls`, `xlsx`, `csv`), and explicit exclusion terms for merchant receipts and unrelated documents.
+- **Optional Narrowing**: Sender- or bank-specific profile filters remain possible as future refinement, but are not the default search path.
+- **Legacy Fallback**: `TARGET_SENDERS` and `TARGET_KEYWORDS` can still be passed explicitly for compatibility or one-off narrowing, but are no longer the default runtime query.
 - **Attachment Support**: Statement emails with PDF attachments are the primary target.
 - **Deduplication (Fetch Level)**: File-level deduplication using MD5 hashes to avoid redundant processing.
 

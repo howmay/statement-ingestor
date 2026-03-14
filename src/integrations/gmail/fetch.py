@@ -1,10 +1,43 @@
 import logging
 from datetime import datetime, timedelta
 from typing import List, Dict, Any, Optional
-from src.core.config import TARGET_SENDERS, TARGET_KEYWORDS, STATEMENT_SEARCH_PROFILES
 from src.support.retry import retry_gmail
 
 logger = logging.getLogger(__name__)
+
+GENERIC_STATEMENT_TERMS = [
+    "credit card statement",
+    "card statement",
+    "bank statement",
+    "account statement",
+    "monthly statement",
+    "billing statement",
+    "eStatement",
+    "consolidated statement",
+    "consolidated_statement",
+    "信用卡帳單",
+    "電子帳單",
+    "銀行對帳單",
+    "對帳單",
+]
+
+GENERIC_STATEMENT_FILE_TERMS = [
+    "filename:pdf",
+    "filename:xls",
+    "filename:xlsx",
+    "filename:csv",
+]
+
+GENERIC_STATEMENT_EXCLUDE_TERMS = [
+    "invoice",
+    "receipt",
+    "order",
+    "shipment",
+    "ticket",
+    "tax",
+    "subscription",
+    "人壽",
+]
 
 
 def _normalize_gmail_date(date_text: Optional[str]) -> Optional[str]:
@@ -48,6 +81,8 @@ def build_gmail_query(
     profile_query = _build_statement_profiles_query(statement_profiles or [])
     if profile_query:
         query_parts.append(profile_query)
+    elif not senders and not keywords:
+        query_parts.append(_build_generic_statement_query())
     else:
         legacy_query = _build_legacy_query(senders, keywords)
         if legacy_query:
@@ -126,6 +161,13 @@ def _build_statement_profiles_query(statement_profiles: List[Dict[str, Any]]) ->
     return _join_or(subqueries)
 
 
+def _build_generic_statement_query() -> str:
+    statement_query = _join_or([_quote_gmail_term(term) for term in GENERIC_STATEMENT_TERMS])
+    file_query = _join_or(GENERIC_STATEMENT_FILE_TERMS)
+    exclude_query = f"-({' OR '.join(GENERIC_STATEMENT_EXCLUDE_TERMS)})"
+    return f"{statement_query} {file_query} {exclude_query}"
+
+
 @retry_gmail
 def search_emails(
     service,
@@ -156,11 +198,11 @@ def search_emails(
         - 'internalDate': Internal date timestamp
     """
     if senders is None:
-        senders = TARGET_SENDERS
+        senders = []
     if keywords is None:
-        keywords = TARGET_KEYWORDS
+        keywords = []
     if statement_profiles is None:
-        statement_profiles = STATEMENT_SEARCH_PROFILES
+        statement_profiles = []
     
     logger.info(f"Starting email search with:")
     logger.info(f"  - Senders: {senders}")

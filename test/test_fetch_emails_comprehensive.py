@@ -28,38 +28,21 @@ def test_build_gmail_query_with_compact_date():
     assert 'before:2026/04/01' in q
 
 
-def test_build_gmail_query_profile_exclusions_and_or_grouping():
-    profiles = [
-        {
-            "name": "fubon-bank",
-            "senders": ["service@bhu.taipeifubon.com.tw"],
-            "subject_keywords": ["對帳單", "電子對帳單"],
-            "exclude_keywords": ["OTP", "驗證"],
-            "has_pdf_attachment": True,
-        },
-        {
-            "name": "esun-card",
-            "senders": ["estatement@esunbank.com"],
-            "subject_keywords": ["信用卡", "電子帳單"],
-            "exclude_keywords": ["活動"],
-            "has_pdf_attachment": True,
-        },
-    ]
-
-    q = fe.build_gmail_query([], [], statement_profiles=profiles)
-    assert 'from:"service@bhu.taipeifubon.com.tw"' in q
-    assert 'from:"estatement@esunbank.com"' in q
-    assert 'subject:"對帳單"' in q
-    assert 'subject:"電子帳單"' in q
-    assert '-"OTP"' in q
-    assert '-"活動"' in q
-    assert ' OR ' in q
+def test_build_gmail_query_uses_generic_statement_terms_and_file_types():
+    q = fe.build_gmail_query([], [], statement_profiles=[])
+    assert '"credit card statement"' in q
+    assert '"account statement"' in q
+    assert '"電子帳單"' in q
+    assert 'filename:pdf' in q
+    assert 'filename:xls' in q
+    assert 'filename:xlsx' in q
+    assert 'filename:csv' in q
 
 
-def test_build_gmail_query_empty_statement_profiles_falls_back_to_legacy():
-    q = fe.build_gmail_query(["a@example.com"], ["invoice"], statement_profiles=[])
+def test_build_gmail_query_explicit_legacy_inputs_still_work():
+    q = fe.build_gmail_query(["a@example.com"], ["invoice"], statement_profiles=[{"senders": ["a@example.com"]}])
     assert 'from:"a@example.com"' in q
-    assert '"invoice"' in q
+    assert 'filename:pdf' in q
 
 
 def test_search_emails_dedupes_across_pages_and_respects_limit():

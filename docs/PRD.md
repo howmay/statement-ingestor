@@ -33,7 +33,8 @@
    - 可設定多個帳戶一併處理
 
 3. **設定篩選條件**
-   - **Statement Search Profiles**：指定每家銀行/卡片的寄件者、主旨關鍵字、排除字與 PDF 附件條件
+   - **通用帳單搜尋條件**：以 statement/billing/對帳單等關鍵字搭配附件副檔名 (`pdf/xls/xlsx/csv`) 與排除字進行搜尋
+   - **可選 narrowing 條件**：未來可再加上寄件者或銀行 profile 作為精準化條件，但不是預設路徑
    - **郵件類型**：只搜尋每月帳單 / 對帳單類郵件，避免與 merchant receipt 重複
    - **日期範圍**：設定要掃描的起始與結束日期（如 `START_DATE=2025-01-01`, `END_DATE=2025-12-31`）
 
@@ -195,18 +196,17 @@
 
 - **Gmail API 金鑰**：您的 Google Cloud 認證憑證
 - **LLM API 金鑰**：OpenAI 或其他相容模型的金鑰
-- **STATEMENT_SEARCH_PROFILES**：列出每家銀行/信用卡帳單的寄件者、主旨關鍵字與排除字
+- **通用 Gmail Query**：預設使用 statement 關鍵字 + 附件副檔名 + 排除字的搜尋條件
 - **日期範圍**：設定要掃描的起始與結束日期（如 `START_DATE=2025-01-01`, `END_DATE=2025-12-31`）
 - **輸出格式**：選擇 CSV、Excel 或 PDF
 - **批次大小**：每次處理的郵件數量（建議 10-20）
 
-範例：
+目前預設查詢概念：
 
-```env
-STATEMENT_SEARCH_PROFILES=[
-  {"name":"fubon-bank","senders":["service@bhu.taipeifubon.com.tw"],"subject_keywords":["銀行對帳單","對帳單","電子對帳單"],"exclude_keywords":["OTP","驗證","活動","廣告"],"has_pdf_attachment":true},
-  {"name":"hsbc-card","senders":["cards@estatements.hsbc.com.tw"],"subject_keywords":["信用卡帳單","電子帳單","eStatement"],"exclude_keywords":["OTP","驗證","活動","廣告"],"has_pdf_attachment":true}
-]
+```text
+("credit card statement" OR "card statement" OR "bank statement" OR "account statement" OR "monthly statement" OR "billing statement" OR "eStatement" OR "consolidated statement" OR "consolidated_statement" OR "信用卡帳單" OR "電子帳單" OR "銀行對帳單" OR "對帳單")
+(filename:pdf OR filename:xls OR filename:xlsx OR filename:csv)
+-(invoice OR receipt OR order OR shipment OR ticket OR tax OR subscription OR 人壽)
 ```
 
 ### 步驟 3：執行工具

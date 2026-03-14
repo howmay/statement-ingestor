@@ -44,7 +44,8 @@ class TestFetchEmails:
     def test_build_gmail_query_no_senders_no_keywords(self):
         """Test building Gmail query with no senders or keywords."""
         query = build_gmail_query([], [])
-        assert query == "has:attachment filename:pdf"
+        assert '"credit card statement"' in query
+        assert 'filename:pdf' in query
 
     def test_build_gmail_query_with_date_range(self):
         """Test building query with date range filters."""
@@ -59,42 +60,23 @@ class TestFetchEmails:
         # before is exclusive, so date_to + 1 day
         assert 'before:2026/04/01' in query
 
-    def test_build_gmail_query_from_statement_profiles(self):
-        profiles = [
-            {
-                "name": "fubon-bank",
-                "senders": ["service@bhu.taipeifubon.com.tw"],
-                "subject_keywords": ["對帳單", "電子對帳單"],
-                "exclude_keywords": ["OTP", "驗證"],
-                "has_pdf_attachment": True,
-            },
-            {
-                "name": "hsbc-card",
-                "senders": ["cards@estatements.hsbc.com.tw"],
-                "subject_keywords": ["信用卡帳單", "eStatement"],
-                "exclude_keywords": [],
-                "has_pdf_attachment": True,
-            },
-        ]
-
+    def test_build_gmail_query_uses_generic_statement_terms_by_default(self):
         query = build_gmail_query(
             senders=[],
             keywords=[],
-            statement_profiles=profiles,
+            statement_profiles=[],
             date_from="2026-03-01",
             date_to="2026-03-31",
         )
 
-        assert 'from:"service@bhu.taipeifubon.com.tw"' in query
-        assert 'from:"cards@estatements.hsbc.com.tw"' in query
-        assert 'subject:"對帳單"' in query
-        assert 'subject:"信用卡帳單"' in query
-        assert '-"OTP"' in query
-        assert "filename:pdf" in query
+        assert '"credit card statement"' in query
+        assert '"bank statement"' in query
+        assert '"信用卡帳單"' in query
+        assert '"對帳單"' in query
+        assert '(filename:pdf OR filename:xls OR filename:xlsx OR filename:csv)' in query
+        assert '-(invoice OR receipt OR order OR shipment OR ticket OR tax OR subscription OR 人壽)' in query
         assert 'before:2026/04/01' in query
 
-    @patch('src.integrations.gmail.fetch.TARGET_SENDERS', ["default@example.com"])
-    @patch('src.integrations.gmail.fetch.TARGET_KEYWORDS', ["default"])
     def test_search_emails_success(self):
         """Test searching emails with mocked Gmail API service."""
         mock_service = Mock()
@@ -120,7 +102,12 @@ class TestFetchEmails:
         }
         
         # Call the function
-        emails = search_emails(mock_service, max_results=1)
+        emails = search_emails(
+            mock_service,
+            senders=["default@example.com"],
+            keywords=["default"],
+            max_results=1,
+        )
         
         assert len(emails) == 1
         assert emails[0]['id'] == 'msg1'
@@ -131,16 +118,7 @@ class TestFetchEmails:
         mock_list_call.assert_called()
         mock_get_call.assert_called_with(userId='me', id='msg1', format='metadata', metadataHeaders=['From', 'Subject'])
 
-    @patch('src.integrations.gmail.fetch.STATEMENT_SEARCH_PROFILES', [
-        {
-            "name": "fubon-bank",
-            "senders": ["service@bhu.taipeifubon.com.tw"],
-            "subject_keywords": ["對帳單", "電子對帳單"],
-            "exclude_keywords": ["OTP"],
-            "has_pdf_attachment": True,
-        }
-    ])
-    def test_search_emails_uses_statement_profiles_by_default(self):
+    def test_search_emails_uses_generic_statement_query_by_default(self):
         mock_service = Mock()
 
         mock_service.users().messages().list().execute.return_value = {'messages': []}
@@ -148,9 +126,10 @@ class TestFetchEmails:
         search_emails(mock_service, max_results=10)
 
         query = mock_service.users().messages().list.call_args.kwargs['q']
-        assert 'from:"service@bhu.taipeifubon.com.tw"' in query
-        assert 'subject:"對帳單"' in query
-        assert 'filename:pdf' in query
+        assert '"credit card statement"' in query
+        assert '"銀行對帳單"' in query
+        assert 'filename:xlsx' in query
+        assert '-(invoice OR receipt OR order OR shipment OR ticket OR tax OR subscription OR 人壽)' in query
 
     def test_search_emails_no_results(self):
         """Test searching emails when no results are found."""
