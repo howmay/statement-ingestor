@@ -36,7 +36,7 @@ class TestPDFToTextEdgeCases:
         
         with patch('src.parsing.pdf.pdf_to_text._extract_with_pdfium', side_effect=Exception("PDFium failed")), \
              patch('src.parsing.pdf.pdf_to_text._extract_with_pdfplumber', side_effect=Exception("PDFplumber failed")), \
-             patch('src.parsing.pdf.pdf_to_text._extract_with_pypdf2', side_effect=Exception("PyPDF2 failed")):
+             patch('src.parsing.pdf.pdf_to_text._extract_with_pypdf', side_effect=Exception("pypdf failed")):
             
             result = extract_text_from_pdf(str(bad_file))
             assert result is None
@@ -132,10 +132,10 @@ class TestPDFToTextEdgeCases:
         test_file.write_text("Test content")
         
         with patch('src.parsing.pdf.pdf_to_text._extract_with_pdfplumber', side_effect=ImportError("No module named 'pdfplumber'")), \
-             patch('src.parsing.pdf.pdf_to_text._extract_with_pypdf2', return_value="PyPDF2 text"):
+             patch('src.parsing.pdf.pdf_to_text._extract_with_pypdf', return_value="pypdf text"):
             
             result = extract_text_from_pdf(str(test_file))
-            assert result == "PyPDF2 text"
+            assert result == "pypdf text"
     
     def test_pdftotext_not_available(self, tmp_path):
         """Test when pdftotext command is not available."""
@@ -143,7 +143,7 @@ class TestPDFToTextEdgeCases:
         test_file.write_text("Test content")
         
         with patch('src.parsing.pdf.pdf_to_text._extract_with_pdftotext', side_effect=FileNotFoundError()), \
-             patch('src.parsing.pdf.pdf_to_text._extract_with_pypdf2', return_value="PyPDF2 text"):
+             patch('src.parsing.pdf.pdf_to_text._extract_with_pypdf', return_value="pypdf text"):
             
             result = extract_text_from_pdf(str(test_file))
-            assert result == "PyPDF2 text"
+            assert result == "pypdf text"

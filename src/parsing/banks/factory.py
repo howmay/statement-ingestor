@@ -7,6 +7,8 @@ from .hsbc import HsbcTwCardParser
 from .fubon import FubonBankParser, FubonCreditCardParser
 from .esun import EsunCardParser
 from .dbs import DbsSgCardParser
+from .sinopac import SinopacCreditCardParser
+from .firstbank import FirstBankCreditCardParser
 
 
 def get_bank_parser(text: str, source_info: Optional[Dict[str, Any]] = None) -> Optional[BaseBankParser]:
@@ -32,6 +34,12 @@ def get_bank_parser(text: str, source_info: Optional[Dict[str, Any]] = None) -> 
 
     if 'dbs' in bank_hint:
         return DbsSgCardParser(text, source_info)
+
+    if 'banksinopac' in bank_hint or 'sinopac' in bank_hint or '永豐' in bank_hint:
+        return SinopacCreditCardParser(text, source_info)
+
+    if 'ebill.firstbank.tw' in bank_hint or 'firstbank' in bank_hint or '第一銀行' in bank_hint:
+        return FirstBankCreditCardParser(text, source_info)
 
     return None
 

@@ -30,26 +30,26 @@ class TestExtractTextFromPdfBranches:
 
         assert out == "from pdfplumber"
 
-    def test_pdfplumber_importerror_fallback_to_pypdf2(self, tmp_path):
+    def test_pdfplumber_importerror_fallback_to_pypdf(self, tmp_path):
         pdf_file = tmp_path / "a.pdf"
         pdf_file.write_bytes(b"%PDF-1.4 test")
 
         with patch("src.parsing.pdf.pdf_to_text._extract_with_pdfium", return_value=""), \
              patch("src.parsing.pdf.pdf_to_text._extract_with_pdftotext", return_value=""), \
              patch("src.parsing.pdf.pdf_to_text._extract_with_pdfplumber", side_effect=ImportError("no pdfplumber")), \
-             patch("src.parsing.pdf.pdf_to_text._extract_with_pypdf2", return_value="from pypdf2"):
+             patch("src.parsing.pdf.pdf_to_text._extract_with_pypdf", return_value="from pypdf"):
             out = pdfmod.extract_text_from_pdf(str(pdf_file))
 
-        assert out == "from pypdf2"
+        assert out == "from pypdf"
 
-    def test_pypdf2_importerror_raises(self, tmp_path):
+    def test_pypdf_importerror_raises(self, tmp_path):
         pdf_file = tmp_path / "a.pdf"
         pdf_file.write_bytes(b"%PDF-1.4 test")
 
         with patch("src.parsing.pdf.pdf_to_text._extract_with_pdfium", return_value=""), \
              patch("src.parsing.pdf.pdf_to_text._extract_with_pdftotext", return_value=""), \
              patch("src.parsing.pdf.pdf_to_text._extract_with_pdfplumber", return_value=""), \
-             patch("src.parsing.pdf.pdf_to_text._extract_with_pypdf2", side_effect=ImportError("missing")):
+             patch("src.parsing.pdf.pdf_to_text._extract_with_pypdf", side_effect=ImportError("missing")):
             with pytest.raises(ImportError):
                 pdfmod.extract_text_from_pdf(str(pdf_file))
 
@@ -60,7 +60,7 @@ class TestExtractTextFromPdfBranches:
         with patch("src.parsing.pdf.pdf_to_text._extract_with_pdfium", return_value=""), \
              patch("src.parsing.pdf.pdf_to_text._extract_with_pdftotext", return_value=""), \
              patch("src.parsing.pdf.pdf_to_text._extract_with_pdfplumber", return_value=""), \
-             patch("src.parsing.pdf.pdf_to_text._extract_with_pypdf2", return_value=""):
+             patch("src.parsing.pdf.pdf_to_text._extract_with_pypdf", return_value=""):
             out = pdfmod.extract_text_from_pdf(str(pdf_file), password="secret")
 
         assert out is None
@@ -144,7 +144,7 @@ class TestPdftotextBranches:
             assert pdfmod._extract_with_pdftotext("/tmp/a.pdf") == ""
 
 
-class TestPdfplumberAndPypdf2Branches:
+class TestPdfplumberAndPypdfBranches:
     def test_pdfplumber_page_extract_exception_continue(self, tmp_path):
         pdf_path = tmp_path / "a.pdf"
         pdf_path.write_bytes(b"%PDF")
@@ -171,37 +171,37 @@ class TestPdfplumberAndPypdf2Branches:
             with pytest.raises(ValueError, match="Incorrect password"):
                 pdfmod._extract_with_pdfplumber(str(pdf_path), password="pw")
 
-    def test_pypdf2_error_branches(self, tmp_path):
+    def test_pypdf_error_branches(self, tmp_path):
         pdf_path = tmp_path / "a.pdf"
         pdf_path.write_bytes(b"%PDF")
 
-        mock_pypdf2 = MagicMock()
+        mock_pypdf = MagicMock()
         FileNotDecryptedError = type("FileNotDecryptedError", (Exception,), {})
         PdfReadError = type("PdfReadError", (Exception,), {})
-        mock_pypdf2.errors = SimpleNamespace(
+        mock_pypdf.errors = SimpleNamespace(
             FileNotDecryptedError=FileNotDecryptedError,
             PdfReadError=PdfReadError,
         )
 
-        with patch.dict("sys.modules", {"PyPDF2": mock_pypdf2}):
-            mock_pypdf2.PdfReader.side_effect = FileNotDecryptedError()
+        with patch.dict("sys.modules", {"pypdf": mock_pypdf}):
+            mock_pypdf.PdfReader.side_effect = FileNotDecryptedError()
             with pytest.raises(ValueError, match="encrypted"):
-                pdfmod._extract_with_pypdf2(str(pdf_path))
+                pdfmod._extract_with_pypdf(str(pdf_path))
 
-            mock_pypdf2.PdfReader.side_effect = PdfReadError("incorrect password")
+            mock_pypdf.PdfReader.side_effect = PdfReadError("incorrect password")
             with pytest.raises(ValueError, match="Incorrect password"):
-                pdfmod._extract_with_pypdf2(str(pdf_path), password="pw")
+                pdfmod._extract_with_pypdf(str(pdf_path), password="pw")
 
-            mock_pypdf2.PdfReader.side_effect = RuntimeError("other")
+            mock_pypdf.PdfReader.side_effect = RuntimeError("other")
             with pytest.raises(ValueError, match="Failed to read PDF"):
-                pdfmod._extract_with_pypdf2(str(pdf_path))
+                pdfmod._extract_with_pypdf(str(pdf_path))
 
-    def test_pypdf2_page_extract_exception_continue(self, tmp_path):
+    def test_pypdf_page_extract_exception_continue(self, tmp_path):
         pdf_path = tmp_path / "a.pdf"
         pdf_path.write_bytes(b"%PDF")
 
-        mock_pypdf2 = MagicMock()
-        mock_pypdf2.errors = SimpleNamespace(
+        mock_pypdf = MagicMock()
+        mock_pypdf.errors = SimpleNamespace(
             FileNotDecryptedError=type("FileNotDecryptedError", (Exception,), {}),
             PdfReadError=type("PdfReadError", (Exception,), {}),
         )
@@ -210,10 +210,10 @@ class TestPdfplumberAndPypdf2Branches:
         page.extract_text.side_effect = RuntimeError("bad page")
         reader = MagicMock()
         reader.pages = [page]
-        mock_pypdf2.PdfReader.return_value = reader
+        mock_pypdf.PdfReader.return_value = reader
 
-        with patch.dict("sys.modules", {"PyPDF2": mock_pypdf2}):
-            out = pdfmod._extract_with_pypdf2(str(pdf_path))
+        with patch.dict("sys.modules", {"pypdf": mock_pypdf}):
+            out = pdfmod._extract_with_pypdf(str(pdf_path))
 
         assert out == ""
 

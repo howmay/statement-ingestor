@@ -9,7 +9,7 @@ def extract_text_from_pdf(pdf_path: str, password: str = None) -> Optional[str]:
     """
     Extract text content from a PDF file, optionally with password for encrypted PDFs.
     
-    Uses pdfplumber as primary extractor, with PyPDF2 as fallback.
+    Uses pdfplumber as primary extractor, with pypdf as fallback.
     
     Args:
         pdf_path: Path to the PDF file.
@@ -72,26 +72,25 @@ def extract_text_from_pdf(pdf_path: str, password: str = None) -> Optional[str]:
             logger.info(f"Successfully extracted {len(text)} characters using pdfplumber")
             return text
         else:
-            logger.warning("pdfplumber returned empty text, trying PyPDF2 fallback")
+            logger.warning("pdfplumber returned empty text, trying pypdf fallback")
     except ImportError:
-        logger.warning("pdfplumber not available, trying PyPDF2 fallback")
+        logger.warning("pdfplumber not available, trying pypdf fallback")
     except Exception as e:
-        logger.warning(f"pdfplumber extraction failed: {e}, trying PyPDF2 fallback")
+        logger.warning(f"pdfplumber extraction failed: {e}, trying pypdf fallback")
     
-    # Fallback to PyPDF2
+    # Fallback to pypdf
     try:
-        import PyPDF2
-        text = _extract_with_pypdf2(pdf_path, password)
+        text = _extract_with_pypdf(pdf_path, password)
         if text and text.strip():
-            logger.info(f"Successfully extracted {len(text)} characters using PyPDF2")
+            logger.info(f"Successfully extracted {len(text)} characters using pypdf")
             return text
         else:
-            logger.warning("PyPDF2 also returned empty text")
+            logger.warning("pypdf also returned empty text")
     except ImportError:
-        logger.error("No PDF extraction library available (pypdfium2, pdfplumber, or PyPDF2)")
-        raise ImportError("PDF extraction requires one of: pypdfium2, pdfplumber, or PyPDF2. Install with: pip install pypdfium2")
+        logger.error("No PDF extraction library available (pypdfium2, pdfplumber, or pypdf)")
+        raise ImportError("PDF extraction requires one of: pypdfium2, pdfplumber, or pypdf. Install with: pip install pypdf")
     except Exception as e:
-        logger.error(f"PyPDF2 extraction failed: {e}")
+        logger.error(f"pypdf extraction failed: {e}")
     
     # If we get here, extraction failed
     if password:
@@ -247,9 +246,9 @@ def _extract_with_pdfplumber(pdf_path: str, password: str = None) -> str:
     return "\n\n".join(all_text)
 
 
-def _extract_with_pypdf2(pdf_path: str, password: str = None) -> str:
+def _extract_with_pypdf(pdf_path: str, password: str = None) -> str:
     """
-    Extract text using PyPDF2 library (fallback).
+    Extract text using pypdf library (fallback).
     
     Args:
         pdf_path: Path to the PDF file.
@@ -258,13 +257,13 @@ def _extract_with_pypdf2(pdf_path: str, password: str = None) -> str:
     Returns:
         Extracted text content.
     """
-    import PyPDF2
+    import pypdf
     
     all_text = []
     
     try:
         with open(pdf_path, 'rb') as f:
-            reader = PyPDF2.PdfReader(f, password=password)
+            reader = pypdf.PdfReader(f, password=password)
             logger.debug(f"PDF has {len(reader.pages)} page(s)")
             
             for i, page in enumerate(reader.pages):
@@ -276,15 +275,15 @@ def _extract_with_pypdf2(pdf_path: str, password: str = None) -> str:
                 except Exception as e:
                     logger.warning(f"Error extracting text from page {i+1}: {e}")
                     continue
-    except PyPDF2.errors.FileNotDecryptedError:
+    except pypdf.errors.FileNotDecryptedError:
         raise ValueError("PDF is encrypted and no password provided")
-    except PyPDF2.errors.PdfReadError as e:
+    except pypdf.errors.PdfReadError as e:
         if "incorrect password" in str(e).lower():
             raise ValueError("Incorrect password for encrypted PDF")
         else:
-            raise ValueError(f"Failed to read PDF with PyPDF2: {e}")
+            raise ValueError(f"Failed to read PDF with pypdf: {e}")
     except Exception as e:
-        raise ValueError(f"Failed to read PDF with PyPDF2: {e}")
+        raise ValueError(f"Failed to read PDF with pypdf: {e}")
     
     return "\n\n".join(all_text)
 
