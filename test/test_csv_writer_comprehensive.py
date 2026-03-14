@@ -17,25 +17,42 @@ def test_transaction_month_and_receipt_key_helpers():
         "amount": "12.3",
         "currency": "TWD",
         "expense_name": "Coffee",
+        "source": "Sinopac Credit Card",
         "source_file": "a.pdf",
     })
-    assert key[1] == "12.30"
+    assert key[1] == ""
+    assert key[2] == "12.30"
 
 
-def test_format_export_row_handles_amount_and_none():
+def test_format_export_row_handles_income_expense_and_none():
     row = cw._format_export_row({
         "date": "2026-03-12",
-        "amount": "not-a-float",
+        "amount": -88.5,
         "currency": None,
         "expense_name": "Coffee",
         "expense_type": "Food",
-        "source": "Cafe",
+        "source": "First Bank Credit Card",
         "original_file": "orig.pdf",
     })
 
     assert row["source_file"] == "orig.pdf"
     assert row["currency"] == ""
-    assert row["amount"] == "not-a-float"
+    assert row["income"] == "88.50"
+    assert row["expense"] == ""
+
+
+def test_format_export_row_never_populates_income_and_expense_together():
+    row = cw._format_export_row({
+        "date": "2026-03-12",
+        "amount": 123.0,
+        "currency": "TWD",
+        "expense_name": "Coffee",
+        "expense_type": "Food",
+        "source": "First Bank Credit Card",
+        "source_file": "orig.pdf",
+    })
+
+    assert not (row["income"] and row["expense"])
 
 
 def test_load_existing_rows_missing_and_invalid(tmp_path):
@@ -57,7 +74,7 @@ def test_export_receipts_to_csv_appends_new_rows_only(tmp_path):
         "currency": "TWD",
         "expense_name": "A",
         "expense_type": "Other",
-        "source": "S",
+        "source": "Sinopac Credit Card",
         "source_file": "a.pdf",
     }
     second = {
@@ -66,7 +83,7 @@ def test_export_receipts_to_csv_appends_new_rows_only(tmp_path):
         "currency": "TWD",
         "expense_name": "B",
         "expense_type": "Other",
-        "source": "S",
+        "source": "Sinopac Credit Card",
         "source_file": "b.pdf",
     }
 
@@ -81,6 +98,29 @@ def test_export_receipts_to_csv_appends_new_rows_only(tmp_path):
 
     assert len(rows) == 2
     assert {r["expense_name"] for r in rows} == {"A", "B"}
+
+
+def test_export_receipts_dedupes_with_income_expense_columns(tmp_path):
+    output_dir = tmp_path / "out"
+    receipt = {
+        "date": "2026-03-01",
+        "amount": 100,
+        "currency": "TWD",
+        "expense_name": "A",
+        "expense_type": "Other",
+        "source": "Sinopac Credit Card",
+        "source_file": "a.pdf",
+    }
+
+    path_csv = cw.export_receipts_to_csv([receipt], output_dir=str(output_dir)).split(",")[0]
+    cw.export_receipts_to_csv([receipt], output_dir=str(output_dir))
+
+    with open(path_csv, "r", encoding="utf-8-sig") as f:
+        rows = list(csv.DictReader(f))
+
+    assert len(rows) == 1
+    assert rows[0]["income"] == ""
+    assert rows[0]["expense"] == "100.00"
 
 
 def test_export_extracted_texts_to_csv_edge_paths(tmp_path):
