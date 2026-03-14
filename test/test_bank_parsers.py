@@ -169,6 +169,8 @@ def test_fubon_parse():
     assert result.matched
     assert result.parser_name == 'FubonBankParser'
     assert len(result.transactions) == 2
+    assert result.transactions[0]['cashflow_side'] == 'expense'
+    assert result.transactions[1]['cashflow_side'] == 'expense'
 
 
 def test_fubon_transaction_detail_section_only():
@@ -193,6 +195,8 @@ def test_fubon_transaction_detail_section_only():
     assert len(result.transactions) == 2
     assert result.transactions[0]['expense_name'] == '委代扣'
     assert result.transactions[1]['expense_name'] == '信用卡轉'
+    assert result.transactions[0]['cashflow_side'] == 'expense'
+    assert result.transactions[1]['cashflow_side'] == 'expense'
 
 
 def test_fubon_credit_card_statement():

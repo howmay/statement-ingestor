@@ -71,6 +71,12 @@ def _split_income_and_expense(receipt: Dict[str, Any]) -> Tuple[str, str]:
     if value == 0:
         return '', ''
 
+    cashflow_side = str(receipt.get('cashflow_side') or '').strip().lower()
+    if cashflow_side == 'income':
+        return f"{abs(value):.2f}", ''
+    if cashflow_side == 'expense':
+        return '', f"{abs(value):.2f}"
+
     statement_kind = _detect_statement_kind(receipt)
 
     if statement_kind == 'credit_card':

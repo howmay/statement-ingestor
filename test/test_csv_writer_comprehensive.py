@@ -55,6 +55,22 @@ def test_format_export_row_never_populates_income_and_expense_together():
     assert not (row["income"] and row["expense"])
 
 
+def test_format_export_row_prefers_cashflow_side_metadata():
+    row = cw._format_export_row({
+        "date": "2026-03-12",
+        "amount": 2580.0,
+        "currency": "TWD",
+        "expense_name": "信用卡轉",
+        "expense_type": "Bills",
+        "source": "Fubon Bank",
+        "cashflow_side": "expense",
+        "source_file": "bank.pdf",
+    })
+
+    assert row["income"] == ""
+    assert row["expense"] == "2580.00"
+
+
 def test_load_existing_rows_missing_and_invalid(tmp_path):
     missing = tmp_path / "missing.csv"
     assert cw._load_existing_rows(str(missing)) == []
