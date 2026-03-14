@@ -123,6 +123,27 @@ class TestDownloadPDFsEnhanced:
         assert results[0]['filepath'] == "/path/to/f1.pdf"
         assert results[0]['sender_tag'] == "tag"
 
+    def test_list_attachments_includes_csv(self):
+        from src.integrations.gmail.fetch import list_attachments
+
+        mock_service = Mock()
+        mock_service.users().messages().get().execute.return_value = {
+            "payload": {
+                "parts": [
+                    {
+                        "filename": "statement.csv",
+                        "mimeType": "text/csv",
+                        "body": {"attachmentId": "csv1", "size": 321},
+                    }
+                ]
+            }
+        }
+
+        attachments = list_attachments(mock_service, "m1")
+        assert len(attachments) == 1
+        assert attachments[0]["filename"] == "statement.csv"
+        assert attachments[0]["attachmentId"] == "csv1"
+
     @patch('src.integrations.gmail.downloads.download_pdf_attachments')
     def test_batch_download_pdfs(self, mock_download):
         """Test batch downloading."""

@@ -297,7 +297,7 @@ def search_emails(
 @retry_gmail
 def list_attachments(service, message_id: str) -> List[Dict[str, Any]]:
     """
-    List PDF attachments in a message.
+    List supported statement attachments in a message.
     
     Args:
         service: Authenticated Gmail API service object.
@@ -331,8 +331,12 @@ def list_attachments(service, message_id: str) -> List[Dict[str, Any]]:
                 filename = part['filename'].lower()
                 mime_type = part.get('mimeType', '')
                 
-                # Check if it's a PDF
-                if filename.endswith('.pdf') or mime_type == 'application/pdf':
+                if (
+                    filename.endswith('.pdf')
+                    or filename.endswith('.csv')
+                    or mime_type == 'application/pdf'
+                    or mime_type == 'text/csv'
+                ):
                     attachments.append({
                         'attachmentId': part['body']['attachmentId'],
                         'filename': part['filename'],
@@ -346,7 +350,12 @@ def list_attachments(service, message_id: str) -> List[Dict[str, Any]]:
     elif payload.get('filename') and payload.get('body', {}).get('attachmentId'):
         filename = payload['filename'].lower()
         mime_type = payload.get('mimeType', '')
-        if filename.endswith('.pdf') or mime_type == 'application/pdf':
+        if (
+            filename.endswith('.pdf')
+            or filename.endswith('.csv')
+            or mime_type == 'application/pdf'
+            or mime_type == 'text/csv'
+        ):
             attachments.append({
                 'attachmentId': payload['body']['attachmentId'],
                 'filename': payload['filename'],
@@ -354,7 +363,7 @@ def list_attachments(service, message_id: str) -> List[Dict[str, Any]]:
                 'size': payload.get('body', {}).get('size', 0)
             })
     
-    logger.info(f"Found {len(attachments)} PDF attachments in message {message_id}")
+    logger.info(f"Found {len(attachments)} supported attachments in message {message_id}")
     return attachments
 
 
