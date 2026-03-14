@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 import re
 import csv
+import tempfile
 
 sys.path.insert(0, str(Path(__file__).parent.parent / 'src'))
 
@@ -213,6 +214,27 @@ class TestGmailExpenseParserAppExtractTexts:
         assert result is True
         assert app.extracted_texts == []
         assert app.stats['texts_extracted'] == 0
+
+    def test_extract_texts_reads_csv_without_pdf_extractor(self, app):
+        with tempfile.NamedTemporaryFile('w', suffix='.csv', delete=False, encoding='utf-8') as tmp:
+            tmp.write("Type,Completed Date,Description,Amount,Currency,State\n")
+            tmp.write("Topup,2025-03-16 23:10:31,Transfer from *6221,100,SGD,COMPLETED\n")
+            csv_path = tmp.name
+
+        app.downloaded_files = [
+            {'filepath': csv_path, 'sender': 'bank', 'subject': 'stmt', 'filename': 'statement.csv'}
+        ]
+
+        try:
+            with patch('src.runtime.app.extract_text_from_pdf') as mock_pdf_extract:
+                result = app.extract_texts()
+
+            assert result is True
+            assert len(app.extracted_texts) == 1
+            assert 'Transfer from *6221' in app.extracted_texts[0]['text']
+            mock_pdf_extract.assert_not_called()
+        finally:
+            Path(csv_path).unlink(missing_ok=True)
 
 
 class TestGmailExpenseParserAppParseReceipts:

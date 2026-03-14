@@ -7,6 +7,7 @@ Enhanced version with comprehensive error handling and logging.
 import os
 import sys
 import traceback
+from pathlib import Path
 from datetime import datetime
 from typing import List, Dict, Any, Optional
 import logging
@@ -31,6 +32,7 @@ from src.integrations.gmail.auth import get_gmail_service
 from src.integrations.gmail.fetch import search_emails, list_attachments
 from src.integrations.gmail.downloads import batch_download_pdfs
 from src.parsing.pdf.pdf_to_text import extract_text_from_pdf
+from src.parsing.csv.statement_csv import parse_csv_statement
 from src.parsing.llm.parse_receipt import parse_receipt_text, parse_multiple_receipts, ReceiptParsingError
 from src.export.csv_writer import export_receipts_to_csv, export_extracted_texts_to_csv
 
@@ -260,6 +262,15 @@ class GmailExpenseParserApp:
 
                 sender = file_info.get('sender', '')
                 password_candidates = get_bank_password(sender) or [None]
+                suffix = Path(filepath).suffix.lower()
+
+                if suffix == '.csv':
+                    with open(filepath, 'r', encoding='utf-8-sig', newline='') as csv_file:
+                        csv_text = csv_file.read()
+                    return {
+                        'text': csv_text,
+                        'file_info': file_info,
+                    }
 
                 extracted_text = None
                 password_used = None
@@ -356,7 +367,10 @@ class GmailExpenseParserApp:
             }
 
             try:
-                receipts = parse_receipt_text(text, source_info)
+                if filename.lower().endswith('.csv'):
+                    receipts = parse_csv_statement(text, source_info)
+                else:
+                    receipts = parse_receipt_text(text, source_info)
                 
                 # Store in cache if successful
                 if receipts and self.cache:
