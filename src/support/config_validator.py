@@ -18,7 +18,8 @@ REQUIRED_ENV_VARS = [
 # Optional but recommended environment variables
 RECOMMENDED_ENV_VARS = [
     'OPENAI_API_KEY',
-    'BANK_PASSWORDS'
+    'BANK_PASSWORDS',
+    'STATEMENT_SEARCH_PROFILES',
 ]
 
 # Environment variable validation rules
@@ -41,6 +42,10 @@ ENV_VALIDATION_RULES = {
     'BANK_PASSWORDS': {
         'type': 'comma_separated',
         'description': 'Comma-separated list of passwords for encrypted PDFs'
+    },
+    'STATEMENT_SEARCH_PROFILES': {
+        'type': 'json_profiles',
+        'description': 'JSON array of Gmail statement search profile objects'
     },
     'OAUTH_PORT': {
         'type': 'integer',
@@ -255,6 +260,40 @@ class ConfigValidator:
                        f'Should be at least {min_length} characters, got {len(value)}')
             
             return ('OK', f'Present: {self._mask_sensitive(var, value)}')
+
+        elif value_type == 'json_profiles':
+            try:
+                parsed = json.loads(value)
+            except json.JSONDecodeError:
+                return ('ERROR', 'Should be valid JSON')
+
+            if not isinstance(parsed, list):
+                return ('ERROR', 'Should be a JSON array of profile objects')
+
+            if not parsed:
+                return ('ERROR', 'Should contain at least 1 profile')
+
+            for index, item in enumerate(parsed, start=1):
+                if not isinstance(item, dict):
+                    return ('ERROR', f'Profile #{index} should be an object')
+
+                senders = item.get('senders')
+                if not isinstance(senders, list) or not any(str(v).strip() for v in senders):
+                    return ('ERROR', f'Profile #{index} must include non-empty senders')
+
+                subject_keywords = item.get('subject_keywords')
+                if not isinstance(subject_keywords, list) or not any(str(v).strip() for v in subject_keywords):
+                    return ('ERROR', f'Profile #{index} must include non-empty subject_keywords')
+
+                exclude_keywords = item.get('exclude_keywords', [])
+                if exclude_keywords is not None and not isinstance(exclude_keywords, list):
+                    return ('ERROR', f'Profile #{index} exclude_keywords must be a list')
+
+                has_pdf_attachment = item.get('has_pdf_attachment', True)
+                if not isinstance(has_pdf_attachment, bool):
+                    return ('ERROR', f'Profile #{index} has_pdf_attachment must be a boolean')
+
+            return ('OK', f'Contains {len(parsed)} statement profile(s)')
         
         return ('OK', f'Present: {self._mask_sensitive(var, value)}')
     

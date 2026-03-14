@@ -164,6 +164,49 @@ BANK_PASSWORDS=password1
             ENV_VALIDATION_RULES['OAUTH_PORT']
         )
         assert status == 'ERROR'
+
+    def test_validate_value_statement_search_profiles_json(self):
+        value = json.dumps([
+            {
+                "name": "hsbc-card",
+                "senders": ["cards@estatements.hsbc.com.tw"],
+                "subject_keywords": ["信用卡帳單", "eStatement"],
+                "exclude_keywords": ["OTP"],
+                "has_pdf_attachment": True,
+            }
+        ])
+
+        status, msg = self.validator._validate_value(
+            'STATEMENT_SEARCH_PROFILES',
+            value,
+            ENV_VALIDATION_RULES['STATEMENT_SEARCH_PROFILES']
+        )
+        assert status == 'OK'
+
+    def test_validate_value_statement_search_profiles_rejects_missing_senders(self):
+        value = json.dumps([
+            {
+                "name": "hsbc-card",
+                "subject_keywords": ["信用卡帳單"],
+            }
+        ])
+
+        status, msg = self.validator._validate_value(
+            'STATEMENT_SEARCH_PROFILES',
+            value,
+            ENV_VALIDATION_RULES['STATEMENT_SEARCH_PROFILES']
+        )
+        assert status == 'ERROR'
+        assert 'senders' in msg.lower()
+
+    def test_validate_value_statement_search_profiles_rejects_bad_json(self):
+        status, msg = self.validator._validate_value(
+            'STATEMENT_SEARCH_PROFILES',
+            '{bad-json',
+            ENV_VALIDATION_RULES['STATEMENT_SEARCH_PROFILES']
+        )
+        assert status == 'ERROR'
+        assert 'json' in msg.lower()
         
         # Out of range
         status, msg = self.validator._validate_value(

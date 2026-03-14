@@ -6,6 +6,8 @@ from unittest.mock import patch, MagicMock
 import sys
 from pathlib import Path
 import os
+import json
+import importlib
 
 sys.path.insert(0, str(Path(__file__).parent.parent / 'src'))
 
@@ -114,6 +116,33 @@ class TestConfigEdgeCases:
         assert OAUTH_CLIENT_SECRETS_PATH is not None
         assert OAUTH_TOKEN_PATH is not None
         assert OAUTH_PORT == int(os.getenv("OAUTH_PORT", "8080"))
+
+    def test_statement_search_profiles_from_json_env(self):
+        profiles = [
+            {
+                "name": "fubon-bank",
+                "senders": ["service@bhu.taipeifubon.com.tw"],
+                "subject_keywords": ["對帳單", "電子對帳單"],
+                "exclude_keywords": ["otp", "驗證"],
+                "has_pdf_attachment": True,
+            }
+        ]
+        with patch.dict(os.environ, {"STATEMENT_SEARCH_PROFILES": json.dumps(profiles)}, clear=False):
+            import src.core.config as config_module
+            importlib.reload(config_module)
+
+            assert len(config_module.STATEMENT_SEARCH_PROFILES) == 1
+            assert config_module.STATEMENT_SEARCH_PROFILES[0]["name"] == "fubon-bank"
+            assert config_module.STATEMENT_SEARCH_PROFILES[0]["senders"] == ["service@bhu.taipeifubon.com.tw"]
+
+    def test_statement_search_profiles_invalid_json_falls_back_to_default(self):
+        with patch.dict(os.environ, {"STATEMENT_SEARCH_PROFILES": "{not-json"}, clear=False):
+            import src.core.config as config_module
+            importlib.reload(config_module)
+
+            assert isinstance(config_module.STATEMENT_SEARCH_PROFILES, list)
+            assert len(config_module.STATEMENT_SEARCH_PROFILES) >= 1
+            assert any("fubon" in profile["name"] for profile in config_module.STATEMENT_SEARCH_PROFILES)
     
     def test_oauth_config_from_env(self):
         """Test OAuth configuration from environment."""
