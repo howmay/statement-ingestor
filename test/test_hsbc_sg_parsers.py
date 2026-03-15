@@ -27,7 +27,7 @@ def test_hsbc_sg_card_parser():
     assert 'STARBUCKS' in t2['expense_name']
 
 def test_hsbc_sg_bank_parser():
-    text = "27 Feb INTEREST 0.15 1,234.56\n28 Feb GIRO IN 1000.00 2,234.56"
+    text = "EVERYDAY GLOBAL ACC 142-05XXXX-221\n27 Feb INTEREST 0.15 1,234.56\n28 Feb GIRO IN 1000.00 2,234.56"
     source_info = {
         'subject': 'HSBC Personal Banking Statement',
         'sender': 'hsbc@hsbc.com.sg',

@@ -126,8 +126,8 @@ class HsbcSgBankParser(BaseBankParser):
         txs: List[Dict] = []
         lines = self.text.splitlines()
         
-        # Only parse between these headers
-        in_details_section = False
+        # Only parse between these headers, but default to True if we see account identifier
+        in_details_section = 'EVERYDAY GLOBAL ACC' in self.text.upper()
         
         current_tx = None
         prev_balance = None
@@ -146,8 +146,14 @@ class HsbcSgBankParser(BaseBankParser):
                 continue
             
             if not in_details_section:
-                continue
-                
+                # If we see a date-like line and we are already identified as HSBC SG,
+                # we might have missed the header.
+                if self.DATE_PATTERN.match(line) and 'EVERYDAY GLOBAL ACC' in self.text.upper():
+                    in_details_section = True
+                else:
+                    continue
+            
+            # Re-check for end section if we just entered or are in section
             if 'CLOSINGBALANCE' in upper_line or 'ENDOFSTATEMENT' in upper_line:
                 # End section
                 if current_tx:

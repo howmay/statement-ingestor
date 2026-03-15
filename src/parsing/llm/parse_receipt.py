@@ -140,12 +140,19 @@ def parse_receipt_text(text: str, source_info: Dict[str, Any] = None) -> List[Di
             return bank_result.transactions
 
         msg = f"Deterministic parser matched ({bank_result.parser_name}) but extracted 0 transactions."
+        
+        # Some banks explicitly warn when no transactions were found on a valid statement
         if any(w in " ".join(bank_result.warnings).lower() for w in ["no transaction", "no consumption"]):
             logger.info(f"{msg} Considered a valid empty statement.")
             return []
             
-        logger.info(f"{msg} Returning empty list to prevent LLM fallback for known bank formats.")
-        return []
+        # If strict mode, we trust the deterministic parser that matched but found nothing
+        if strict_bank_parser:
+            logger.info(f"{msg} Raising error to prevent LLM fallback (STRICT_BANK_PARSER=true).")
+            raise ReceiptParsingError(msg)
+        
+        # If non-strict, we allow fallback if we think the deterministic parser might have missed something
+        logger.info(f"{msg} Falling back to LLM because STRICT_BANK_PARSER=false.")
 
     # 2) LLM path for non-bank or when strict mode disabled
     llm_config = _get_llm_runtime_config()
