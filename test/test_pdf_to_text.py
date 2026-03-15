@@ -60,7 +60,7 @@ class TestPDFTextExtraction:
     @patch('src.parsing.pdf.pdf_to_text._extract_with_pdftotext')
     @patch('src.parsing.pdf.pdf_to_text.select_pdf_library')
     def test_extract_text_fallback_chain(self, mock_select_library, mock_pdftotext, mock_pypdf, mock_pdfplumber, mock_pdfium, tmp_path):
-        """Test the fallback chain of PDF extractors with smart library selection."""
+        """Test the fallback chain of PDF extractors."""
         pdf_file = tmp_path / "test.pdf"
         pdf_file.write_bytes(b"%PDF-1.4 minimal pdf content")
         
@@ -70,55 +70,47 @@ class TestPDFTextExtraction:
             mock_cache.get.return_value = None
             mock_get_cache.return_value = mock_cache
             
-            # Test 1: Selected library (pypdfium2) succeeds
-            mock_select_library.return_value = 'pypdfium2'
+            # Reset all mock return values to empty strings to avoid MagicMock truthiness
+            mock_pdfplumber.return_value = ""
+            mock_pdfium.return_value = ""
+            mock_pdftotext.return_value = ""
+            mock_pypdf.return_value = ""
+
+            # Test 1: First library in order (pdfplumber) succeeds
+            mock_pdfplumber.return_value = "Text from pdfplumber"
+            result = extract_text_from_pdf(str(pdf_file))
+            assert result == "Text from pdfplumber"
+            mock_pdfplumber.assert_called_once()
+            
+            # Reset mocks
+            mock_pdfplumber.reset_mock()
+            mock_pdfium.reset_mock()
+            mock_pdftotext.reset_mock()
+            mock_pypdf.reset_mock()
+            mock_pdfplumber.return_value = ""
+            
+            # Test 2: First fails, second (pdfium) succeeds
             mock_pdfium.return_value = "Text from pdfium"
             result = extract_text_from_pdf(str(pdf_file))
             assert result == "Text from pdfium"
+            mock_pdfplumber.assert_called_once()
             mock_pdfium.assert_called_once()
             
             # Reset mocks
-            mock_pdfium.reset_mock()
             mock_pdfplumber.reset_mock()
-            mock_pypdf.reset_mock()
+            mock_pdfium.reset_mock()
             mock_pdftotext.reset_mock()
-            mock_cache.get.return_value = None
-            
-            # Test 2: Selected library fails, fallback succeeds
-            mock_select_library.return_value = 'pypdfium2'
+            mock_pypdf.reset_mock()
+            mock_pdfplumber.return_value = ""
             mock_pdfium.return_value = ""
+            
+            # Test 3: Multiple fallbacks
             mock_pdftotext.return_value = "Text from pdftotext"
             result = extract_text_from_pdf(str(pdf_file))
             assert result == "Text from pdftotext"
             
-            # Reset mocks
-            mock_pdfium.reset_mock()
-            mock_pdfplumber.reset_mock()
-            mock_pypdf.reset_mock()
-            mock_pdftotext.reset_mock()
-            mock_cache.get.return_value = None
-            
-            # Test 3: Multiple fallbacks
-            mock_select_library.return_value = 'pypdfium2'
-            mock_pdfium.return_value = ""
-            mock_pdftotext.return_value = ""
-            mock_pdfplumber.return_value = "Text from pdfplumber"
-            result = extract_text_from_pdf(str(pdf_file))
-            assert result == "Text from pdfplumber"
-            
-            # Reset mocks
-            mock_pdfium.reset_mock()
-            mock_pdfplumber.reset_mock()
-            mock_pypdf.reset_mock()
-            mock_pdftotext.reset_mock()
-            mock_cache.get.return_value = None
-            
             # Test 4: All extractors fail
-            mock_select_library.return_value = 'pypdfium2'
-            mock_pdfium.return_value = ""
             mock_pdftotext.return_value = ""
-            mock_pdfplumber.return_value = ""
-            mock_pypdf.return_value = ""
             result = extract_text_from_pdf(str(pdf_file))
             assert result is None
 
