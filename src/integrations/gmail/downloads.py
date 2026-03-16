@@ -54,6 +54,10 @@ def extract_sender_tag(sender: str) -> str:
         r'taipeifubon\.com\.tw$': 'fubon_tw',
         r'fubon\.': 'fubon',
         
+        # DBS SG patterns
+        r'dbs\.com\.sg$': 'dbs_sg',
+        r'dbs\.com$': 'dbs',
+        
         # Esun Bank patterns
         r'esunbank\.com$': 'esunbank',
         
@@ -64,6 +68,7 @@ def extract_sender_tag(sender: str) -> str:
         r'estatements\.': 'estatements_',
         
         # Generic company patterns
+        r'wise\.com$': 'wise',
         r'apple\.com$': 'apple',
         r'uber\.com$': 'uber',
         r'amazon\.com$': 'amazon',

@@ -41,13 +41,13 @@ def get_bank_parser(text: str, source_info: Optional[Dict[str, Any]] = None) -> 
             return FubonCreditCardParser(text, source_info)
         return FubonBankParser(text, source_info)
 
-    if 'esun' in bank_hint or sender_tag == '_bank' or '玉山' in bank_hint:
+    if 'esun' in bank_hint or '玉山' in bank_hint:
         is_card = any(k in bank_hint for k in ['信用卡', 'credit card', 'card'])
         if is_card:
             return EsunCardParser(text, source_info)
         return EsunBankParser(text, source_info)
 
-    if 'dbs' in bank_hint or 'dbs bank' in text.lower()[:2000] or 'consolidated statement' in text[:500].lower():
+    if 'dbs' in bank_hint or 'dbs bank' in text.lower()[:4000] or 'consolidated statement' in text[:2000].lower():
         is_card = any(k in bank_hint for k in ['credit card', '信用卡']) or 'card' in filename
         if is_card:
             return DbsSgCardParser(text, source_info)

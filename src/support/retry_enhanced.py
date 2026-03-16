@@ -343,7 +343,9 @@ class EnhancedAPIRetry:
                 return result
 
             except JSONTruncationError as e:
+                last_exception = e
                 self._handle_json_retry(e, response, context, base_kwargs, attempt, local_logger)
+                continue
 
             except Exception as e:
                 last_exception = e
