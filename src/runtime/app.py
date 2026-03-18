@@ -72,6 +72,9 @@ class GmailExpenseParserApp:
         self.extracted_texts = []
         self.parsed_receipts = []
         
+        # File processing reports
+        self.processing_reports = []
+
         # Statistics
         self.stats = {
             'emails_found': 0,
@@ -101,6 +104,156 @@ class GmailExpenseParserApp:
             self.logger.error(message, **kwargs)
         elif level == 'exception':
             self.logger.exception(message, **kwargs)
+
+    def _get_bank_and_country(self, sender_tag: str, filename: str = "", receipts: Optional[List[Dict[str, Any]]] = None) -> tuple[str, str, str]:
+        """Convert sender tag (e.g., hsbc-sg) to Bank, Country, and Account Type."""
+        bank = 'Unknown'
+        country = 'Unknown'
+        account_type = '未知'
+        
+        # 1. Use parsed metadata from receipts if available
+        if receipts and len(receipts) > 0:
+            source = str(receipts[0].get('source') or '').lower()
+            parser = str(receipts[0].get('parser_name') or '').lower()
+            if 'esun' in parser or '玉山' in source or 'esun' in source:
+                bank, country = 'E.SUN', 'TW'
+            elif 'fubon' in parser or '富邦' in source or 'fubon' in source:
+                bank, country = 'Fubon', 'TW'
+            elif 'taishin' in parser or '台新' in source or 'taishin' in source:
+                bank, country = 'Taishin', 'TW'
+            elif 'first' in parser or '第一' in source:
+                bank, country = 'FirstBank', 'TW'
+            elif 'sinopac' in parser or '永豐' in source:
+                bank, country = 'SinoPac', 'TW'
+            elif 'dbs' in parser or '星展' in source or 'dbs' in source:
+                bank, country = 'DBS', 'SG' if 'sg' in parser else 'TW'
+            elif 'hsbc' in parser or '匯豐' in source or 'hsbc' in source:
+                bank, country = 'HSBC', 'SG' if 'sg' in parser else 'TW'
+            elif 'wise' in parser or 'wise' in source:
+                bank, country = 'Wise', 'Global'
+                
+            if 'card' in parser or 'credit' in source or '信用卡' in source:
+                account_type = '信用卡'
+            elif 'bank' in parser or 'account' in source:
+                account_type = '銀行帳戶'
+
+        # 2. Filename inference
+        if bank == 'Unknown':
+            fname_lower = (filename or '').lower()
+            if '玉山' in fname_lower or 'esun' in fname_lower:
+                bank, country = 'E.SUN', 'TW'
+            elif '台新' in fname_lower or 'taishin' in fname_lower:
+                bank, country = 'Taishin', 'TW'
+            elif '富邦' in fname_lower or 'fubon' in fname_lower:
+                bank, country = 'Fubon', 'TW'
+            elif '星展' in fname_lower or 'dbs' in fname_lower:
+                bank, country = 'DBS', 'SG' if ('sg' in fname_lower or 'dbs.com.sg' in (sender_tag or '').lower()) else 'TW'
+            elif '匯豐' in fname_lower or 'hsbc' in fname_lower:
+                bank, country = 'HSBC', 'SG' if 'sg' in fname_lower else 'TW'
+            elif '第一' in fname_lower or 'first' in fname_lower:
+                bank, country = 'FirstBank', 'TW'
+            elif '永豐' in fname_lower or 'sinopac' in fname_lower:
+                bank, country = 'SinoPac', 'TW'
+            elif 'wise' in fname_lower:
+                bank, country = 'Wise', 'Global'
+
+        # 3. Fallback to sender_tag
+        if bank == 'Unknown':
+            tag = (sender_tag or '').lower()
+            if not tag or tag == 'unknown' or tag == '_bank':
+                pass
+            else:
+                parts = tag.split('-')
+                b = parts[0].upper()
+                if b == 'ESUN':
+                    bank = 'E.SUN'
+                elif b == 'SINOPAC':
+                    bank = 'SinoPac'
+                elif b == 'FUBON':
+                    bank = 'Fubon'
+                else:
+                    bank = b
+                country = 'SG' if 'sg' in parts else 'TW'
+
+        # Account type inference fallback via filename if still unknown
+        if account_type == '未知':
+            fname_lower = (filename or '').lower()
+            if '信用卡' in fname_lower or '簽帳' in fname_lower or 'card' in fname_lower:
+                account_type = '信用卡'
+            elif '對帳單' in fname_lower or 'bank' in fname_lower or 'statement' in fname_lower or '帳戶' in fname_lower:
+                account_type = '銀行帳戶'
+                
+        return bank, country, account_type
+
+    def _add_file_report(self, filename: str, sender_tag: str, status: str, reason: str = "", receipts: Optional[List[Dict[str, Any]]] = None):
+        """Record the processing status for a file."""
+        bank, country, account_type = self._get_bank_and_country(sender_tag, filename, receipts)
+        item_count = len(receipts) if receipts else 0
+        self.processing_reports.append({
+            'Bank': bank,
+            'Country': country,
+            'Type': account_type,
+            'Filename': filename,
+            'Status': status,
+            'Count': item_count,
+            'Reason': reason
+        })
+
+    def print_processing_report(self):
+        """Print the final table report grouping by Bank/Country/Type/Filename/Status."""
+        if not self.processing_reports:
+            return
+
+        import textwrap
+        print("\n\n" + "=" * 110)
+        print(" 處理結果報告 ".center(108 - 12))  # Adjust spacing for double-width chars roughly
+        print("=" * 110)
+
+        # Sort by Country, Bank, Type, Filename
+        sorted_reports = sorted(
+            self.processing_reports,
+            key=lambda x: (x.get('Country', ''), x.get('Bank', ''), x.get('Type', ''), x.get('Filename', ''))
+        )
+
+        try:
+            from tabulate import tabulate
+            headers = ["銀行", "國家", "帳戶類型", "檔名", "狀態", "筆數", "原因"]
+            table_data = []
+            for r in sorted_reports:
+                fname = "\n".join(textwrap.wrap(r.get('Filename', ''), width=35))
+                reason = "\n".join(textwrap.wrap(r.get('Reason', ''), width=20))
+                count_str = str(r.get('Count', 0)) if r.get('Status') == '成功' else '-'
+                table_data.append([
+                    r.get('Bank'), r.get('Country'), r.get('Type'), fname, r.get('Status'), count_str, reason
+                ])
+            print(tabulate(table_data, headers=headers, tablefmt="grid"))
+        except ImportError:
+            # Fallback formatting with multi-line wrapping
+            header = f"| {'銀行':<10} | {'國家':<6} | {'類型':<10} | {'檔名':<35} | {'狀態':<6} | {'筆數':<4} | {'原因'}"
+            print(header)
+            print("-" * 110)
+            for r in sorted_reports:
+                bank = str(r.get('Bank'))[:10]
+                country = str(r.get('Country'))[:6]
+                acct_type = str(r.get('Type'))[:10]
+                status = str(r.get('Status'))[:6]
+                count_str = str(r.get('Count', 0)) if r.get('Status') == '成功' else '-'
+                
+                fname_lines = textwrap.wrap(str(r.get('Filename', '')), width=35)
+                reason_lines = textwrap.wrap(str(r.get('Reason', '')), width=20)
+                
+                max_lines = max(1, len(fname_lines), len(reason_lines))
+                for i in range(max_lines):
+                    f_line = fname_lines[i] if i < len(fname_lines) else ""
+                    r_line = reason_lines[i] if i < len(reason_lines) else ""
+                    
+                    if i == 0:
+                        print(f"| {bank:<10} | {country:<6} | {acct_type:<10} | {f_line:<35} | {status:<6} | {count_str:<4} | {r_line}")
+                    else:
+                        print(f"| {'':<10} | {'':<6} | {'':<10} | {f_line:<35} | {'':<6} | {'':<4} | {r_line}")
+                print("-" * 110)
+
+        print("=" * 110 + "\n")
     
     def validate_configuration(self) -> bool:
         """Validate configuration before starting."""
@@ -305,11 +458,28 @@ class GmailExpenseParserApp:
                     }
 
                 if last_error:
-                    return {'error': f"Failed to extract text from {filename}: {last_error}"}
+                    error_msg = str(last_error).lower()
+                    reason = "密碼不過" if "password" in error_msg or "encrypted" in error_msg else "解析pdf 異常"
+                    return {
+                        'error': f"Failed to extract text from {filename}: {last_error}",
+                        'file_info': file_info,
+                        'report_status': '失敗',
+                        'report_reason': reason
+                    }
 
-                return {'warning': f"No text extracted from {filename}"}
+                return {
+                    'warning': f"No text extracted from {filename}",
+                    'file_info': file_info,
+                    'report_status': '失敗',
+                    'report_reason': '無文字內容'
+                }
             except Exception as e:
-                return {'error': f"Failed to extract text from {file_info.get('filepath', 'unknown')}: {e}"}
+                return {
+                    'error': f"Failed to extract text from {file_info.get('filepath', 'unknown')}: {e}",
+                    'file_info': file_info,
+                    'report_status': '失敗',
+                    'report_reason': '例外錯誤'
+                }
 
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             futures = [executor.submit(process_file, f) for f in files_to_process]
@@ -319,7 +489,13 @@ class GmailExpenseParserApp:
                 if 'text' in result:
                     self.extracted_texts.append(result)
                     self.stats['texts_extracted'] += 1
-                elif 'warning' in result:
+                else:
+                    file_info = result.get('file_info', {})
+                    filename = file_info.get('filename') or os.path.basename(file_info.get('filepath', 'unknown'))
+                    sender_tag = file_info.get('sender_tag', 'unknown')
+                    self._add_file_report(filename, sender_tag, result.get('report_status', '失敗'), result.get('report_reason', '未知錯誤'))
+
+                if 'warning' in result:
                     self.log('warning', result['warning'])
                     self.stats['warnings'] += 1
                 elif 'error' in result:
@@ -396,14 +572,18 @@ class GmailExpenseParserApp:
                     if not receipts:
                         self.log('warning', f"No receipts parsed from {filename}")
                         self.stats['warnings'] += 1
+                        self._add_file_report(filename, file_info.get('sender_tag', ''), "失敗", "解析內容異常/無交易紀錄", receipts)
                         continue
 
                     for r in receipts:
                         r['source_file'] = filename
                         parsed_candidates.append(r)
+                        
+                    self._add_file_report(filename, file_info.get('sender_tag', ''), "成功", "", receipts)
                 except Exception as e:
                     self.log('error', f"Unexpected error processing {filename}: {e}")
                     self.stats['errors'] += 1
+                    self._add_file_report(filename, file_info.get('sender_tag', ''), "失敗", "未預期錯誤")
 
         # De-duplicate parsed transactions to avoid repeated detail rows across reruns/files
         deduped_receipts: List[Dict[str, Any]] = []
@@ -504,6 +684,9 @@ class GmailExpenseParserApp:
                              f"{self.stats['receipts_parsed']} receipts")
             self.log('info', f"Errors: {self.stats['errors']}, Warnings: {self.stats['warnings']}")
             self.log('info', "=" * 60)
+            
+            # Print the formatted table report
+            self.print_processing_report()
             
         return self.stats
 
