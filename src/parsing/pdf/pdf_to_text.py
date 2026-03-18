@@ -58,6 +58,7 @@ def extract_text_from_pdf(pdf_path: str, password: str = None) -> Optional[str]:
     # Primary: pdfplumber, Fallbacks only for extreme cases
     extraction_order = ['pdfplumber', 'pypdfium2', 'pdftotext', 'pypdf']
     
+    last_exception = None
     for library in extraction_order:
         try:
             if library == 'pdfplumber':
@@ -77,9 +78,17 @@ def extract_text_from_pdf(pdf_path: str, password: str = None) -> Optional[str]:
                 cache.set(pdf_path, text, password)
                 return text
         except Exception as e:
-            logger.warning(f"{library} extraction failed: {e}")
+            last_exception = e
+            error_msg = str(e).lower()
+            if 'password' in error_msg or 'encrypt' in error_msg:
+                logger.debug(f"{library} extraction failed: {e}")
+            else:
+                logger.warning(f"{library} extraction failed: {e}")
             continue
-    
+            
+    if last_exception:
+        raise last_exception
+        
     return None
 
 
