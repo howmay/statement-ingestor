@@ -132,14 +132,13 @@ class TestGmailAuth:
         mock_test_token.assert_called_once_with(mock_creds)
 
     @patch('src.integrations.gmail.auth.os.path.exists')
-    @patch('src.integrations.gmail.auth.pickle.load')
     @patch('src.integrations.gmail.auth._test_token_usable')
     @patch('src.integrations.gmail.auth.InstalledAppFlow')
     @patch('src.integrations.gmail.auth._save_credentials_to_token_file')
     @patch('src.integrations.gmail.auth.build')
     def test_get_gmail_service_new_authentication(
         self, mock_build, mock_save_token, mock_flow_class, mock_test_token,
-        mock_pickle_load, mock_exists
+        mock_exists
     ):
         """Test getting Gmail service with new authentication (no token file)."""
         # Mock: client_secrets exists, but token.json does not
@@ -227,11 +226,11 @@ class TestGmailAuth:
 
     @patch('builtins.open', new_callable=mock_open)
     @patch('src.integrations.gmail.auth.os.path.exists')
-    @patch('src.integrations.gmail.auth.pickle.load')
+    @patch('src.integrations.gmail.auth.Credentials.from_authorized_user_file')
     @patch('src.integrations.gmail.auth._test_token_usable')
     @patch('src.integrations.gmail.auth.build')
     def test_get_gmail_service_custom_paths(
-        self, mock_build, mock_test_token, mock_pickle_load, mock_exists, mock_open_file
+        self, mock_build, mock_test_token, mock_creds_from_file, mock_exists, mock_open_file
     ):
         """Test getting Gmail service with custom file paths."""
         # Mock file existence
@@ -241,7 +240,7 @@ class TestGmailAuth:
         mock_creds = Mock(spec=Credentials)
         mock_creds.valid = True
         mock_creds.expired = False
-        mock_pickle_load.return_value = mock_creds
+        mock_creds_from_file.return_value = mock_creds
 
         # Mock token test
         mock_test_token.return_value = True
@@ -252,7 +251,7 @@ class TestGmailAuth:
 
         # Custom paths
         custom_client_secrets = '/custom/path/client_secrets.json'
-        custom_token = '/custom/path/token.pickle'
+        custom_token = '/custom/path/token.json'
         custom_port = 8080
 
         # Call the function with custom paths

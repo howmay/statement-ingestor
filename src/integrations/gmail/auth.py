@@ -1,6 +1,5 @@
 import json
 import os
-import pickle
 import sys
 import tempfile
 from google.auth.transport.requests import Request
@@ -24,10 +23,8 @@ SCOPES = ['https://www.googleapis.com/auth/gmail.readonly']
 DEFAULT_CLIENT_SECRETS_FILE = OAUTH_CLIENT_SECRETS_PATH
 DEFAULT_TOKEN_FILE = OAUTH_TOKEN_PATH
 
-
 def _is_json_token_path(token_path: str) -> bool:
     return str(token_path).lower().endswith('.json')
-
 
 def _atomic_write_text(filepath: str, content: str) -> None:
     """Atomically write UTF-8 text file to avoid partial token corruption."""
@@ -46,78 +43,43 @@ def _atomic_write_text(filepath: str, content: str) -> None:
                 pass
         raise
 
-
-def _atomic_write_bytes(filepath: str, content: bytes) -> None:
-    """Atomically write binary file to avoid partial token corruption."""
-    os.makedirs(os.path.dirname(filepath) or '.', exist_ok=True)
-    temp_path = None
-    try:
-        with tempfile.NamedTemporaryFile('wb', delete=False, dir=os.path.dirname(filepath) or '.') as tf:
-            temp_path = tf.name
-            tf.write(content)
-        os.replace(temp_path, filepath)
-    except Exception:
-        if temp_path and os.path.exists(temp_path):
-            try:
-                os.remove(temp_path)
-            except Exception:
-                pass
-        raise
-
-
 def _load_credentials_from_token_file(token_path: str):
-    """Load credentials from token file with JSON-first + pickle fallback."""
+    """Load credentials from a JSON token file and quarantine invalid legacy formats."""
     if not os.path.exists(token_path):
         return None
 
     logger.info(f"Loading credentials from {token_path}")
 
-    json_error = None
-    pickle_error = None
+    if not _is_json_token_path(token_path):
+        logger.warning(
+            "Legacy non-JSON token files are no longer supported; ignoring %s",
+            token_path,
+        )
+        return None
 
-    # If path is .json, prefer modern google-auth JSON format
-    if _is_json_token_path(token_path):
-        try:
-            return Credentials.from_authorized_user_file(token_path, SCOPES)
-        except Exception as e:
-            json_error = e
-            logger.warning(f"Failed to parse JSON token, trying pickle fallback: {e}")
-
-    # Legacy pickle fallback
     try:
-        with open(token_path, 'rb') as token:
-            return pickle.load(token)
+        return Credentials.from_authorized_user_file(token_path, SCOPES)
     except Exception as e:
-        pickle_error = e
-        logger.warning(f"Failed to load token: {e}")
+        logger.warning(f"Failed to parse JSON token: {e}")
 
-    # Both loaders failed; quarantine broken token to avoid repeated warnings.
     try:
         corrupted_path = f"{token_path}.corrupted"
         if os.path.exists(corrupted_path):
             os.remove(corrupted_path)
         os.replace(token_path, corrupted_path)
-        logger.warning(
-            f"Token file appears corrupted. Moved to {corrupted_path}. "
-            f"json_error={json_error}, pickle_error={pickle_error}"
-        )
+        logger.warning(f"Token file appears corrupted. Moved to {corrupted_path}.")
     except Exception:
         pass
 
     return None
 
-
 def _save_credentials_to_token_file(creds, token_path: str) -> None:
-    """Save credentials to token file, using JSON for *.json path."""
+    """Save credentials to token file in JSON format only."""
     logger.info(f"Saving credentials to {token_path}")
     try:
-        if _is_json_token_path(token_path):
-            _atomic_write_text(token_path, creds.to_json())
-        else:
-            _atomic_write_bytes(token_path, pickle.dumps(creds))
+        _atomic_write_text(token_path, creds.to_json())
     except Exception as e:
         logger.warning(f"Failed to save token: {e}")
-
 
 def _test_token_usable(creds):
     """
@@ -137,6 +99,18 @@ def _test_token_usable(creds):
         logger.warning(f"Token usability test failed: {e}")
         return False
 
+def _describe_manual_token(manual_token) -> str:
+    """Return a safe, non-secret description for manual token logging."""
+    if isinstance(manual_token, dict):
+        token_value = str(manual_token.get('token', '') or '')
+        has_refresh = bool(manual_token.get('refresh_token'))
+        return (
+            "authorized-user info provided "
+            f"(token_length={len(token_value)}, refresh_token={'yes' if has_refresh else 'no'})"
+        )
+
+    token_value = str(manual_token or '')
+    return f"access token provided (token_length={len(token_value)})"
 
 def _get_oauth2_client_id_secret():
     """
@@ -166,7 +140,6 @@ def _get_oauth2_client_id_secret():
         "Please set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET environment variables, "
         "or create a client_secrets.json file."
     )
-
 
 @retry_gmail
 def get_gmail_service(client_secrets_path=None, token_path=None, port=None, 
@@ -225,11 +198,10 @@ def get_gmail_service(client_secrets_path=None, token_path=None, port=None,
         if manual_token:
             try:
                 if isinstance(manual_token, dict):
-                    token_preview = str(manual_token.get('token', ''))[:20]
-                    logger.info(f"Using manual token info (token first 20 chars): {token_preview}...")
+                    logger.info(f"Using manual token: {_describe_manual_token(manual_token)}")
                     creds = Credentials.from_authorized_user_info(manual_token, SCOPES)
                 elif isinstance(manual_token, str):
-                    logger.info(f"Using manual token (first 20 chars): {manual_token[:20]}...")
+                    logger.info(f"Using manual token: {_describe_manual_token(manual_token)}")
                     creds = Credentials(
                         token=manual_token,
                         token_uri='https://oauth2.googleapis.com/token',
@@ -335,7 +307,6 @@ def get_gmail_service(client_secrets_path=None, token_path=None, port=None,
     except Exception as e:
         raise ValueError(f"Failed to build Gmail service: {e}")
 
-
 def test_auth():
     """Simple test function to verify authentication works."""
     try:
@@ -347,7 +318,6 @@ def test_auth():
     except Exception as e:
         logger.error(f"Authentication test failed: {e}")
         return False
-
 
 if __name__ == '__main__':
     # When run directly, test the authentication
