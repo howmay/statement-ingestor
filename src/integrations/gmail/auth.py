@@ -24,10 +24,8 @@ SCOPES = ['https://www.googleapis.com/auth/gmail.readonly']
 DEFAULT_CLIENT_SECRETS_FILE = OAUTH_CLIENT_SECRETS_PATH
 DEFAULT_TOKEN_FILE = OAUTH_TOKEN_PATH
 
-
 def _is_json_token_path(token_path: str) -> bool:
     return str(token_path).lower().endswith('.json')
-
 
 def _atomic_write_text(filepath: str, content: str) -> None:
     """Atomically write UTF-8 text file to avoid partial token corruption."""
@@ -46,7 +44,6 @@ def _atomic_write_text(filepath: str, content: str) -> None:
                 pass
         raise
 
-
 def _atomic_write_bytes(filepath: str, content: bytes) -> None:
     """Atomically write binary file to avoid partial token corruption."""
     os.makedirs(os.path.dirname(filepath) or '.', exist_ok=True)
@@ -63,7 +60,6 @@ def _atomic_write_bytes(filepath: str, content: bytes) -> None:
             except Exception:
                 pass
         raise
-
 
 def _load_credentials_from_token_file(token_path: str):
     """Load credentials from token file with JSON-first + pickle fallback."""
@@ -106,7 +102,6 @@ def _load_credentials_from_token_file(token_path: str):
 
     return None
 
-
 def _save_credentials_to_token_file(creds, token_path: str) -> None:
     """Save credentials to token file, using JSON for *.json path."""
     logger.info(f"Saving credentials to {token_path}")
@@ -117,7 +112,6 @@ def _save_credentials_to_token_file(creds, token_path: str) -> None:
             _atomic_write_bytes(token_path, pickle.dumps(creds))
     except Exception as e:
         logger.warning(f"Failed to save token: {e}")
-
 
 def _test_token_usable(creds):
     """
@@ -137,6 +131,18 @@ def _test_token_usable(creds):
         logger.warning(f"Token usability test failed: {e}")
         return False
 
+def _describe_manual_token(manual_token) -> str:
+    """Return a safe, non-secret description for manual token logging."""
+    if isinstance(manual_token, dict):
+        token_value = str(manual_token.get('token', '') or '')
+        has_refresh = bool(manual_token.get('refresh_token'))
+        return (
+            "authorized-user info provided "
+            f"(token_length={len(token_value)}, refresh_token={'yes' if has_refresh else 'no'})"
+        )
+
+    token_value = str(manual_token or '')
+    return f"access token provided (token_length={len(token_value)})"
 
 def _get_oauth2_client_id_secret():
     """
@@ -166,7 +172,6 @@ def _get_oauth2_client_id_secret():
         "Please set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET environment variables, "
         "or create a client_secrets.json file."
     )
-
 
 @retry_gmail
 def get_gmail_service(client_secrets_path=None, token_path=None, port=None, 
@@ -225,11 +230,10 @@ def get_gmail_service(client_secrets_path=None, token_path=None, port=None,
         if manual_token:
             try:
                 if isinstance(manual_token, dict):
-                    token_preview = str(manual_token.get('token', ''))[:20]
-                    logger.info(f"Using manual token info (token first 20 chars): {token_preview}...")
+                    logger.info(f"Using manual token: {_describe_manual_token(manual_token)}")
                     creds = Credentials.from_authorized_user_info(manual_token, SCOPES)
                 elif isinstance(manual_token, str):
-                    logger.info(f"Using manual token (first 20 chars): {manual_token[:20]}...")
+                    logger.info(f"Using manual token: {_describe_manual_token(manual_token)}")
                     creds = Credentials(
                         token=manual_token,
                         token_uri='https://oauth2.googleapis.com/token',
@@ -335,7 +339,6 @@ def get_gmail_service(client_secrets_path=None, token_path=None, port=None,
     except Exception as e:
         raise ValueError(f"Failed to build Gmail service: {e}")
 
-
 def test_auth():
     """Simple test function to verify authentication works."""
     try:
@@ -347,7 +350,6 @@ def test_auth():
     except Exception as e:
         logger.error(f"Authentication test failed: {e}")
         return False
-
 
 if __name__ == '__main__':
     # When run directly, test the authentication
