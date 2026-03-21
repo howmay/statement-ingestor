@@ -34,7 +34,11 @@ from src.integrations.gmail.downloads import batch_download_pdfs
 from src.parsing.pdf.pdf_to_text import extract_text_from_pdf
 from src.parsing.csv.statement_csv import parse_csv_statement
 from src.parsing.llm.parse_receipt import parse_receipt_text, parse_multiple_receipts, ReceiptParsingError
-from src.export.csv_writer import export_receipts_to_csv, export_extracted_texts_to_csv
+from src.export.csv_writer import (
+    export_receipts_to_csv,
+    export_extracted_texts_to_csv,
+    sort_exported_receipt_csvs,
+)
 
 
 class GmailExpenseParserApp:
@@ -639,6 +643,9 @@ class GmailExpenseParserApp:
             # Export parsed receipts
             if self.parsed_receipts:
                 csv_path = export_receipts_to_csv(self.parsed_receipts)
+                receipt_csv_paths = [path for path in csv_path.split(',') if path]
+                if receipt_csv_paths:
+                    sort_exported_receipt_csvs(receipt_csv_paths)
                 self.log('info', f"✓ Parsed receipts exported to: {csv_path}")
             
             # Also export raw extracted texts for debugging/record

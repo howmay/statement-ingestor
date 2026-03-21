@@ -2,6 +2,7 @@
 Enhanced unit tests for PDF download module.
 """
 import os
+from pathlib import Path
 import pytest
 import base64
 import hashlib
@@ -90,6 +91,40 @@ class TestDownloadPDFsEnhanced:
             with patch('src.integrations.gmail.downloads.os.path.isfile', return_value=True):
                 result = get_existing_file_by_md5(target_md5, "/tmp/dir")
                 assert result == "/tmp/dir/existing.pdf"
+
+    def test_get_existing_file_by_md5_uses_sqlite_index_instead_of_json_cache(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        directory = tmp_path / "downloads"
+        directory.mkdir()
+        existing = directory / "existing.pdf"
+        existing.write_bytes(b"file content")
+
+        target_md5 = hashlib.md5(b"file content").hexdigest()
+
+        result = get_existing_file_by_md5(target_md5, str(directory))
+
+        assert result == str(existing)
+        assert not (directory / ".md5_cache.json").exists()
+        assert Path(".cache/performance_index.sqlite3").exists()
+
+    def test_get_existing_file_by_md5_refreshes_stale_entry_when_file_changes(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        directory = tmp_path / "downloads"
+        directory.mkdir()
+        existing = directory / "existing.pdf"
+        existing.write_bytes(b"old content")
+
+        old_md5 = hashlib.md5(b"old content").hexdigest()
+        new_md5 = hashlib.md5(b"new content").hexdigest()
+
+        assert get_existing_file_by_md5(old_md5, str(directory)) == str(existing)
+
+        existing.write_bytes(b"new content")
+        stat_info = existing.stat()
+        os.utime(existing, (stat_info.st_mtime + 1, stat_info.st_mtime + 1))
+
+        assert get_existing_file_by_md5(old_md5, str(directory)) is None
+        assert get_existing_file_by_md5(new_md5, str(directory)) == str(existing)
 
     @patch('src.integrations.gmail.downloads.DOWNLOAD_DIR', '/tmp/downloads')
     @patch('src.integrations.gmail.downloads.os.makedirs')
