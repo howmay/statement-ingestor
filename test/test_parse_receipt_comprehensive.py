@@ -71,6 +71,38 @@ def test_parse_receipt_text_non_strict_falls_back_to_heuristic(monkeypatch):
     assert len(out) >= 1
 
 
+
+
+def test_parse_receipt_text_logs_filename_when_entering_llm(monkeypatch):
+    monkeypatch.setattr(pr, "parse_with_bank_factory", lambda *_: BankParseResult(matched=False))
+    monkeypatch.setattr(pr, "_get_llm_runtime_config", lambda: {"enabled": True, "provider": "openai", "model": "gpt-test"})
+    monkeypatch.setattr(
+        pr,
+        "_parse_with_openai_enhanced",
+        lambda *_args, **_kwargs: [
+            {
+                "date": "2026-01-01",
+                "amount": 100.0,
+                "currency": "TWD",
+                "expense_name": "A",
+                "expense_type": "Other",
+                "source": "S",
+                "confidence": 0.9,
+            }
+        ],
+    )
+
+    with patch.object(pr.logger, "info") as mock_info:
+        out = pr.parse_receipt_text(
+            "2026-01-01 NT$100.00",
+            {"sender_tag": "hsbc", "filename": "statement.pdf"},
+        )
+
+    assert len(out) == 1
+    logged = "\n".join(str(call.args[0]) for call in mock_info.call_args_list if call.args)
+    assert "statement.pdf" in logged
+    assert "Attempting openai parsing" in logged
+
 def test_parse_receipt_text_llm_failure_falls_back_to_heuristic(monkeypatch):
     monkeypatch.setattr(pr, "parse_with_bank_factory", lambda *_: BankParseResult(matched=False))
     monkeypatch.setattr(pr, "_get_llm_runtime_config", lambda: {"enabled": True, "provider": "openai", "model": "m"})
