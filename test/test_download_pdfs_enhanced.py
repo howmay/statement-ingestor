@@ -37,6 +37,8 @@ class TestDownloadPDFsEnhanced:
         assert extract_sender_tag("service@mail.hsbc.com.sg") == "hsbc_sg_mail"
         assert extract_sender_tag("alert@hsbc.com.tw") == "hsbc_tw"
         assert extract_sender_tag("no-reply@uber.com") == "uber"
+        assert extract_sender_tag('"台新銀行" <webmaster@bhurecv.taishinbank.com.tw>') == "taishin"
+        assert extract_sender_tag("alert@esunbank.com.tw") == "esunbank"
         # Adjusted expectation to match implementation
         assert extract_sender_tag("test@unknown-bank.com") == "_bank"
         assert extract_sender_tag("simple") == "simple"

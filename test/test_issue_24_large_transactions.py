@@ -179,6 +179,7 @@ def test_mock_openai_parsing():
         
         os.environ['OPENAI_API_KEY'] = 'test-key'
         os.environ['STRICT_BANK_PARSER'] = 'false'
+        os.environ['ALLOW_MATCHED_BANK_LLM_FALLBACK'] = 'true'
         
         try:
             text = "2024-01-01 NT$100.00 Test"
@@ -194,6 +195,8 @@ def test_mock_openai_parsing():
                 del os.environ['OPENAI_API_KEY']
             if 'STRICT_BANK_PARSER' in os.environ:
                 del os.environ['STRICT_BANK_PARSER']
+            if 'ALLOW_MATCHED_BANK_LLM_FALLBACK' in os.environ:
+                del os.environ['ALLOW_MATCHED_BANK_LLM_FALLBACK']
     
     print("Mock API parsing tests completed\n")
 

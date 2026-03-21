@@ -63,6 +63,7 @@ def test_truncated_json_repair():
 
 def test_mock_api_with_chunking(monkeypatch):
     monkeypatch.setenv('STRICT_BANK_PARSER', 'false')
+    monkeypatch.setenv('ALLOW_MATCHED_BANK_LLM_FALLBACK', 'true')
     monkeypatch.setenv('OPENAI_API_KEY', 'test-key')
     monkeypatch.setenv('LLM_PROVIDER', 'openai')
 
@@ -99,6 +100,7 @@ def test_mock_api_with_chunking(monkeypatch):
 
 def test_error_handling_and_retry(monkeypatch):
     monkeypatch.setenv('STRICT_BANK_PARSER', 'false')
+    monkeypatch.setenv('ALLOW_MATCHED_BANK_LLM_FALLBACK', 'true')
     monkeypatch.setenv('OPENAI_API_KEY', 'test-key')
     monkeypatch.setenv('LLM_PROVIDER', 'openai')
 
