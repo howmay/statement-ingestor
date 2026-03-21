@@ -1,6 +1,5 @@
 import json
 import os
-import pickle
 import sys
 import tempfile
 from google.auth.transport.requests import Request
@@ -62,54 +61,40 @@ def _atomic_write_bytes(filepath: str, content: bytes) -> None:
         raise
 
 def _load_credentials_from_token_file(token_path: str):
-    """Load credentials from token file with JSON-first + pickle fallback."""
+    """Load credentials from a JSON token file and quarantine invalid legacy formats."""
     if not os.path.exists(token_path):
         return None
 
     logger.info(f"Loading credentials from {token_path}")
 
-    json_error = None
-    pickle_error = None
+    if not _is_json_token_path(token_path):
+        logger.warning(
+            "Legacy non-JSON token files are no longer supported; ignoring %s",
+            token_path,
+        )
+        return None
 
-    # If path is .json, prefer modern google-auth JSON format
-    if _is_json_token_path(token_path):
-        try:
-            return Credentials.from_authorized_user_file(token_path, SCOPES)
-        except Exception as e:
-            json_error = e
-            logger.warning(f"Failed to parse JSON token, trying pickle fallback: {e}")
-
-    # Legacy pickle fallback
     try:
-        with open(token_path, 'rb') as token:
-            return pickle.load(token)
+        return Credentials.from_authorized_user_file(token_path, SCOPES)
     except Exception as e:
-        pickle_error = e
-        logger.warning(f"Failed to load token: {e}")
+        logger.warning(f"Failed to parse JSON token: {e}")
 
-    # Both loaders failed; quarantine broken token to avoid repeated warnings.
     try:
         corrupted_path = f"{token_path}.corrupted"
         if os.path.exists(corrupted_path):
             os.remove(corrupted_path)
         os.replace(token_path, corrupted_path)
-        logger.warning(
-            f"Token file appears corrupted. Moved to {corrupted_path}. "
-            f"json_error={json_error}, pickle_error={pickle_error}"
-        )
+        logger.warning(f"Token file appears corrupted. Moved to {corrupted_path}.")
     except Exception:
         pass
 
     return None
 
 def _save_credentials_to_token_file(creds, token_path: str) -> None:
-    """Save credentials to token file, using JSON for *.json path."""
+    """Save credentials to token file in JSON format only."""
     logger.info(f"Saving credentials to {token_path}")
     try:
-        if _is_json_token_path(token_path):
-            _atomic_write_text(token_path, creds.to_json())
-        else:
-            _atomic_write_bytes(token_path, pickle.dumps(creds))
+        _atomic_write_text(token_path, creds.to_json())
     except Exception as e:
         logger.warning(f"Failed to save token: {e}")
 

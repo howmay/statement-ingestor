@@ -161,8 +161,10 @@ def parse_receipt_text(text: str, source_info: Dict[str, Any] = None) -> List[Di
         return _parse_with_heuristics(text, source_info)
 
     try:
+        filename = source_info.get('filename') or source_info.get('filepath') or '<unknown>'
         logger.info(
-            f"Attempting {llm_config.get('provider')} parsing with model: {llm_config.get('model')}"
+            f"Attempting {llm_config.get('provider')} parsing for {filename} "
+            f"with model: {llm_config.get('model')}"
         )
         return _parse_with_openai_enhanced(text, source_info, llm_config)
     except Exception as e:

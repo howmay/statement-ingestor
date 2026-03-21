@@ -257,6 +257,29 @@ class TestGmailExpenseParserAppParseReceipts:
             assert len(app.parsed_receipts) == 2
             assert app.stats['receipts_parsed'] == 2
     
+
+
+    def test_extract_and_parse_reuse_cached_file_md5(self, app):
+        """MD5 should be computed once and then carried in file_info across steps."""
+        app.cache = Mock()
+        app.cache.get_file_md5.return_value = 'md5-1'
+        app.cache.get.return_value = None
+        app.downloaded_files = [
+            {'filepath': '/downloads/file1.pdf', 'sender': 'bank', 'subject': 'stmt', 'filename': 'file1.pdf', 'sender_tag': 'bank'}
+        ]
+
+        with patch('src.runtime.app.extract_text_from_pdf', return_value='Extracted text'):
+            assert app.extract_texts(max_workers=1) is True
+
+        with patch('src.runtime.app.parse_receipt_text', return_value=[
+            {'date': '2024-01-01', 'amount': 100.0, 'expense_name': 'Purchase', 'expense_type': 'Food', 'source': 'bank', 'confidence': 0.95}
+        ]):
+            assert app.parse_receipts(max_workers=1) is True
+
+        assert app.cache.get_file_md5.call_count == 1
+        extracted_file_info = app.extracted_texts[0]['file_info']
+        assert extracted_file_info['file_md5'] == 'md5-1'
+
     def test_parse_receipts_no_texts(self, app):
         """Test parse with no extracted texts."""
         app.extracted_texts = []
