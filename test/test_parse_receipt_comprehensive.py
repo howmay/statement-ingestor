@@ -63,12 +63,35 @@ def test_parse_receipt_text_strict_bank_parser_raises_when_zero_transactions(mon
 
 def test_parse_receipt_text_non_strict_falls_back_to_heuristic(monkeypatch):
     monkeypatch.setenv("STRICT_BANK_PARSER", "false")
+    monkeypatch.setenv("ALLOW_MATCHED_BANK_LLM_FALLBACK", "true")
     monkeypatch.setattr(pr, "parse_with_bank_factory", lambda *_: BankParseResult(matched=True, parser_name="hsbc", transactions=[]))
     monkeypatch.setattr(pr, "_get_llm_runtime_config", lambda: {"enabled": False})
 
     out = pr.parse_receipt_text("2026-01-01 NT$100.00", {"sender_tag": "hsbc"})
     assert isinstance(out, list)
     assert len(out) >= 1
+
+
+def test_parse_receipt_text_known_bank_parser_does_not_fallback_to_llm_when_zero_transactions(monkeypatch):
+    monkeypatch.setenv("STRICT_BANK_PARSER", "false")
+    monkeypatch.setattr(
+        pr,
+        "parse_with_bank_factory",
+        lambda *_: BankParseResult(matched=True, parser_name="HsbcSgBankParser", transactions=[]),
+    )
+    llm_called = {"called": False}
+
+    def _mark_llm_call(*_args, **_kwargs):
+        llm_called["called"] = True
+        return []
+
+    monkeypatch.setattr(pr, "_get_llm_runtime_config", lambda: {"enabled": True, "provider": "local", "model": "m"})
+    monkeypatch.setattr(pr, "_parse_with_openai_enhanced", _mark_llm_call)
+
+    with pytest.raises(ReceiptParsingError):
+        pr.parse_receipt_text("statement text", {"sender_tag": "hsbc_sg_mail", "filename": "20260322.pdf"})
+
+    assert llm_called["called"] is False
 
 
 
@@ -108,7 +131,12 @@ def test_parse_receipt_text_llm_failure_falls_back_to_heuristic(monkeypatch):
     monkeypatch.setattr(pr, "_get_llm_runtime_config", lambda: {"enabled": True, "provider": "openai", "model": "m"})
     monkeypatch.setattr(pr, "_parse_with_openai_enhanced", Mock(side_effect=RuntimeError("llm fail")))
 
-    out = pr.parse_receipt_text("2026-01-01 NT$100.00", {"sender_tag": "hsbc"})
+    with patch.object(pr.logger, "warning") as mock_warning:
+        out = pr.parse_receipt_text("2026-01-01 NT$100.00", {"sender_tag": "hsbc", "filename": "wise.pdf"})
+
+    logged = "\n".join(str(call.args[0]) for call in mock_warning.call_args_list if call.args)
+    assert "wise.pdf" in logged
+    assert "LLM parsing failed" in logged
     assert isinstance(out, list)
     assert len(out) >= 1
 
@@ -146,17 +174,22 @@ def test_parse_with_adaptive_strategy_chunking_and_merge(monkeypatch):
     def fake_call_llm(_prompt, _max_tokens):
         return responses.pop(0)
 
-    out = pr._parse_with_adaptive_strategy(
-        text="large text",
-        source_info={"sender_tag": "hsbc"},
-        source_label="HSBC Bank",
-        model_name="m",
-        provider_name="openai",
-        call_llm=fake_call_llm,
-    )
+    with patch.object(pr.logger, "info") as mock_info:
+        out = pr._parse_with_adaptive_strategy(
+            text="large text",
+            source_info={"sender_tag": "hsbc", "filename": "wise.pdf"},
+            source_label="HSBC Bank",
+            model_name="m",
+            provider_name="openai",
+            call_llm=fake_call_llm,
+        )
 
     assert len(out) == 2
     assert {x["expense_name"] for x in out} == {"A", "B"}
+    logged = "\n".join(str(call.args[0]) for call in mock_info.call_args_list if call.args)
+    assert "wise.pdf" in logged
+    assert "Split text into 2 chunks" in logged
+    assert "Processing chunk 1/2" in logged
 
 
 def test_parse_with_adaptive_strategy_all_chunks_fail(monkeypatch):
@@ -166,15 +199,20 @@ def test_parse_with_adaptive_strategy_all_chunks_fail(monkeypatch):
     def fake_call_llm(_prompt, _max_tokens):
         raise RuntimeError("boom")
 
-    with pytest.raises(ReceiptParsingError):
-        pr._parse_with_adaptive_strategy(
-            text="large text",
-            source_info={"sender_tag": "hsbc"},
-            source_label="HSBC Bank",
-            model_name="m",
-            provider_name="openai",
-            call_llm=fake_call_llm,
-        )
+    with patch.object(pr.logger, "error") as mock_error:
+        with pytest.raises(ReceiptParsingError):
+            pr._parse_with_adaptive_strategy(
+                text="large text",
+                source_info={"sender_tag": "hsbc", "filename": "wise.pdf"},
+                source_label="HSBC Bank",
+                model_name="m",
+                provider_name="openai",
+                call_llm=fake_call_llm,
+            )
+
+    logged = "\n".join(str(call.args[0]) for call in mock_error.call_args_list if call.args)
+    assert "wise.pdf" in logged
+    assert "Chunk 1 failed after retries" in logged
 
 
 def test_extract_and_validate_transactions_paths():

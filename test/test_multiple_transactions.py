@@ -8,6 +8,7 @@ from src.parsing.llm.parse_receipt import parse_receipt_text
 def test_bank_statement_parsing(monkeypatch):
     # Force heuristic/LLM fallback path without strict deterministic blocking
     monkeypatch.setenv('STRICT_BANK_PARSER', 'false')
+    monkeypatch.setenv('ALLOW_MATCHED_BANK_LLM_FALLBACK', 'true')
     monkeypatch.setenv('LLM_PROVIDER', 'openai')
     monkeypatch.delenv('OPENAI_API_KEY', raising=False)
 

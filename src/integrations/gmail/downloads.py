@@ -30,13 +30,16 @@ def extract_sender_tag(sender: str) -> str:
     Returns:
         Clean tag string (lowercase, alphanumeric and underscores only).
     """
+    _display_name, email_addr = parseaddr(sender or "")
+    normalized_sender = email_addr or sender or ""
+
     # Extract domain part after @
-    if '@' not in sender:
+    if '@' not in normalized_sender:
         # Clean the whole string if no @ found
-        tag = re.sub(r'[^a-zA-Z0-9]', '_', sender).lower()
+        tag = re.sub(r'[^a-zA-Z0-9]', '_', normalized_sender).lower()
         return tag[:30] if tag else 'unknown'
     
-    domain = sender.split('@')[1]
+    domain = normalized_sender.split('@', 1)[1].strip().strip('>').lower()
     
     # Bank/company domain mapping for better identification
     # Key patterns in domain -> preferred tag
@@ -61,8 +64,12 @@ def extract_sender_tag(sender: str) -> str:
         # DBS SG patterns
         r'dbs\.com\.sg$': 'dbs_sg',
         r'dbs\.com$': 'dbs',
-        
+
+        # Taishin patterns
+        r'taishinbank\.com\.tw$': 'taishin',
+
         # Esun Bank patterns
+        r'esunbank\.com\.tw$': 'esunbank',
         r'esunbank\.com$': 'esunbank',
         
         # Common financial patterns

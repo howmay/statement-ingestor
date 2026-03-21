@@ -89,6 +89,18 @@ class TestBankFactory:
         # Esun
         parser = get_bank_parser("text", {'sender': 'service@esunbank.com'})
         assert isinstance(parser, EsunBankParser)
+
+        # Esun debit card / signed debit card should use card parser
+        parser = get_bank_parser(
+            "text",
+            {
+                'sender': 'alert@esunbank.com.tw',
+                'sender_tag': 'esunbank',
+                'subject': '玉山銀行簽帳金融卡電子對帳單',
+                'filename': '玉山銀行簽帳金融卡電子對帳單(11502).pdf',
+            },
+        )
+        assert isinstance(parser, EsunCardParser)
         
         # None
         parser = get_bank_parser("text", {'sender': 'unknown@gmail.com'})

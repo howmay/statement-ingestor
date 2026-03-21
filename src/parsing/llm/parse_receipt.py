@@ -32,6 +32,10 @@ class ReceiptParsingError(Exception):
     pass
 
 
+def _is_truthy_env(name: str, default: str = "false") -> bool:
+    return os.getenv(name, default).lower() in {'1', 'true', 'yes', 'on'}
+
+
 def _get_llm_runtime_config() -> Dict[str, Any]:
     """
     Resolve runtime LLM config.
@@ -129,7 +133,8 @@ def parse_receipt_text(text: str, source_info: Dict[str, Any] = None) -> List[Di
     logger.info(f"Parsing receipt text ({len(text)} chars), source: {source_info.get('sender_tag', 'unknown')}")
 
     # 1) Deterministic bank parser first (accuracy-first path)
-    strict_bank_parser = os.getenv('STRICT_BANK_PARSER', 'true').lower() in {'1', 'true', 'yes', 'on'}
+    strict_bank_parser = _is_truthy_env('STRICT_BANK_PARSER', 'true')
+    allow_matched_bank_fallback = _is_truthy_env('ALLOW_MATCHED_BANK_LLM_FALLBACK', 'false')
     bank_result = parse_with_bank_factory(text, source_info)
     if bank_result.matched:
         if bank_result.transactions:
@@ -145,14 +150,24 @@ def parse_receipt_text(text: str, source_info: Dict[str, Any] = None) -> List[Di
         if any(w in " ".join(bank_result.warnings).lower() for w in ["no transaction", "no consumption"]):
             logger.info(f"{msg} Considered a valid empty statement.")
             return []
-            
-        # If strict mode, we trust the deterministic parser that matched but found nothing
-        if strict_bank_parser:
-            logger.info(f"{msg} Raising error to prevent LLM fallback (STRICT_BANK_PARSER=true).")
+
+        
+        # For known deterministic parsers, default to trusting the parser match and
+        # only allow LLM fallback via an explicit opt-in flag.
+        if strict_bank_parser or not allow_matched_bank_fallback:
+            reason = (
+                "STRICT_BANK_PARSER=true"
+                if strict_bank_parser
+                else "ALLOW_MATCHED_BANK_LLM_FALLBACK=false"
+            )
+            logger.info(f"{msg} Raising error to prevent LLM fallback ({reason}).")
             raise ReceiptParsingError(msg)
         
-        # If non-strict, we allow fallback if we think the deterministic parser might have missed something
-        logger.info(f"{msg} Falling back to LLM because STRICT_BANK_PARSER=false.")
+        # Explicit opt-in for matched deterministic parsers that should still try LLM recovery.
+        logger.info(
+            f"{msg} Falling back to LLM because STRICT_BANK_PARSER=false "
+            f"and ALLOW_MATCHED_BANK_LLM_FALLBACK=true."
+        )
 
     # 2) LLM path for non-bank or when strict mode disabled
     llm_config = _get_llm_runtime_config()
@@ -168,7 +183,7 @@ def parse_receipt_text(text: str, source_info: Dict[str, Any] = None) -> List[Di
         )
         return _parse_with_openai_enhanced(text, source_info, llm_config)
     except Exception as e:
-        logger.warning(f"LLM parsing failed: {e}, trying heuristic fallback")
+        logger.warning(f"LLM parsing failed for {filename}: {e}, trying heuristic fallback")
         return _parse_with_heuristics(text, source_info)
 
 
@@ -193,13 +208,11 @@ def _chunk_text_by_transactions(
     min_transactions_per_chunk: int = 5,
 ) -> List[Tuple[str, List[int]]]:
     """Backward-compatible wrapper for transaction chunking."""
-    chunks = _chunk_text_by_transactions_impl(
+    return _chunk_text_by_transactions_impl(
         text,
         max_chunk_size=max_chunk_size,
         min_transactions_per_chunk=min_transactions_per_chunk,
     )
-    logger.info(f"Split text into {len(chunks)} chunks")
-    return chunks
 
 
 def _should_enable_chunking(text: str, source_info: Dict[str, Any], force: bool = False) -> bool:
@@ -229,6 +242,7 @@ def _parse_with_adaptive_strategy(
     """Adaptive parsing strategy for large transaction lists."""
     chunk_cfg = _get_chunking_config()
     user_prompt_template = "Extract transactions from {source} text:\n{text}"
+    filename = source_info.get('filename') or source_info.get('filepath') or '<unknown>'
 
     if _should_enable_chunking(text, source_info, force=force_chunking):
         chunks = _chunk_text_by_transactions(
@@ -236,13 +250,14 @@ def _parse_with_adaptive_strategy(
             max_chunk_size=chunk_cfg['max_chunk_size'],
             min_transactions_per_chunk=chunk_cfg['min_transactions_per_chunk'],
         )
-        logger.info(f"Chunking enabled, processing {len(chunks)} chunks")
+        logger.info(f"Split text into {len(chunks)} chunks for {filename}")
+        logger.info(f"Chunking enabled for {filename}, processing {len(chunks)} chunks")
 
         all_transactions = []
         for i, (chunk_text, _) in enumerate(chunks):
             user_prompt = user_prompt_template.format(text=chunk_text, source=source_label)
             try:
-                logger.info(f"Processing chunk {i+1}/{len(chunks)}")
+                logger.info(f"Processing chunk {i+1}/{len(chunks)} for {filename}")
                 result_text = call_llm(user_prompt, _calculate_max_tokens(len(chunk_text)))
                 json_payload = _extract_json_payload(result_text)
                 fixed_json = _fix_truncated_json_enhanced(json_payload, {'expected_keys': ['transactions']})
@@ -251,7 +266,7 @@ def _parse_with_adaptive_strategy(
                     _extract_and_validate_transactions(parsed, source_info, chunk_text, model_name, provider_name)
                 )
             except Exception as e:
-                logger.error(f"Chunk {i+1} failed after retries: {e}")
+                logger.error(f"Chunk {i+1} failed after retries for {filename}: {e}")
 
         if not all_transactions:
             raise ReceiptParsingError("All chunks failed to parse")

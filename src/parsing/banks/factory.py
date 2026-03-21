@@ -42,7 +42,7 @@ def get_bank_parser(text: str, source_info: Optional[Dict[str, Any]] = None) -> 
         return FubonBankParser(text, source_info)
 
     if 'esun' in bank_hint or '玉山' in bank_hint:
-        is_card = any(k in bank_hint for k in ['信用卡', 'credit card', 'card'])
+        is_card = any(k in bank_hint for k in ['信用卡', 'credit card', 'card', '簽帳金融卡', '金融卡', 'debit card'])
         if is_card:
             return EsunCardParser(text, source_info)
         return EsunBankParser(text, source_info)
