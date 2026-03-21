@@ -381,6 +381,25 @@ class GmailExpenseParserApp:
             self.stats['errors'] += 1
             return False
             
+
+    def _get_or_compute_file_md5(self, file_info: Dict[str, Any]) -> Optional[str]:
+        """Compute file MD5 once per file_info and reuse it across pipeline steps."""
+        if not self.cache:
+            return None
+
+        cached_md5 = file_info.get('file_md5')
+        if cached_md5:
+            return cached_md5
+
+        filepath = file_info.get('filepath', '')
+        if not filepath:
+            return None
+
+        file_md5 = self.cache.get_file_md5(filepath)
+        if file_md5:
+            file_info['file_md5'] = file_md5
+        return file_md5
+
     def extract_texts(self, max_workers: Optional[int] = None) -> bool:
         """Step 4: Extract text from PDFs with parallelism and caching."""
         if not self.downloaded_files:
@@ -401,7 +420,7 @@ class GmailExpenseParserApp:
                 
                 # Check cache for extracted text
                 if self.cache:
-                    pdf_md5 = self.cache.get_file_md5(filepath)
+                    pdf_md5 = self._get_or_compute_file_md5(file_info)
                     if pdf_md5:
                         # Use md5 + filename as key for extraction cache
                         cached_text = self.cache.get(f"extraction_{pdf_md5}", extra=filename)
@@ -447,8 +466,9 @@ class GmailExpenseParserApp:
                 if extracted_text:
                     # Save to cache
                     if self.cache:
-                        pdf_md5 = self.cache.get_file_md5(filepath)
-                        self.cache.set(f"extraction_{pdf_md5}", {'text': extracted_text}, extra=filename)
+                        pdf_md5 = self._get_or_compute_file_md5(file_info)
+                        if pdf_md5:
+                            self.cache.set(f"extraction_{pdf_md5}", {'text': extracted_text}, extra=filename)
                     
                     file_info = dict(file_info)
                     file_info['pdf_password'] = password_used
@@ -525,7 +545,7 @@ class GmailExpenseParserApp:
             # Check cache first
             if self.cache:
                 # Use PDF MD5 + sender_tag as cache key
-                pdf_md5 = self.cache.get_file_md5(filepath)
+                pdf_md5 = self._get_or_compute_file_md5(file_info)
                 if pdf_md5:
                     cached_result = self.cache.get(text, extra=f"{pdf_md5}_{sender_tag}")
                     if cached_result:
@@ -550,8 +570,9 @@ class GmailExpenseParserApp:
                 
                 # Store in cache if successful
                 if receipts and self.cache:
-                    pdf_md5 = self.cache.get_file_md5(filepath)
-                    self.cache.set(text, receipts, extra=f"{pdf_md5}_{sender_tag}")
+                    pdf_md5 = self._get_or_compute_file_md5(file_info)
+                    if pdf_md5:
+                        self.cache.set(text, receipts, extra=f"{pdf_md5}_{sender_tag}")
                 
                 return receipts
             except Exception as e:
