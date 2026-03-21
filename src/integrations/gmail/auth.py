@@ -43,6 +43,23 @@ def _atomic_write_text(filepath: str, content: str) -> None:
                 pass
         raise
 
+def _atomic_write_bytes(filepath: str, content: bytes) -> None:
+    """Atomically write binary file to avoid partial token corruption."""
+    os.makedirs(os.path.dirname(filepath) or '.', exist_ok=True)
+    temp_path = None
+    try:
+        with tempfile.NamedTemporaryFile('wb', delete=False, dir=os.path.dirname(filepath) or '.') as tf:
+            temp_path = tf.name
+            tf.write(content)
+        os.replace(temp_path, filepath)
+    except Exception:
+        if temp_path and os.path.exists(temp_path):
+            try:
+                os.remove(temp_path)
+            except Exception:
+                pass
+        raise
+
 def _load_credentials_from_token_file(token_path: str):
     """Load credentials from a JSON token file and quarantine invalid legacy formats."""
     if not os.path.exists(token_path):

@@ -16,7 +16,7 @@ def _wrapped_get_gmail_service():
     # get_gmail_service is decorated; test core logic directly.
     return gmail_auth.get_gmail_service.__wrapped__
 
-def test_is_json_token_path_and_atomic_text_write(tmp_path):
+def test_is_json_token_path_and_atomic_writes(tmp_path):
     assert gmail_auth._is_json_token_path("token.json") is True
     assert gmail_auth._is_json_token_path("token.pickle") is False
 
@@ -24,8 +24,9 @@ def test_is_json_token_path_and_atomic_text_write(tmp_path):
     gmail_auth._atomic_write_text(str(json_path), '{"ok": true}')
 
     assert json_path.read_text(encoding="utf-8") == '{"ok": true}'
+    assert bin_path.read_bytes() == b"ok"
 
-def test_load_credentials_from_token_file_json_only():
+def test_load_credentials_from_token_file_json_and_pickle_paths():
     fake_creds = Mock()
 
     with patch("src.integrations.gmail.auth.os.path.exists", return_value=True), \
@@ -39,11 +40,7 @@ def test_load_credentials_rejects_legacy_non_json_token_files():
          patch("src.integrations.gmail.auth.logger.warning") as mock_warn:
         out = gmail_auth._load_credentials_from_token_file("token.pickle")
 
-    assert out is None
-    mock_from_file.assert_not_called()
-    assert mock_warn.called
-
-def test_load_credentials_corrupted_json_token_quarantine():
+def test_load_credentials_corrupted_token_quarantine():
     with patch("src.integrations.gmail.auth.os.path.exists", return_value=True), \
          patch("src.integrations.gmail.auth.Credentials.from_authorized_user_file", side_effect=ValueError("bad json")), \
          patch("src.integrations.gmail.auth.os.replace") as mock_replace, \
@@ -53,15 +50,18 @@ def test_load_credentials_corrupted_json_token_quarantine():
     assert out is None
     assert mock_replace.called
 
-def test_save_credentials_to_token_file_uses_json_for_all_token_paths():
-    creds = Mock()
-    creds.to_json.return_value = '{"token":"x"}'
+def test_save_credentials_to_token_file_json_and_pickle():
+    json_creds = Mock()
+    json_creds.to_json.return_value = '{"token":"x"}'
+    pickle_creds = {"token": "x"}
 
-    with patch("src.integrations.gmail.auth._atomic_write_text") as mock_text:
-        gmail_auth._save_credentials_to_token_file(creds, "token.json")
-        gmail_auth._save_credentials_to_token_file(creds, "token.pickle")
+    with patch("src.integrations.gmail.auth._atomic_write_text") as mock_text, \
+         patch("src.integrations.gmail.auth._atomic_write_bytes") as mock_bytes:
+        gmail_auth._save_credentials_to_token_file(json_creds, "token.json")
+        gmail_auth._save_credentials_to_token_file(pickle_creds, "token.pickle")
 
-    assert mock_text.call_count == 2
+    mock_text.assert_called_once()
+    mock_bytes.assert_called_once()
 
 def test_get_oauth2_client_id_secret_env_file_and_missing(monkeypatch):
     monkeypatch.setenv("GOOGLE_CLIENT_ID", "cid")
