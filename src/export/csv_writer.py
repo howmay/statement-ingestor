@@ -2,7 +2,9 @@ import csv
 import os
 import json
 import re
+import sqlite3
 import time
+from contextlib import closing
 from datetime import datetime
 from typing import List, Dict, Any, Tuple
 import logging
@@ -49,6 +51,9 @@ CSV_COLUMNS = [
     ('source', '來源'),
     ('source_file', '來源檔案'),
 ]
+
+PERFORMANCE_CACHE_DIR = ".cache"
+PERFORMANCE_DB_FILENAME = "performance_index.sqlite3"
 
 
 def _transaction_month(receipt: Dict[str, Any]) -> str:
@@ -153,6 +158,81 @@ def _load_existing_rows(filepath: str) -> List[Dict[str, str]]:
         return []
 
 
+def _sort_row_key(row: Dict[str, str]) -> Tuple[str, str, str, str, str, str]:
+    return (
+        str(row.get("date") or "").strip(),
+        str(row.get("income") or "").strip(),
+        str(row.get("expense") or "").strip(),
+        str(row.get("currency") or "").strip(),
+        str(row.get("expense_name") or "").strip(),
+        str(row.get("source_file") or "").strip(),
+    )
+
+
+def _performance_db_path() -> str:
+    cache_dir = os.path.join(os.getcwd(), PERFORMANCE_CACHE_DIR)
+    os.makedirs(cache_dir, exist_ok=True)
+    return os.path.join(cache_dir, PERFORMANCE_DB_FILENAME)
+
+
+def _connect_performance_db() -> sqlite3.Connection:
+    conn = sqlite3.connect(_performance_db_path(), timeout=5)
+    conn.execute("PRAGMA journal_mode=WAL")
+    return conn
+
+
+def _init_csv_export_index(conn: sqlite3.Connection) -> None:
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS csv_export_index (
+            csv_path TEXT NOT NULL,
+            month TEXT NOT NULL,
+            dedupe_key TEXT NOT NULL,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (csv_path, dedupe_key)
+        )
+        """
+    )
+    conn.commit()
+
+
+def _serialize_csv_row_key(row: Dict[str, str]) -> str:
+    return json.dumps(
+        [
+            str(row.get("date") or "").strip(),
+            str(row.get("income") or "").strip(),
+            str(row.get("expense") or "").strip(),
+            str(row.get("currency") or "").strip(),
+            str(row.get("expense_name") or "").strip(),
+            str(row.get("source_file") or "").strip(),
+        ],
+        ensure_ascii=False,
+        separators=(",", ":"),
+    )
+
+
+def _backfill_csv_index(conn: sqlite3.Connection, filepath: str, month: str) -> None:
+    existing_index_count = conn.execute(
+        "SELECT COUNT(*) FROM csv_export_index WHERE csv_path = ?",
+        (filepath,),
+    ).fetchone()[0]
+    if existing_index_count or not os.path.exists(filepath):
+        return
+
+    existing_rows = _load_existing_rows(filepath)
+    if not existing_rows:
+        return
+
+    conn.executemany(
+        """
+        INSERT OR IGNORE INTO csv_export_index(csv_path, month, dedupe_key)
+        VALUES (?, ?, ?)
+        """,
+        [(filepath, month, _serialize_csv_row_key(row)) for row in existing_rows],
+    )
+    conn.commit()
+
+
 def export_receipts_to_csv(receipts: List[Dict[str, Any]], output_dir: str = "output") -> str:
     """
     Export parsed receipts into month-partitioned CSV files (append-only + de-duplicated + sorted).
@@ -176,68 +256,88 @@ def export_receipts_to_csv(receipts: List[Dict[str, Any]], output_dir: str = "ou
     for month, month_receipts in grouped.items():
         filename = f"expenses_{month}.csv"
         filepath = os.path.join(output_dir, filename)
-        temp_filepath = f"{filepath}.tmp"
         lock_filepath = f"{filepath}.lock"
 
         with FileLock(lock_filepath):
-            # Load existing
-            existing_rows = _load_existing_rows(filepath)
-            existing_keys = set()
-            for row in existing_rows:
-                existing_keys.add((
-                    str(row.get('date') or '').strip(),
-                    str(row.get('income') or '').strip(),
-                    str(row.get('expense') or '').strip(),
-                    str(row.get('currency') or '').strip(),
-                    str(row.get('expense_name') or '').strip(),
-                    str(row.get('source_file') or '').strip(),
-                ))
-
-            # Add new deduplicated
-            new_rows_count = 0
-            all_rows = list(existing_rows)
-            for receipt in month_receipts:
-                row = _format_export_row(receipt)
-                key = (
-                    row.get('date', '').strip(),
-                    row.get('income', '').strip(),
-                    row.get('expense', '').strip(),
-                    row.get('currency', '').strip(),
-                    row.get('expense_name', '').strip(),
-                    row.get('source_file', '').strip(),
-                )
-                if key in existing_keys:
-                    continue
-                existing_keys.add(key)
-                all_rows.append(row)
-                new_rows_count += 1
-
-            if new_rows_count == 0 and existing_rows:
-                continue
-
-            # Sort all rows by Date ASC
-            all_rows.sort(key=lambda r: r.get('date', ''))
-
-            # Write to a temporary file first to prevent concurrent read/write corruption
             try:
-                with open(temp_filepath, 'w', newline='', encoding='utf-8-sig') as csvfile:
-                    writer = csv.DictWriter(csvfile, fieldnames=[k for k, _ in CSV_COLUMNS])
-                    writer.writeheader()
-                    writer.writerows(all_rows)
-                
-                # Atomic replacement
-                os.replace(temp_filepath, filepath)
-                
+                with closing(_connect_performance_db()) as conn:
+                    _init_csv_export_index(conn)
+                    _backfill_csv_index(conn, filepath, month)
+
+                    new_rows: List[Dict[str, str]] = []
+                    index_entries: List[Tuple[str, str, str]] = []
+
+                    for receipt in month_receipts:
+                        row = _format_export_row(receipt)
+                        dedupe_key = _serialize_csv_row_key(row)
+                        existing = conn.execute(
+                            """
+                            SELECT 1 FROM csv_export_index
+                            WHERE csv_path = ? AND dedupe_key = ?
+                            """,
+                            (filepath, dedupe_key),
+                        ).fetchone()
+                        if existing:
+                            continue
+                        new_rows.append(row)
+                        index_entries.append((filepath, month, dedupe_key))
+
+                    if not new_rows:
+                        continue
+
+                    file_exists = os.path.exists(filepath) and os.path.getsize(filepath) > 0
+                    mode = 'a' if file_exists else 'w'
+
+                    with open(filepath, mode, newline='', encoding='utf-8-sig') as csvfile:
+                        writer = csv.DictWriter(csvfile, fieldnames=[k for k, _ in CSV_COLUMNS])
+                        if not file_exists:
+                            writer.writeheader()
+                        writer.writerows(new_rows)
+
+                    conn.executemany(
+                        """
+                        INSERT OR IGNORE INTO csv_export_index(csv_path, month, dedupe_key)
+                        VALUES (?, ?, ?)
+                        """,
+                        index_entries,
+                    )
+                    conn.commit()
+
+                    total_rows = conn.execute(
+                        "SELECT COUNT(*) FROM csv_export_index WHERE csv_path = ?",
+                        (filepath,),
+                    ).fetchone()[0]
+
                 logger.info(
-                    f"Exported month={month}: new_rows={new_rows_count} total_rows={len(all_rows)} file={filepath}"
+                    f"Exported month={month}: new_rows={len(new_rows)} total_rows={total_rows} file={filepath}"
                 )
                 written_paths.append(filepath)
             except Exception as e:
                 logger.error(f"Failed to write CSV {filepath}: {e}")
-                if os.path.exists(temp_filepath):
-                    os.remove(temp_filepath)
+                raise
 
     return ",".join(sorted(written_paths))
+
+
+def sort_exported_receipt_csvs(csv_paths: List[str]) -> None:
+    """Sort exported monthly receipt CSV files after append-only writes complete."""
+    for filepath in csv_paths:
+        if not filepath or not os.path.exists(filepath):
+            continue
+
+        rows = _load_existing_rows(filepath)
+        if not rows:
+            continue
+
+        rows.sort(key=_sort_row_key)
+        temp_filepath = f"{filepath}.tmp"
+
+        with open(temp_filepath, 'w', newline='', encoding='utf-8-sig') as csvfile:
+            writer = csv.DictWriter(csvfile, fieldnames=[k for k, _ in CSV_COLUMNS])
+            writer.writeheader()
+            writer.writerows(rows)
+
+        os.replace(temp_filepath, filepath)
 
 
 def export_extracted_texts_to_csv(extracted_texts: List[Dict[str, Any]], output_dir: str = "output") -> str:

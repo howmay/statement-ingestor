@@ -300,10 +300,23 @@ class TestGmailExpenseParserAppExportResults:
         app.extracted_texts = [{'text': 'raw', 'file_info': {}}]
         
         with patch('src.runtime.app.export_receipts_to_csv', return_value='/output/receipts.csv'), \
-             patch('src.runtime.app.export_extracted_texts_to_csv', return_value='/output/texts.csv'):
+             patch('src.runtime.app.export_extracted_texts_to_csv', return_value='/output/texts.csv'), \
+             patch('src.runtime.app.sort_exported_receipt_csvs') as mock_sort:
             result = app.export_results()
             
             assert result is True
+            mock_sort.assert_called_once_with(['/output/receipts.csv'])
+
+    def test_export_results_sorts_multiple_exported_receipt_csvs(self, app):
+        app.parsed_receipts = [{'date': '2024-01-01', 'amount': 100}]
+
+        with patch('src.runtime.app.export_receipts_to_csv', return_value='/output/a.csv,/output/b.csv'), \
+             patch('src.runtime.app.export_extracted_texts_to_csv'), \
+             patch('src.runtime.app.sort_exported_receipt_csvs') as mock_sort:
+            result = app.export_results()
+
+        assert result is True
+        mock_sort.assert_called_once_with(['/output/a.csv', '/output/b.csv'])
     
     def test_export_results_no_data(self, app):
         """Test export with no data."""
