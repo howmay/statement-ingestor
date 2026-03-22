@@ -49,3 +49,20 @@ def test_hsbc_sg_bank_parser():
     assert t2['date'] == '2026-02-28'
     assert t2['amount'] == 1000.00
     assert t2['cashflow_side'] == 'income'
+
+
+def test_hsbc_sg_bank_parser_marks_supported_statement_as_matched_even_when_no_transactions():
+    text = "HSBC Bank (Singapore) Limited\nPersonal Banking Statement\nDate Transaction Details Deposits Withdrawals Balance"
+    source_info = {
+        'subject': 'HSBC Personal Banking Statement',
+        'sender': 'service@mail.hsbc.com.sg',
+        'filename': '20260322.pdf',
+        'sender_tag': 'hsbc_sg_mail',
+    }
+
+    parser = get_bank_parser(text, source_info)
+    assert isinstance(parser, HsbcSgBankParser)
+
+    result = parser.parse()
+    assert result.matched is True
+    assert result.transactions == []

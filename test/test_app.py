@@ -262,6 +262,7 @@ class TestGmailExpenseParserAppParseReceipts:
     def test_extract_and_parse_reuse_cached_file_md5(self, app):
         """MD5 should be computed once and then carried in file_info across steps."""
         app.cache = Mock()
+        app.cache.content_cache_enabled = True
         app.cache.get_file_md5.return_value = 'md5-1'
         app.cache.get.return_value = None
         app.downloaded_files = [
@@ -280,6 +281,20 @@ class TestGmailExpenseParserAppParseReceipts:
         extracted_file_info = app.extracted_texts[0]['file_info']
         assert extracted_file_info['file_md5'] == 'md5-1'
 
+    def test_extract_texts_does_not_persist_content_cache_when_disabled(self, app):
+        app.cache = Mock()
+        app.cache.get.return_value = None
+        app.cache.get_file_md5.return_value = 'md5-1'
+        app.downloaded_files = [
+            {'filepath': '/downloads/file1.pdf', 'sender': 'bank', 'subject': 'stmt', 'filename': 'file1.pdf'}
+        ]
+
+        with patch('src.runtime.app.extract_text_from_pdf', return_value='Extracted text'):
+            result = app.extract_texts(max_workers=1)
+
+        assert result is True
+        app.cache.set.assert_not_called()
+
     def test_parse_receipts_no_texts(self, app):
         """Test parse with no extracted texts."""
         app.extracted_texts = []
@@ -289,6 +304,26 @@ class TestGmailExpenseParserAppParseReceipts:
         assert result is True
         assert app.parsed_receipts == []
         assert app.stats['receipts_parsed'] == 0
+
+    def test_parse_receipts_error_logs_downloaded_filename(self, app):
+        app.extracted_texts = [
+            {
+                'text': 'text1',
+                'file_info': {
+                    'filepath': '/downloads/HSBC_SG_statement_abcd1234.pdf',
+                    'filename': '20260322.pdf',
+                    'sender': 'bank',
+                    'subject': 'stmt',
+                },
+            }
+        ]
+
+        with patch('src.runtime.app.parse_receipt_text', side_effect=Exception("boom")):
+            result = app.parse_receipts(max_workers=1)
+
+        assert result is True
+        error_messages = [call.args[0] for call in app.logger.error.call_args_list if call.args]
+        assert any('HSBC_SG_statement_abcd1234.pdf' in msg for msg in error_messages)
 
 
 class TestGmailExpenseParserAppExportResults:

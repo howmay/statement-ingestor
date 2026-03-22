@@ -404,6 +404,20 @@ class GmailExpenseParserApp:
             file_info['file_md5'] = file_md5
         return file_md5
 
+    def _display_file_name(self, file_info: Dict[str, Any]) -> str:
+        """Prefer downloaded local filename in logs, with original attachment name as context."""
+        filepath = str(file_info.get('filepath') or '')
+        local_name = os.path.basename(filepath) if filepath else ''
+        original_name = str(file_info.get('filename') or '').strip()
+
+        if local_name and original_name and local_name != original_name:
+            return f"{local_name} (attachment: {original_name})"
+        if local_name:
+            return local_name
+        if original_name:
+            return original_name
+        return 'unknown'
+
     def extract_texts(self, max_workers: Optional[int] = None) -> bool:
         """Step 4: Extract text from PDFs with parallelism and caching."""
         if not self.downloaded_files:
@@ -421,9 +435,10 @@ class GmailExpenseParserApp:
             try:
                 filepath = file_info.get('filepath', '')
                 filename = os.path.basename(filepath)
+                display_name = self._display_file_name(file_info)
                 
                 # Check cache for extracted text
-                if self.cache:
+                if self.cache and getattr(self.cache, 'content_cache_enabled', False) is True:
                     pdf_md5 = self._get_or_compute_file_md5(file_info)
                     if pdf_md5:
                         # Use md5 + filename as key for extraction cache
@@ -469,7 +484,7 @@ class GmailExpenseParserApp:
 
                 if extracted_text:
                     # Save to cache
-                    if self.cache:
+                    if self.cache and getattr(self.cache, 'content_cache_enabled', False) is True:
                         pdf_md5 = self._get_or_compute_file_md5(file_info)
                         if pdf_md5:
                             self.cache.set(f"extraction_{pdf_md5}", {'text': extracted_text}, extra=filename)
@@ -485,21 +500,21 @@ class GmailExpenseParserApp:
                     error_msg = str(last_error).lower()
                     reason = "密碼不過" if "password" in error_msg or "encrypted" in error_msg else "解析pdf 異常"
                     return {
-                        'error': f"Failed to extract text from {filename}: {last_error}",
+                        'error': f"Failed to extract text from {display_name}: {last_error}",
                         'file_info': file_info,
                         'report_status': '失敗',
                         'report_reason': reason
                     }
 
                 return {
-                    'warning': f"No text extracted from {filename}",
+                    'warning': f"No text extracted from {display_name}",
                     'file_info': file_info,
                     'report_status': '失敗',
                     'report_reason': '無文字內容'
                 }
             except Exception as e:
                 return {
-                    'error': f"Failed to extract text from {file_info.get('filepath', 'unknown')}: {e}",
+                    'error': f"Failed to extract text from {self._display_file_name(file_info)}: {e}",
                     'file_info': file_info,
                     'report_status': '失敗',
                     'report_reason': '例外錯誤'
@@ -544,10 +559,11 @@ class GmailExpenseParserApp:
             file_info = item['file_info']
             filepath = file_info.get('filepath', '')
             filename = file_info.get('filename') or os.path.basename(filepath)
+            display_name = self._display_file_name(file_info)
             sender_tag = file_info.get('sender_tag', '')
 
             # Check cache first
-            if self.cache:
+            if self.cache and getattr(self.cache, 'content_cache_enabled', False) is True:
                 # Use PDF MD5 + sender_tag as cache key
                 pdf_md5 = self._get_or_compute_file_md5(file_info)
                 if pdf_md5:
@@ -573,14 +589,14 @@ class GmailExpenseParserApp:
                     receipts = parse_receipt_text(text, source_info)
                 
                 # Store in cache if successful
-                if receipts and self.cache:
+                if receipts and self.cache and getattr(self.cache, 'content_cache_enabled', False) is True:
                     pdf_md5 = self._get_or_compute_file_md5(file_info)
                     if pdf_md5:
                         self.cache.set(text, receipts, extra=f"{pdf_md5}_{sender_tag}")
                 
                 return receipts
             except Exception as e:
-                self.log('error', f"Error parsing {filename}: {e}")
+                self.log('error', f"Error parsing {display_name}: {e}")
                 return []
 
         # Use ThreadPoolExecutor for parallel LLM calls
@@ -595,7 +611,7 @@ class GmailExpenseParserApp:
                 try:
                     receipts = future.result()
                     if not receipts:
-                        self.log('warning', f"No receipts parsed from {filename}")
+                        self.log('warning', f"No receipts parsed from {self._display_file_name(file_info)}")
                         self.stats['warnings'] += 1
                         self._add_file_report(filename, file_info.get('sender_tag', ''), "失敗", "解析內容異常/無交易紀錄", receipts)
                         continue
@@ -606,7 +622,7 @@ class GmailExpenseParserApp:
                         
                     self._add_file_report(filename, file_info.get('sender_tag', ''), "成功", "", receipts)
                 except Exception as e:
-                    self.log('error', f"Unexpected error processing {filename}: {e}")
+                    self.log('error', f"Unexpected error processing {self._display_file_name(file_info)}: {e}")
                     self.stats['errors'] += 1
                     self._add_file_report(filename, file_info.get('sender_tag', ''), "失敗", "未預期錯誤")
 

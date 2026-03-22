@@ -393,6 +393,45 @@ def get_existing_file_by_md5(target_md5: str, directory: str = DOWNLOAD_DIR) -> 
     return None
 
 
+def _get_existing_download_by_message_attachment(
+    message_id: str,
+    original_filename: str,
+    size: Optional[int],
+    attachment_id: Optional[str] = None,
+) -> Optional[str]:
+    cache = _file_md5_cache()
+    cached = None
+    if message_id and original_filename and size is not None:
+        cached = cache.find_downloaded_attachment_reference(
+            message_id,
+            original_filename,
+            size,
+        )
+    elif message_id and attachment_id:
+        cached = cache.get_downloaded_attachment_reference(message_id, attachment_id)
+
+    if not cached:
+        return None
+
+    filepath = cached.get("downloaded_filepath")
+    if filepath and os.path.exists(filepath):
+        return filepath
+
+    logger.info(
+        f"Detected stale Gmail attachment index for {message_id}/{original_filename or attachment_id}/{size}; "
+        f"removing stale Gmail attachment index at {filepath or 'unknown path'}"
+    )
+    if message_id and original_filename and size is not None:
+        cache.delete_downloaded_attachment_references_by_message_file(
+            message_id,
+            original_filename,
+            size,
+        )
+    elif message_id and attachment_id:
+        cache.delete_downloaded_attachment_reference(message_id, attachment_id)
+    return None
+
+
 @retry_gmail
 def download_attachment(
     service,
@@ -417,6 +456,18 @@ def download_attachment(
         Exception: If download fails.
     """
     try:
+        existing_attachment_file = _get_existing_download_by_message_attachment(
+            message_id,
+            attachment_info.get('filename', ''),
+            attachment_info.get('size'),
+            attachment_info.get('attachmentId'),
+        )
+        if existing_attachment_file:
+            logger.info(
+                f"Skipping download: reusing indexed Gmail attachment at {existing_attachment_file}"
+            )
+            return existing_attachment_file
+
         # Get the attachment data
         attachment = service.users().messages().attachments().get(
             userId='me',
@@ -434,7 +485,17 @@ def download_attachment(
         # Check if file with same content already exists
         existing_file = get_existing_file_by_md5(file_md5)
         if existing_file:
-            logger.info(f"Skipping download: identical file already exists at {existing_file}")
+            _file_md5_cache().store_downloaded_attachment_reference(
+                message_id=message_id,
+                attachment_id=attachment_info.get('attachmentId', ''),
+                original_filename=attachment_info.get('filename', ''),
+                downloaded_filepath=existing_file,
+                size=len(file_data),
+                md5=file_md5,
+            )
+            logger.info(
+                f"Skipping download: reusing existing file by content MD5 at {existing_file}"
+            )
             return existing_file
         
         # Ensure download directory exists
@@ -462,9 +523,20 @@ def download_attachment(
         with open(filepath, 'wb') as f:
             f.write(file_data)
 
-        _file_md5_cache().store_file_md5(filepath, file_md5)
+        cache = _file_md5_cache()
+        cache.store_file_md5(filepath, file_md5)
+        cache.store_downloaded_attachment_reference(
+            message_id=message_id,
+            attachment_id=attachment_info.get('attachmentId', ''),
+            original_filename=original_filename,
+            downloaded_filepath=filepath,
+            size=len(file_data),
+            md5=file_md5,
+        )
         
-        logger.info(f"Downloaded: {filepath} ({len(file_data)} bytes, MD5: {file_md5})")
+        logger.info(
+            f"Downloaded attachment to {filepath} ({len(file_data)} bytes, MD5: {file_md5})"
+        )
         return filepath
         
     except Exception as e:
@@ -511,13 +583,14 @@ def download_pdf_attachments(service, message_id: str, email_metadata: Dict[str,
                 'sender': sender,
                 'sender_tag': sender_tag,
                 'subject': subject,
-                'message_id': message_id
+                'message_id': message_id,
+                'attachment_id': att.get('attachmentId'),
             })
         except Exception as e:
             logger.error(f"Skipping attachment {att['filename']}: {e}")
             continue
     
-    logger.info(f"Downloaded {len(downloaded_files)} PDF(s) from message {message_id}")
+    logger.info(f"Prepared {len(downloaded_files)} attachment(s) from message {message_id}")
     return downloaded_files
 
 
@@ -543,7 +616,7 @@ def batch_download_pdfs(service, email_list: List[Dict[str, Any]]) -> List[Dict[
             # Propagate to caller so run summary can reflect errors accurately
             raise
     
-    logger.info(f"Total downloaded PDFs: {len(all_downloaded)}")
+    logger.info(f"Total prepared attachments: {len(all_downloaded)}")
     return all_downloaded
 
 

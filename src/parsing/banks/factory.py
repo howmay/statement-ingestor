@@ -21,11 +21,20 @@ def get_bank_parser(text: str, source_info: Optional[Dict[str, Any]] = None) -> 
     filename = str(source_info.get('filename', '')).lower()
 
     bank_hint = ' '.join([sender_tag, sender, subject, filename])
+    text_hint = text.lower()[:4000]
 
     if 'hsbc' in bank_hint or 'hsbc bank (singapore)' in text.lower()[:1000]:
         # Singapore HSBC
         if any(k in bank_hint for k in ['hsbc.com.sg', 'singapore', 'hsbc_sg']) or 'hsbc bank (singapore)' in text.lower()[:1000]:
-            if any(k in bank_hint for k in ['credit card', '信用卡']):
+            is_sg_card = any(k in bank_hint for k in ['credit card', '信用卡']) or any(
+                marker in text_hint
+                for marker in [
+                    'hsbc visa revolution',
+                    'post tran account summary',
+                    'payment-thankyou',
+                ]
+            )
+            if is_sg_card:
                 return HsbcSgCardParser(text, source_info)
             return HsbcSgBankParser(text, source_info)
         

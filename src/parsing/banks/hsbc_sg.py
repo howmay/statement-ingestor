@@ -125,6 +125,7 @@ class HsbcSgBankParser(BaseBankParser):
     def parse(self) -> BankParseResult:
         txs: List[Dict] = []
         lines = self.text.splitlines()
+        normalized_text = self.text.upper()
         
         # Only parse between these headers, but default to True if we see account identifier
         in_details_section = 'EVERYDAY GLOBAL ACC' in self.text.upper()
@@ -252,9 +253,20 @@ class HsbcSgBankParser(BaseBankParser):
 
         # Filter out invalid or zero-amount non-interest transactions
         valid_txs = [t for t in txs if t['amount'] != 0 or 'INTEREST' in t['expense_name'].upper()]
+        matched_signature = any(
+            marker in normalized_text
+            for marker in [
+                'EVERYDAY GLOBAL ACC',
+                'HSBC BANK (SINGAPORE)',
+                'HSBC BANK (SINGAPORE) LIMITED',
+                'PERSONAL BANKING STATEMENT',
+                'DETAILS OF YOUR ACCOUNTS',
+                'TRANSACTIONDETAILS',
+            ]
+        )
         
         return BankParseResult(
-            matched=len(valid_txs) > 0 or 'EVERYDAY GLOBAL ACC' in self.text,
+            matched=len(valid_txs) > 0 or matched_signature,
             parser_name='HsbcSgBankParser',
             transactions=valid_txs,
         )

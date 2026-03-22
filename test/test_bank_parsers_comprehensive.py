@@ -106,6 +106,24 @@ class TestBankFactory:
         parser = get_bank_parser("text", {'sender': 'unknown@gmail.com'})
         assert parser is None
 
+    def test_get_bank_parser_prefers_hsbc_sg_card_from_text_signature_even_with_generic_attachment_name(self):
+        text = """
+        HSBC VISA REVOLUTION
+        POST TRAN ACCOUNT SUMMARY SGD
+        03Mar 02Mar Grab*A-92WTN9QWWVIAAV 29.70
+        06Mar 06Mar PAYMENT-THANKYOU 32.49CR
+        """
+        parser = get_bank_parser(
+            text,
+            {
+                'sender_tag': 'hsbc_sg_mail',
+                'sender': 'service@mail.hsbc.com.sg',
+                'subject': 'HSBC Singapore statement',
+                'filename': '20260322.pdf',
+            },
+        )
+        assert isinstance(parser, HsbcSgCardParser)
+
     def test_parse_with_bank_factory(self):
         # Use a more realistic HSBC Taiwan bank statement format
         text = """
