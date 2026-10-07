@@ -11,19 +11,29 @@ MONTH_MAP = {
 }
 
 
+def _has_keyword(d: str, k: str) -> bool:
+    # ASCII keywords match whole words ("ach" must not hit "coach"); CJK keywords are substrings.
+    # ASCII-alnum edges, not \b: an adjacent CJK char is a boundary and "/ccp/" still matches "/ccp/4503".
+    if not k.isascii():
+        return k in d
+    left = r'(?<![a-z0-9])' if k[0].isalnum() else ''
+    right = r'(?![a-z0-9])' if k[-1].isalnum() else ''
+    return re.search(left + re.escape(k) + right, d) is not None
+
+
 def classify_expense_type(desc: str) -> str:
     d = desc.lower()
-    if re.search(r'\bfees?\b', d) or any(k in d for k in [
+    if re.search(r'\bfees?\b', d) or any(_has_keyword(d, k) for k in [
         '自動轉帳繳款', '自動轉帳扣繳', '服務費', '國外交易服務費', '手續費', '年費', '電費', '水費',
         '瓦斯費', '電話費', '信用卡轉', '信用卡款', '利息', '繳款', '扣繳', '自扣', '回饋',
         '中華電信', 'payment',
     ]):
         return 'Bills'
-    if any(k in d for k in ['uber', 'taxi', 'grab', 'trip', '交通', '計程車', '高鐵', '台鐵', '捷運', '悠遊卡']):
+    if any(_has_keyword(d, k) for k in ['uber', 'taxi', 'grab', 'trip', '交通', '計程車', '高鐵', '台鐵', '捷運', '悠遊卡']):
         return 'Transportation'
-    if any(k in d for k in ['spotify', 'netflix', 'youtube', 'google', 'movie', '電影', '遊戲']):
+    if any(_has_keyword(d, k) for k in ['spotify', 'netflix', 'youtube', 'google', 'movie', '電影', '遊戲']):
         return 'Entertainment'
-    if any(k in d for k in [
+    if any(_has_keyword(d, k) for k in [
         'amazon', 'apple', 'app store', 'itunes', 'pchome', 'momo', 'shopping', '購物', '寶島',
         '全支付', '全聯', '大全聯', '特斯拉',
     ]):
@@ -33,9 +43,9 @@ def classify_expense_type(desc: str) -> str:
 
 def classify_bank_expense_type(desc: str) -> str:
     d = desc.lower()
-    if any(k in d for k in ['利息', 'interest', '/ccp/', '卡費']):
+    if any(_has_keyword(d, k) for k in ['利息', 'interest', '/ccp/', '卡費']):
         return 'Bills'
-    if any(k in d for k in ['轉帳', 'global transfer', 'fisc', 'hiba881', '提款', '轉出', '支取', 'ach']):
+    if any(_has_keyword(d, k) for k in ['轉帳', 'global transfer', 'fisc', 'hiba881', '提款', '轉出', '支取', 'ach']):
         return 'Transfer'
     return 'Other'
 

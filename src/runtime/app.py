@@ -90,8 +90,9 @@ class GmailExpenseParserApp:
         if parser in _BANK_BY_PARSER:
             return _BANK_BY_PARSER[parser]
         f = (filename or '').lower()
-        bank = next((b for k, b in _BANK_BY_FILENAME if k in f), 'Unknown')
-        country = 'SG' if 'sg' in f or 'sg' in (sender_tag or '').lower() else ('Global' if bank == 'Wise' else 'TW')
+        tag = (sender_tag or '').lower()
+        bank = next((b for k, b in _BANK_BY_FILENAME if k in f or k in tag), 'Unknown')
+        country = 'SG' if 'sg' in f or 'sg' in tag else ('Global' if bank == 'Wise' else 'TW')
         account_type = '信用卡' if any(k in f for k in ('信用卡', '簽帳', 'card')) else ('銀行帳戶' if any(k in f for k in ('對帳單', 'bank', 'statement', '帳戶')) else '未知')
         return bank, country, account_type
 
@@ -415,7 +416,7 @@ class GmailExpenseParserApp:
         return True
         
     def parse_receipts(self, max_workers: int = 4) -> bool:
-        """Step 5: Parse receipts using LLM with parallelism and caching."""
+        """Step 5: Parse receipts using LLM with parallelism."""
         if not self.extracted_texts:
             self.logger.info("No text to parse.")
             return True
@@ -431,17 +432,6 @@ class GmailExpenseParserApp:
             filename = file_info.get('filename') or os.path.basename(filepath)
             display_name = self._display_file_name(file_info)
             sender_tag = file_info.get('sender_tag', '')
-
-            # Check cache first
-            # Use PDF MD5 + sender_tag as cache key
-            pdf_md5 = self._get_or_compute_file_md5(file_info)
-            if pdf_md5:
-                cached_result = self.cache.get(text, extra=f"{pdf_md5}_{sender_tag}")
-                if cached_result:
-                    self.logger.info(f"Cache hit for {filename}")
-                    self.stats['cache_hits'] += 1
-                    return cached_result
-
             source_info = {
                 'sender': file_info.get('sender', ''),
                 'sender_tag': sender_tag,
@@ -456,13 +446,6 @@ class GmailExpenseParserApp:
                     receipts = parse_csv_statement(text, source_info)
                 else:
                     receipts = parse_receipt_text(text, source_info)
-                
-                # Store in cache if successful
-                if receipts:
-                    pdf_md5 = self._get_or_compute_file_md5(file_info)
-                    if pdf_md5:
-                        self.cache.set(text, receipts, extra=f"{pdf_md5}_{sender_tag}")
-                
                 return receipts
             except Exception as e:
                 self.logger.error(f"Error parsing {display_name}: {e}")

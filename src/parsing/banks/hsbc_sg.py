@@ -169,7 +169,9 @@ class HsbcSgBankParser(BaseBankParser):
                     # Parse date
                     day = m.group('day') or m.group('day2')
                     date_iso = self.month_name_day_to_iso(day, m.group('mon') or m.group('mon2'), m.group('year'))
-                    if not date_iso: continue
+                    if not date_iso:
+                        current_tx = None  # already finalized above; don't append it again
+                        continue
                     
                     # Remainder of line
                     rest = line[m.end():].strip()

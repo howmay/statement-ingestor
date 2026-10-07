@@ -94,7 +94,9 @@ class DbsSgBankParser(BaseBankParser):
                     date_iso = f"{y}-{m}-{d}"
                 else:
                     date_iso = self.month_name_day_to_iso(date_match.group('day'), date_match.group('mon'))
-                    if not date_iso: continue
+                    if not date_iso:
+                        current_tx = None  # already finalized above; don't append it again
+                        continue
                 
                 # Remainder of line
                 rest = line[date_match.end():].strip()

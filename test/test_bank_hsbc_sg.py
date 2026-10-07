@@ -193,3 +193,9 @@ def test_hsbc_sg_bank_parser_marks_supported_statement_as_matched_even_when_no_t
     result = parser.parse()
     assert result.matched is True
     assert result.transactions == []
+
+
+def test_hsbc_sg_bank_unparseable_month_does_not_double_count():
+    text = "EVERYDAY GLOBAL ACC 142-05XXXX-221\n01Feb2026 NETS PURCHASE 10.00 990.00\n12 Mon instalment note\nREF 1234\n02Feb2026 GIRO 5.00 985.00"
+    txs = HsbcSgBankParser(text).parse().transactions
+    assert [t['amount'] for t in txs].count(10.0) == 1

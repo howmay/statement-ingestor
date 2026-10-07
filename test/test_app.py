@@ -230,6 +230,9 @@ class TestGmailExpenseParserAppParseReceipts:
             assert app.parse_receipts(max_workers=1) is True
 
         assert app.cache.get_file_md5.call_count == 1
+        # Only the Step-4 extraction text is cached; parse results never are.
+        assert app.cache.get.call_count == 1
+        assert app.cache.set.call_count == 1
         extracted_file_info = app.extracted_texts[0]['file_info']
         assert extracted_file_info['file_md5'] == 'md5-1'
 
@@ -529,6 +532,11 @@ def test_validate_configuration_exception_counts_as_failure(app):
 
 def test_bank_and_country_uses_sg_sender_tag(app):
     assert app._get_bank_and_country('hsbc_sg_mail', 'dbs_statement.pdf') == ('DBS', 'SG', '銀行帳戶')
+
+
+def test_bank_falls_back_to_sender_tag(app):
+    assert app._get_bank_and_country('fubon_tw_bhu', 'Statement.pdf', None)[0] == 'Fubon'
+    assert app._get_bank_and_country('hsbc_sg', 'x.pdf', None)[:2] == ('HSBC', 'SG')
 
 
 def _pipeline_mocks(emails, downloads):

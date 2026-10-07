@@ -17,17 +17,19 @@ class ResultCache:
     # ponytail: JSON index rewritten per download; switch to sqlite if downloads exceed ~10k
     def _index_path(self): return os.path.join(self.cache_dir, "downloads.json")
 
-    def get_downloaded_path(self, message_id, attachment_id) -> Optional[str]:
-        try:
-            with open(self._index_path(), encoding='utf-8') as f: path = json.load(f).get(f"{message_id}/{attachment_id}")
-        except (OSError, json.JSONDecodeError): return None
-        return path if path and os.path.exists(path) else None
-
-    def set_downloaded_path(self, message_id, attachment_id, path) -> None:
+    def _read_index(self) -> dict:
         try:
             with open(self._index_path(), encoding='utf-8') as f: index = json.load(f)
-        except (OSError, json.JSONDecodeError): index = {}
-        index[f"{message_id}/{attachment_id}"] = path
+        except (OSError, ValueError): return {}
+        return index if isinstance(index, dict) else {}
+
+    def get_downloaded_path(self, key: str) -> Optional[str]:
+        path = self._read_index().get(key)
+        return path if isinstance(path, str) and os.path.exists(path) else None
+
+    def set_downloaded_path(self, key: str, path) -> None:
+        index = self._read_index()
+        index[key] = path
         try:
             with open(self._index_path(), 'w', encoding='utf-8') as f: json.dump(index, f, ensure_ascii=False, indent=0)
         except OSError as e:

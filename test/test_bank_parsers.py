@@ -1,4 +1,4 @@
-from src.parsing.banks.base import classify_expense_type
+from src.parsing.banks.base import classify_expense_type, classify_bank_expense_type
 from src.parsing.banks.factory import parse_with_bank_factory, get_bank_parser
 from src.parsing.ocr.hsbc_ocr import _extract_rows_from_ocr_text, _clean_ocr_desc
 from src.parsing.banks.hsbc import HsbcTwCardParser, HsbcTwBankParser
@@ -465,6 +465,14 @@ def test_classify_expense_type():
     assert classify_expense_type('STARBUCKS COFFEE') == 'Other'
     assert classify_expense_type('UBER payment') == 'Bills'  # Bills wins over Transportation
     assert classify_expense_type('coffee shop') == 'Other'  # "fee" only as a whole word
+    assert classify_expense_type('STRIPE*ACME') == 'Other'  # ASCII keywords are whole words ("trip")
+    assert classify_expense_type('PINEAPPLE MART') == 'Other'
+    assert classify_expense_type('GRAB TAXI') == 'Transportation'
+    assert classify_expense_type('電費') == 'Bills'
+    assert classify_expense_type('service fees') == 'Bills'
+    assert classify_bank_expense_type('COACH OUTLET') == 'Other'
+    assert classify_bank_expense_type('ACH TRANSFER') == 'Transfer'
+    assert classify_bank_expense_type('/CCP/450307XXXXXX3278') == 'Bills'
 
 
 class TestHSBCParser:

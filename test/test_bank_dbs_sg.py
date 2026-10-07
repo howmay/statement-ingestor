@@ -121,3 +121,9 @@ def test_dbs_sg_bank_parser():
     t2 = result.transactions[1]
     assert t2['amount'] == 200.00
     assert t2['cashflow_side'] == 'expense'
+
+
+def test_dbs_sg_bank_unparseable_month_does_not_double_count():
+    text = "DBS Bank\n01 Feb NETS PURCHASE 10.00 990.00\n12 Mon instalment note\nREF 1234\n02 Feb GIRO 5.00 985.00"
+    txs = DbsSgBankParser(text).parse().transactions
+    assert [t['amount'] for t in txs].count(10.0) == 1

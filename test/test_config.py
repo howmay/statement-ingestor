@@ -6,6 +6,8 @@ import os
 import json
 import importlib
 
+import pytest
+
 import src.core.config as config_module
 from src.core.config import (
     get_bank_password,
@@ -15,50 +17,56 @@ from src.core.config import (
 )
 
 
+@pytest.fixture
+def reload_with_env():
+    """Set env vars and reload config; on teardown restore the env, then reload again."""
+    with pytest.MonkeyPatch.context() as mp:
+        def _reload(**env):
+            for key, value in env.items():
+                mp.setenv(key, value)
+            return importlib.reload(config_module)
+        yield _reload
+    importlib.reload(config_module)
+
+
 class TestConfigEdgeCases:
     """Edge case tests for config module."""
     
-    def test_target_senders_empty(self):
+    def test_target_senders_empty(self, reload_with_env):
         """Test TARGET_SENDERS with empty environment."""
-        with patch.dict(os.environ, {"TARGET_SENDERS": ""}, clear=False):
-            # Reload module to re-evaluate constants
-            importlib.reload(config_module)
-            
-            # Should be empty list
-            assert isinstance(config_module.TARGET_SENDERS, list)
+        reload_with_env(TARGET_SENDERS="")
+        
+        # Should be empty list
+        assert isinstance(config_module.TARGET_SENDERS, list)
     
-    def test_target_keywords_empty(self):
+    def test_target_keywords_empty(self, reload_with_env):
         """Test TARGET_KEYWORDS with empty environment."""
-        with patch.dict(os.environ, {"TARGET_KEYWORDS": ""}, clear=False):
-            importlib.reload(config_module)
-            
-            assert isinstance(config_module.TARGET_KEYWORDS, list)
+        reload_with_env(TARGET_KEYWORDS="")
+        
+        assert isinstance(config_module.TARGET_KEYWORDS, list)
     
-    def test_bank_passwords_simple_list(self):
+    def test_bank_passwords_simple_list(self, reload_with_env):
         """Test BANK_PASSWORDS parsing simple list."""
-        with patch.dict(os.environ, {"BANK_PASSWORDS": "pass1,pass2,pass3"}, clear=False):
-            importlib.reload(config_module)
-            
-            assert "pass1" in config_module.BANK_PASSWORDS
-            assert "pass2" in config_module.BANK_PASSWORDS
-            assert "pass3" in config_module.BANK_PASSWORDS
+        reload_with_env(BANK_PASSWORDS="pass1,pass2,pass3")
+        
+        assert "pass1" in config_module.BANK_PASSWORDS
+        assert "pass2" in config_module.BANK_PASSWORDS
+        assert "pass3" in config_module.BANK_PASSWORDS
     
-    def test_bank_passwords_legacy_format(self):
+    def test_bank_passwords_legacy_format(self, reload_with_env):
         """Test BANK_PASSWORDS parsing legacy key=value format."""
-        with patch.dict(os.environ, {"BANK_PASSWORDS": "hsbc=TEST_ID_123,fubon=250496N12498"}, clear=False):
-            importlib.reload(config_module)
-            
-            assert "TEST_ID_123" in config_module.BANK_PASSWORDS
-            assert "250496N12498" in config_module.BANK_PASSWORDS
+        reload_with_env(BANK_PASSWORDS="hsbc=TEST_ID_123,fubon=250496N12498")
+        
+        assert "TEST_ID_123" in config_module.BANK_PASSWORDS
+        assert "250496N12498" in config_module.BANK_PASSWORDS
     
-    def test_bank_passwords_mixed_content(self):
+    def test_bank_passwords_mixed_content(self, reload_with_env):
         """Test BANK_PASSWORDS with whitespace variations."""
-        with patch.dict(os.environ, {"BANK_PASSWORDS": "  pass1  ,  pass2  ,  pass3  "}, clear=False):
-            importlib.reload(config_module)
-            
-            assert "pass1" in config_module.BANK_PASSWORDS
-            assert "pass2" in config_module.BANK_PASSWORDS
-            assert "pass3" in config_module.BANK_PASSWORDS
+        reload_with_env(BANK_PASSWORDS="  pass1  ,  pass2  ,  pass3  ")
+        
+        assert "pass1" in config_module.BANK_PASSWORDS
+        assert "pass2" in config_module.BANK_PASSWORDS
+        assert "pass3" in config_module.BANK_PASSWORDS
     
     def test_get_bank_password_returns_all_passwords(self):
         """Test get_bank_password returns all passwords."""
@@ -93,7 +101,7 @@ class TestConfigEdgeCases:
         assert OAUTH_TOKEN_PATH is not None
         assert OAUTH_PORT == int(os.getenv("OAUTH_PORT", "8080"))
 
-    def test_statement_search_profiles_from_json_env(self):
+    def test_statement_search_profiles_from_json_env(self, reload_with_env):
         profiles = [
             {
                 "name": "fubon-bank",
@@ -103,41 +111,27 @@ class TestConfigEdgeCases:
                 "has_pdf_attachment": True,
             }
         ]
-        with patch.dict(os.environ, {"STATEMENT_SEARCH_PROFILES": json.dumps(profiles)}, clear=False):
-            importlib.reload(config_module)
+        reload_with_env(STATEMENT_SEARCH_PROFILES=json.dumps(profiles))
 
-            assert len(config_module.STATEMENT_SEARCH_PROFILES) == 1
-            assert config_module.STATEMENT_SEARCH_PROFILES[0]["name"] == "fubon-bank"
-            assert config_module.STATEMENT_SEARCH_PROFILES[0]["senders"] == ["service@bhu.taipeifubon.com.tw"]
+        assert len(config_module.STATEMENT_SEARCH_PROFILES) == 1
+        assert config_module.STATEMENT_SEARCH_PROFILES[0]["name"] == "fubon-bank"
+        assert config_module.STATEMENT_SEARCH_PROFILES[0]["senders"] == ["service@bhu.taipeifubon.com.tw"]
 
-    def test_statement_search_profiles_invalid_json_falls_back_to_default(self):
-        with patch.dict(os.environ, {"STATEMENT_SEARCH_PROFILES": "{not-json"}, clear=False):
-            importlib.reload(config_module)
+    def test_statement_search_profiles_invalid_json_falls_back_to_default(self, reload_with_env):
+        reload_with_env(STATEMENT_SEARCH_PROFILES="{not-json")
 
-            assert isinstance(config_module.STATEMENT_SEARCH_PROFILES, list)
-            assert len(config_module.STATEMENT_SEARCH_PROFILES) >= 1
-            assert any("fubon" in profile["name"] for profile in config_module.STATEMENT_SEARCH_PROFILES)
+        assert isinstance(config_module.STATEMENT_SEARCH_PROFILES, list)
+        assert len(config_module.STATEMENT_SEARCH_PROFILES) >= 1
+        assert any("fubon" in profile["name"] for profile in config_module.STATEMENT_SEARCH_PROFILES)
     
-    def test_oauth_config_from_env(self):
+    def test_oauth_config_from_env(self, reload_with_env):
         """Test OAuth configuration from environment."""
-        # Set environment variables before import
-        os.environ["OAUTH_CLIENT_SECRETS_PATH"] = "/custom/secrets.json"
-        os.environ["OAUTH_TOKEN_PATH"] = "/custom/token.json"
-        os.environ["OAUTH_PORT"] = "3000"
-        
-        try:
-            importlib.reload(config_module)
-            
-            assert config_module.OAUTH_CLIENT_SECRETS_PATH == "/custom/secrets.json"
-            assert config_module.OAUTH_TOKEN_PATH == "/custom/token.json"
-            assert config_module.OAUTH_PORT == 3000
-        finally:
-            # Clean up
-            if "OAUTH_CLIENT_SECRETS_PATH" in os.environ:
-                del os.environ["OAUTH_CLIENT_SECRETS_PATH"]
-            if "OAUTH_TOKEN_PATH" in os.environ:
-                del os.environ["OAUTH_TOKEN_PATH"]
-            if "OAUTH_PORT" in os.environ:
-                del os.environ["OAUTH_PORT"]
-            # Reload to restore original values
-            importlib.reload(config_module)
+        reload_with_env(
+            OAUTH_CLIENT_SECRETS_PATH="/custom/secrets.json",
+            OAUTH_TOKEN_PATH="/custom/token.json",
+            OAUTH_PORT="3000",
+        )
+
+        assert config_module.OAUTH_CLIENT_SECRETS_PATH == "/custom/secrets.json"
+        assert config_module.OAUTH_TOKEN_PATH == "/custom/token.json"
+        assert config_module.OAUTH_PORT == 3000

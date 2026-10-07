@@ -277,14 +277,14 @@ def _extract_pdf_text_hint(file_data: bytes, sender: str, ext: str) -> str:
         tmp_path = tmp.name
 
     try:
-        # get_bank_password already returns every known password
-        passwords = get_bank_password(sender) or [None]
-        for password in passwords:
-            text = extract_text_from_pdf(tmp_path, password)
+        # get_bank_password already returns every known password; a failing one moves on to the next
+        for password in get_bank_password(sender) or [None]:
+            try:
+                text = extract_text_from_pdf(tmp_path, password)
+            except Exception:
+                continue
             if text and text.strip():
                 return text
-    except Exception:
-        return ""
     finally:
         try:
             os.unlink(tmp_path)
@@ -332,6 +332,11 @@ def build_pdf_filename_by_sender(
     )
 
 
+def _index_key(message_id: str, attachment_info: Dict[str, Any]) -> str:
+    # Gmail attachmentId changes between API calls; filename+size is stable per message.
+    return f"{message_id}/{attachment_info.get('filename', '')}/{attachment_info.get('size')}"
+
+
 def download_attachment(
     service,
     message_id: str,
@@ -356,7 +361,7 @@ def download_attachment(
     """
     try:
         attachment_id = attachment_info['attachmentId']
-        cached = _get_cache().get_downloaded_path(message_id, attachment_id)
+        cached = _get_cache().get_downloaded_path(_index_key(message_id, attachment_info))
         if cached:
             logger.info(f"Skipping download: reusing indexed Gmail attachment at {cached}")
             return cached
@@ -390,7 +395,7 @@ def download_attachment(
                 f.write(file_data)
             logger.info(f"Downloaded attachment to {filepath} ({len(file_data)} bytes)")
 
-        _get_cache().set_downloaded_path(message_id, attachment_id, filepath)
+        _get_cache().set_downloaded_path(_index_key(message_id, attachment_info), filepath)
         return filepath
 
     except Exception as e:

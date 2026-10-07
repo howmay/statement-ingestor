@@ -32,7 +32,7 @@ This document describes the technical requirements for the **Gmail Expense Parse
 - **Optional Narrowing**: Sender- or bank-specific profile filters remain possible as future refinement, but are not the default search path.
 - **Legacy Fallback**: `TARGET_SENDERS` and `TARGET_KEYWORDS` can still be passed explicitly for compatibility or one-off narrowing, but are no longer the default runtime query.
 - **Attachment Support**: Statement emails with PDF attachments are the primary target.
-- **Deduplication (Fetch Level)**: File-level deduplication using MD5 hashes to avoid redundant processing.
+- **Deduplication (Fetch Level)**: File-level deduplication by a download index and a content-hash suffix in the filename to avoid redundant processing.
 
 ### 3.3 Multi-Strategy Parsing Engine
 - **Deterministic Bank Parsers (Priority 1)**: 
@@ -60,7 +60,7 @@ Each transaction record includes:
 - **Dual-Layer Deduplication**:
   - **File Level**: Skip previously processed PDF MD5s.
   - **Transaction Level**: Deduplicate using a composite key `(Date, 收入, 支出, Currency, Description, Source)`.
-- **Validation**: Strict mode (`STRICT_BANK_PARSER`) to ensure high-quality extraction from known formats.
+- **Validation**: Strict mode: a matched deterministic parser is trusted; zero rows raises instead of falling back to the LLM.
 
 ### 3.6 Output & Delivery
 - **CSV Export**: Grouped by month (`YYYY-MM_expenses.csv`).
@@ -73,7 +73,7 @@ Each transaction record includes:
 
 1. **Initialize**: Enter through `main.py`, load `.env`, validate config, and authenticate via `src/runtime/app.py`.
 2. **Fetch**: Search Gmail for target monthly statement emails within the date range.
-3. **Download**: Save unique attachments (deduped by MD5).
+3. **Download**: Save unique attachments (deduped by a download index and a content-hash suffix in the filename).
 4. **Extract**: Convert PDF/Images to text (using OCR if needed).
 5. **Parse**: Execute parsing strategy (Bank Factory -> LLM -> Heuristics).
 6. **Deduplicate**: Filter redundant transactions.

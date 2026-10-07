@@ -3,6 +3,8 @@ import hashlib
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
+
 import src.support.cache as cache_mod
 
 
@@ -73,14 +75,26 @@ def test_downloaded_path_index(tmp_path):
     f = tmp_path / "a.pdf"
     f.write_bytes(b"pdf")
 
-    assert cache.get_downloaded_path("m1", "a1") is None
-    cache.set_downloaded_path("m1", "a1", str(f))
-    assert cache.get_downloaded_path("m1", "a1") == str(f)
+    assert cache.get_downloaded_path("m1/a.pdf/3") is None
+    cache.set_downloaded_path("m1/a.pdf/3", str(f))
+    assert cache.get_downloaded_path("m1/a.pdf/3") == str(f)
 
     f.unlink()
-    assert cache.get_downloaded_path("m1", "a1") is None
+    assert cache.get_downloaded_path("m1/a.pdf/3") is None
 
     (tmp_path / "cache" / "downloads.json").write_text("{bad", encoding="utf-8")
-    assert cache.get_downloaded_path("m1", "a1") is None
-    cache.set_downloaded_path("m1", "a1", str(f))  # corrupt index is replaced
-    assert '"m1/a1"' in (tmp_path / "cache" / "downloads.json").read_text(encoding="utf-8")
+    assert cache.get_downloaded_path("m1/a.pdf/3") is None
+    cache.set_downloaded_path("m1/a.pdf/3", str(f))  # corrupt index is replaced
+    assert '"m1/a.pdf/3"' in (tmp_path / "cache" / "downloads.json").read_text(encoding="utf-8")
+
+
+@pytest.mark.parametrize("content", [b"[]", b'{"m1/a.pdf/3": "/x', b"\xff\xfe"])
+def test_downloaded_path_index_tolerates_non_dict_or_truncated(tmp_path, content):
+    cache = cache_mod.ResultCache(cache_dir=str(tmp_path / "cache"))
+    f = tmp_path / "a.pdf"
+    f.write_bytes(b"pdf")
+    (tmp_path / "cache" / "downloads.json").write_bytes(content)
+
+    assert cache.get_downloaded_path("m1/a.pdf/3") is None
+    cache.set_downloaded_path("m1/a.pdf/3", str(f))
+    assert cache.get_downloaded_path("m1/a.pdf/3") == str(f)

@@ -2,7 +2,6 @@ import os
 import json
 import logging
 import re
-import time
 from typing import Dict, List, Any, Optional
 from datetime import datetime
 
@@ -36,11 +35,6 @@ def _source_from_tag(source_info: Dict[str, Any]) -> str:
     return next((label for tag, label in _SOURCE_BY_TAG if tag in sender_tag), "unknown")
 
 
-# Trust a matched deterministic bank parser; the LLM is not a fallback for it.
-STRICT_BANK_PARSER = True
-ALLOW_MATCHED_BANK_LLM_FALLBACK = False
-
-
 def _get_llm_runtime_config() -> Dict[str, Any]:
     """
     Resolve runtime LLM config.
@@ -51,11 +45,13 @@ def _get_llm_runtime_config() -> Dict[str, Any]:
     """
     provider = os.getenv("LLM_PROVIDER", "local").strip().lower()
 
-    # Local OpenAI-compatible runtime (requested branch default)
-    if provider in {"local", "openai-completions"}:
+    # Local OpenAI-compatible runtime: the default for anything but "openai"
+    if provider != "openai":
         base_url = os.getenv("LOCAL_BASE_URL", "http://0.0.0.0:30000/v1").rstrip("/")
         if not base_url.endswith("/v1"):
             base_url = f"{base_url}/v1"
+        if provider not in {"local", "openai-completions"}:
+            logger.warning(f"Unknown LLM_PROVIDER={provider!r}; using local OpenAI-compatible runtime at {base_url}")
 
         model = os.getenv("LOCAL_MODEL", "qwen3.5-9b")
         api_key = os.getenv("LOCAL_API_KEY", "not-needed")
@@ -121,25 +117,10 @@ def parse_receipt_text(text: str, source_info: Dict[str, Any] = None) -> List[Di
             logger.info(f"{msg} Considered a valid empty statement.")
             return []
 
-        
-        # For known deterministic parsers, default to trusting the parser match and
-        # only allow LLM fallback via an explicit opt-in flag.
-        if STRICT_BANK_PARSER or not ALLOW_MATCHED_BANK_LLM_FALLBACK:
-            reason = (
-                "STRICT_BANK_PARSER=true"
-                if STRICT_BANK_PARSER
-                else "ALLOW_MATCHED_BANK_LLM_FALLBACK=false"
-            )
-            logger.info(f"{msg} Raising error to prevent LLM fallback ({reason}).")
-            raise ReceiptParsingError(msg)
-        
-        # Explicit opt-in for matched deterministic parsers that should still try LLM recovery.
-        logger.info(
-            f"{msg} Falling back to LLM because STRICT_BANK_PARSER=false "
-            f"and ALLOW_MATCHED_BANK_LLM_FALLBACK=true."
-        )
+        # Trust a matched deterministic bank parser; the LLM is not a fallback for it.
+        raise ReceiptParsingError(msg)
 
-    # 2) LLM path for non-bank or when strict mode disabled
+    # 2) LLM path for non-bank text
     llm_config = _get_llm_runtime_config()
     if not llm_config.get("enabled"):
         logger.info("No LLM runtime configured, using heuristic parsing")

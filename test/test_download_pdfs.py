@@ -167,7 +167,7 @@ class TestDownloadPDFs:
         download_dir, cache = isolated
         existing = download_dir / "existing.pdf"
         existing.write_bytes(b"existing data")
-        cache.set_downloaded_path('msg1', 'att1', str(existing))
+        cache.set_downloaded_path(downloads._index_key('msg1', {'filename': 'statement.pdf'}), str(existing))
 
         mock_service = Mock()
         attachment_info = {'attachmentId': 'att1', 'filename': 'statement.pdf'}
@@ -179,10 +179,21 @@ class TestDownloadPDFs:
         mock_service.users.assert_not_called()
         assert "reusing indexed Gmail attachment" in caplog.text
 
+    @patch('src.integrations.gmail.downloads._extract_pdf_text_hint', return_value="")
+    def test_index_hit_survives_new_attachment_id(self, _mock_hint, isolated):
+        service = _service_returning(b"statement bytes")
+        first = download_attachment(service, 'msg1', {'attachmentId': 'att-A', 'filename': 's.pdf', 'size': 15})
+
+        other = Mock()
+        second = download_attachment(other, 'msg1', {'attachmentId': 'att-B', 'filename': 's.pdf', 'size': 15})
+
+        assert second == first
+        other.users.assert_not_called()
+
     def test_download_attachment_redownloads_when_indexed_file_was_deleted(self, isolated, caplog):
         download_dir, cache = isolated
         stale = download_dir / "missing.pdf"
-        cache.set_downloaded_path('msg1', 'att1', str(stale))
+        cache.set_downloaded_path(downloads._index_key('msg1', {'filename': 'statement.pdf'}), str(stale))
 
         file_data = b'new attachment bytes'
         mock_service = _service_returning(file_data)
@@ -193,7 +204,7 @@ class TestDownloadPDFs:
 
         assert Path(result).read_bytes() == file_data
         assert result != str(stale)
-        assert cache.get_downloaded_path('msg1', 'att1') == result
+        assert cache.get_downloaded_path(downloads._index_key('msg1', attachment_info)) == result
         assert "Downloaded attachment to" in caplog.text
 
     @patch('src.integrations.gmail.downloads.download_attachment')

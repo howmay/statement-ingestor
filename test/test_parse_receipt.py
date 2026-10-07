@@ -1,3 +1,4 @@
+import logging
 import types
 import pytest
 import src.parsing.llm.parse_receipt as pr
@@ -47,27 +48,14 @@ def test_parse_receipt_text_returns_deterministic_bank_result(monkeypatch):
     assert out == txs
 
 
-def test_parse_receipt_text_strict_bank_parser_raises_when_zero_transactions(monkeypatch):
-    monkeypatch.setattr(pr, "STRICT_BANK_PARSER", True)
+def test_parse_receipt_text_matched_bank_parser_raises_when_zero_transactions(monkeypatch):
     monkeypatch.setattr(pr, "parse_with_bank_factory", lambda *_: BankParseResult(matched=True, parser_name="hsbc", transactions=[]))
 
     with pytest.raises(ReceiptParsingError):
         pr.parse_receipt_text("statement text", {"sender_tag": "hsbc"})
 
 
-def test_parse_receipt_text_non_strict_falls_back_to_heuristic(monkeypatch):
-    monkeypatch.setattr(pr, "STRICT_BANK_PARSER", False)
-    monkeypatch.setattr(pr, "ALLOW_MATCHED_BANK_LLM_FALLBACK", True)
-    monkeypatch.setattr(pr, "parse_with_bank_factory", lambda *_: BankParseResult(matched=True, parser_name="hsbc", transactions=[]))
-    monkeypatch.setattr(pr, "_get_llm_runtime_config", lambda: {"enabled": False})
-
-    out = pr.parse_receipt_text("2026-01-01 NT$100.00", {"sender_tag": "hsbc"})
-    assert isinstance(out, list)
-    assert len(out) >= 1
-
-
 def test_parse_receipt_text_known_bank_parser_does_not_fallback_to_llm_when_zero_transactions(monkeypatch):
-    monkeypatch.setattr(pr, "STRICT_BANK_PARSER", False)
     monkeypatch.setattr(
         pr,
         "parse_with_bank_factory",
@@ -382,9 +370,7 @@ def test_first_pass_chunk_truncation_triggers_forced_pass(monkeypatch):
 
 
 def test_hsbc_statement_text_without_llm_key_returns_heuristic_transactions(monkeypatch):
-    # Force heuristic/LLM fallback path without strict deterministic blocking
-    monkeypatch.setattr(pr, "STRICT_BANK_PARSER", False)
-    monkeypatch.setattr(pr, "ALLOW_MATCHED_BANK_LLM_FALLBACK", True)
+    # No deterministic parser matches this text; no LLM key -> heuristics
     monkeypatch.setenv('LLM_PROVIDER', 'openai')
     monkeypatch.delenv('OPENAI_API_KEY', raising=False)
 
@@ -436,8 +422,7 @@ Total Amount Due: NT$45,678.90
 
 
 def test_parse_receipt_text_large_statement_with_mocked_openai(monkeypatch):
-    monkeypatch.setattr(pr, "STRICT_BANK_PARSER", False)
-    monkeypatch.setattr(pr, "ALLOW_MATCHED_BANK_LLM_FALLBACK", True)
+    monkeypatch.setattr(pr, "parse_with_bank_factory", lambda *_: BankParseResult(matched=False))  # exercise the LLM path
     monkeypatch.setenv('OPENAI_API_KEY', 'test-key')
     monkeypatch.setenv('LLM_PROVIDER', 'openai')
 
@@ -472,8 +457,7 @@ def test_parse_receipt_text_large_statement_with_mocked_openai(monkeypatch):
 
 
 def test_parse_receipt_text_with_mocked_openai_client(monkeypatch):
-    monkeypatch.setattr(pr, "STRICT_BANK_PARSER", False)
-    monkeypatch.setattr(pr, "ALLOW_MATCHED_BANK_LLM_FALLBACK", True)
+    monkeypatch.setattr(pr, "parse_with_bank_factory", lambda *_: BankParseResult(matched=False))  # exercise the LLM path
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
     monkeypatch.setenv("LLM_PROVIDER", "openai")
 
@@ -502,3 +486,11 @@ def test_parse_receipt_text_with_mocked_openai_client(monkeypatch):
     assert len(transactions) == 1
     assert transactions[0]["expense_name"] == "Test"
     assert transactions[0]["amount"] == 100.0
+
+
+def test_unknown_llm_provider_uses_local_runtime(monkeypatch, caplog):
+    monkeypatch.setenv("LLM_PROVIDER", "ollama")
+    with caplog.at_level(logging.WARNING):
+        cfg = pr._get_llm_runtime_config()
+    assert (cfg["provider"], cfg["enabled"]) == ("local", True)
+    assert "Unknown LLM_PROVIDER='ollama'" in caplog.text
