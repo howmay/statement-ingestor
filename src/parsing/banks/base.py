@@ -12,13 +12,13 @@ MONTH_MAP = {
 
 
 def _has_keyword(d: str, k: str) -> bool:
-    # ASCII keywords match whole words ("ach" must not hit "coach"); CJK keywords are substrings.
-    # ASCII-alnum edges, not \b: an adjacent CJK char is a boundary and "/ccp/" still matches "/ccp/4503".
+    # ASCII keywords must start a word ("ach" must not hit "coach") but may run on ("ubereats");
+    # CJK keywords are substrings. ASCII-alnum edge, not \b: an adjacent CJK char is a boundary
+    # and a keyword starting with punctuation ("/ccp/") gets no boundary check.
     if not k.isascii():
         return k in d
     left = r'(?<![a-z0-9])' if k[0].isalnum() else ''
-    right = r'(?![a-z0-9])' if k[-1].isalnum() else ''
-    return re.search(left + re.escape(k) + right, d) is not None
+    return re.search(left + re.escape(k), d) is not None
 
 
 def classify_expense_type(desc: str) -> str:

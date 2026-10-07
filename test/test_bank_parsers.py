@@ -465,7 +465,9 @@ def test_classify_expense_type():
     assert classify_expense_type('STARBUCKS COFFEE') == 'Other'
     assert classify_expense_type('UBER payment') == 'Bills'  # Bills wins over Transportation
     assert classify_expense_type('coffee shop') == 'Other'  # "fee" only as a whole word
-    assert classify_expense_type('STRIPE*ACME') == 'Other'  # ASCII keywords are whole words ("trip")
+    assert classify_expense_type('STRIPE*ACME') == 'Other'  # ASCII keywords need a left word boundary ("trip")
+    assert classify_expense_type('UBEREATS') == 'Transportation'  # ...but no right boundary
+    assert classify_expense_type('AMAZONPRIME') == 'Shopping'
     assert classify_expense_type('PINEAPPLE MART') == 'Other'
     assert classify_expense_type('GRAB TAXI') == 'Transportation'
     assert classify_expense_type('電費') == 'Bills'
