@@ -423,13 +423,13 @@ class TestGmailExpenseParserAppValidateConfiguration:
 
     def test_validate_configuration_success_bool_return(self, app):
         """Current validator returns bool; app should handle it."""
-        with patch('src.support.config_validator.ConfigValidator.validate_all', return_value=True):
+        with patch('src.runtime.app.config_is_valid', return_value=True):
             result = app.validate_configuration()
         assert result is True
 
     def test_validate_configuration_failure_bool_return(self, app):
         """False bool return should fail gracefully (no tuple unpack crash)."""
-        with patch('src.support.config_validator.ConfigValidator.validate_all', return_value=False):
+        with patch('src.runtime.app.config_is_valid', return_value=False):
             result = app.validate_configuration()
         assert result is False
         assert app.stats['errors'] >= 1

@@ -261,9 +261,7 @@ class TestGmailExpenseParserAppComprehensive:
         """Test validate_configuration with boolean return."""
         app = app_with_enhancements
         
-        with patch('src.runtime.app.ConfigValidator') as mock_validator_class:
-            mock_validator = mock_validator_class.return_value
-            mock_validator.validate_all.return_value = True
+        with patch('src.runtime.app.config_is_valid', return_value=True):
             result = app.validate_configuration()
             
             assert result is True
@@ -272,10 +270,7 @@ class TestGmailExpenseParserAppComprehensive:
         """Test validate_configuration when it fails."""
         app = app_with_enhancements
         
-        with patch('src.runtime.app.ConfigValidator') as mock_validator_class:
-            mock_validator = mock_validator_class.return_value
-            mock_validator.validate_all.return_value = False
-            
+        with patch('src.runtime.app.config_is_valid', return_value=False):
             result = app.validate_configuration()
             
             assert result is False

@@ -9,15 +9,11 @@ from typing import Dict, Any, Optional
 logger = logging.getLogger(__name__)
 
 
-def _is_truthy_env(name: str, default: str = "false") -> bool:
-    return os.getenv(name, default).lower() in {"1", "true", "yes", "on"}
-
 class ResultCache:
     """Simple file-based cache for LLM parsing results."""
     
     def __init__(self, cache_dir: str = ".cache"):
         self.cache_dir = cache_dir
-        self.content_cache_enabled = _is_truthy_env("ENABLE_CONTENT_CACHE", "false")
         os.makedirs(self.cache_dir, exist_ok=True)
         self.db_path = os.path.join(self.cache_dir, "performance_index.sqlite3")
         self._init_index_db()
@@ -273,9 +269,6 @@ class ResultCache:
         
     def get(self, text: str, extra: str = "") -> Optional[Dict[str, Any]]:
         """Retrieve cached result if available."""
-        if not self.content_cache_enabled:
-            return None
-
         key = self._get_cache_key(text, extra)
         cache_path = os.path.join(self.cache_dir, f"{key}.json")
         
@@ -291,9 +284,6 @@ class ResultCache:
         
     def set(self, text: str, result: Dict[str, Any], extra: str = ""):
         """Store result in cache."""
-        if not self.content_cache_enabled:
-            return
-
         key = self._get_cache_key(text, extra)
         cache_path = os.path.join(self.cache_dir, f"{key}.json")
         

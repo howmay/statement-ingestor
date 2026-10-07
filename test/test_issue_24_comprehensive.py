@@ -7,6 +7,7 @@ import os
 from datetime import datetime
 from unittest.mock import MagicMock, patch
 
+import src.parsing.llm.parse_receipt as pr
 from src.parsing.llm.parse_receipt import (
     _chunk_text_by_transactions,
     _fix_truncated_json_enhanced,
@@ -62,8 +63,8 @@ def test_truncated_json_repair():
 
 
 def test_mock_api_with_chunking(monkeypatch):
-    monkeypatch.setenv('STRICT_BANK_PARSER', 'false')
-    monkeypatch.setenv('ALLOW_MATCHED_BANK_LLM_FALLBACK', 'true')
+    monkeypatch.setattr(pr, "STRICT_BANK_PARSER", False)
+    monkeypatch.setattr(pr, "ALLOW_MATCHED_BANK_LLM_FALLBACK", True)
     monkeypatch.setenv('OPENAI_API_KEY', 'test-key')
     monkeypatch.setenv('LLM_PROVIDER', 'openai')
 
@@ -99,8 +100,8 @@ def test_mock_api_with_chunking(monkeypatch):
 
 
 def test_error_handling_and_retry(monkeypatch):
-    monkeypatch.setenv('STRICT_BANK_PARSER', 'false')
-    monkeypatch.setenv('ALLOW_MATCHED_BANK_LLM_FALLBACK', 'true')
+    monkeypatch.setattr(pr, "STRICT_BANK_PARSER", False)
+    monkeypatch.setattr(pr, "ALLOW_MATCHED_BANK_LLM_FALLBACK", True)
     monkeypatch.setenv('OPENAI_API_KEY', 'test-key')
     monkeypatch.setenv('LLM_PROVIDER', 'openai')
 

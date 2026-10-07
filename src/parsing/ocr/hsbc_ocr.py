@@ -70,16 +70,14 @@ def enrich_hsbc_transactions_with_ocr(
         logger.warning('HSBC OCR skipped: `tesseract` not found in PATH')
         return 0
 
-    # Default: require chi_tra for HSBC TW statements to avoid severe OCR garbling.
-    require_chi_tra = os.getenv('HSBC_OCR_REQUIRE_CHI_TRA', 'true').strip().lower() in {'1', 'true', 'yes', 'on'}
-    if require_chi_tra:
-        langs = _get_tesseract_langs()
-        if 'chi_tra' not in langs:
-            logger.warning(
-                'HSBC OCR skipped: chi_tra language data not installed in tesseract '
-                f'(available={sorted(langs)})'
-            )
-            return 0
+    # Require chi_tra for HSBC TW statements to avoid severe OCR garbling.
+    langs = _get_tesseract_langs()
+    if 'chi_tra' not in langs:
+        logger.warning(
+            'HSBC OCR skipped: chi_tra language data not installed in tesseract '
+            f'(available={sorted(langs)})'
+        )
+        return 0
 
     candidates = []
     for idx, tx in enumerate(transactions):

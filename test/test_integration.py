@@ -9,7 +9,6 @@ from pathlib import Path
 def test_core_modules_importable():
     modules = [
         'src.support.retry',
-        'src.support.config_validator',
         'src.runtime.app',
     ]
 

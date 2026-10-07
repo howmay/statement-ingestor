@@ -1,30 +1,9 @@
 from src.parsing.llm import chunking
 
 
-def test_safe_env_int_clamps(monkeypatch):
-    monkeypatch.setenv('MAX_CHUNK_SIZE', '999999')
-    assert chunking.safe_env_int('MAX_CHUNK_SIZE', 3500, maximum=20000) == 20000
-
-
-def test_get_chunking_config_reads_env(monkeypatch):
-    monkeypatch.setenv('ENABLE_ADAPTIVE_CHUNKING', 'false')
-    monkeypatch.setenv('MAX_CHUNK_SIZE', '1200')
-    monkeypatch.setenv('MIN_TRANSACTIONS_PER_CHUNK', '2')
-    monkeypatch.setenv('FORCE_CHUNKING_TEXT_LENGTH', '1500')
-
-    cfg = chunking.get_chunking_config()
-    assert cfg['enabled'] is False
-    assert cfg['max_chunk_size'] == 1200
-    assert cfg['min_transactions_per_chunk'] == 2
-    assert cfg['force_threshold'] == 1500
-
-
-def test_should_enable_chunking_by_force_threshold(monkeypatch):
-    monkeypatch.setenv('ENABLE_ADAPTIVE_CHUNKING', 'true')
-    monkeypatch.setenv('FORCE_CHUNKING_TEXT_LENGTH', '1000')
-
-    text = 'x' * 1001
-    assert chunking.should_enable_chunking(text, {'sender_tag': 'foo'}) is True
+def test_should_enable_chunking_by_force_threshold():
+    assert chunking.should_enable_chunking('x' * (chunking.FORCE_CHUNKING_TEXT_LENGTH + 1), {'sender_tag': 'foo'}) is True
+    assert chunking.should_enable_chunking('x' * 100, {'sender_tag': 'foo'}) is False
 
 
 def test_chunk_text_by_transactions_splits_large_text():

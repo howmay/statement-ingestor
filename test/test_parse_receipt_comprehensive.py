@@ -9,7 +9,7 @@ from src.parsing.banks.base import BankParseResult
 from src.parsing.llm.parse_receipt import ReceiptParsingError
 
 
-def test_get_llm_runtime_config_local_and_ollama(monkeypatch):
+def test_get_llm_runtime_config_local(monkeypatch):
     monkeypatch.setenv("LLM_PROVIDER", "local")
     monkeypatch.setenv("LOCAL_BASE_URL", "http://127.0.0.1:30000")
     monkeypatch.setenv("LOCAL_MODEL", "qwen-test")
@@ -17,12 +17,6 @@ def test_get_llm_runtime_config_local_and_ollama(monkeypatch):
     assert cfg["provider"] == "local"
     assert cfg["base_url"].endswith("/v1")
     assert cfg["model"] == "qwen-test"
-
-    monkeypatch.setenv("LLM_PROVIDER", "ollama")
-    monkeypatch.setenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434")
-    cfg = pr._get_llm_runtime_config()
-    assert cfg["provider"] == "ollama"
-    assert cfg["enabled"] is True
 
 
 def test_get_llm_runtime_config_openai_enabled_and_disabled(monkeypatch):
@@ -54,7 +48,7 @@ def test_parse_receipt_text_returns_deterministic_bank_result(monkeypatch):
 
 
 def test_parse_receipt_text_strict_bank_parser_raises_when_zero_transactions(monkeypatch):
-    monkeypatch.setenv("STRICT_BANK_PARSER", "true")
+    monkeypatch.setattr(pr, "STRICT_BANK_PARSER", True)
     monkeypatch.setattr(pr, "parse_with_bank_factory", lambda *_: BankParseResult(matched=True, parser_name="hsbc", transactions=[]))
 
     with pytest.raises(ReceiptParsingError):
@@ -62,8 +56,8 @@ def test_parse_receipt_text_strict_bank_parser_raises_when_zero_transactions(mon
 
 
 def test_parse_receipt_text_non_strict_falls_back_to_heuristic(monkeypatch):
-    monkeypatch.setenv("STRICT_BANK_PARSER", "false")
-    monkeypatch.setenv("ALLOW_MATCHED_BANK_LLM_FALLBACK", "true")
+    monkeypatch.setattr(pr, "STRICT_BANK_PARSER", False)
+    monkeypatch.setattr(pr, "ALLOW_MATCHED_BANK_LLM_FALLBACK", True)
     monkeypatch.setattr(pr, "parse_with_bank_factory", lambda *_: BankParseResult(matched=True, parser_name="hsbc", transactions=[]))
     monkeypatch.setattr(pr, "_get_llm_runtime_config", lambda: {"enabled": False})
 
@@ -73,7 +67,7 @@ def test_parse_receipt_text_non_strict_falls_back_to_heuristic(monkeypatch):
 
 
 def test_parse_receipt_text_known_bank_parser_does_not_fallback_to_llm_when_zero_transactions(monkeypatch):
-    monkeypatch.setenv("STRICT_BANK_PARSER", "false")
+    monkeypatch.setattr(pr, "STRICT_BANK_PARSER", False)
     monkeypatch.setattr(
         pr,
         "parse_with_bank_factory",

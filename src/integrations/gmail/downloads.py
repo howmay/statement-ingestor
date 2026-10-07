@@ -271,26 +271,12 @@ def _extract_pdf_text_hint(file_data: bytes, sender: str, ext: str) -> str:
         tmp_path = tmp.name
 
     try:
-        # 1) Try specific passwords for this sender
+        # get_bank_password already returns every known password
         passwords = get_bank_password(sender) or [None]
         for password in passwords:
             text = extract_text_from_pdf(tmp_path, password)
             if text and text.strip():
                 return text
-        
-        # 2) Fallback: If sender is generic (e.g., self), try ALL known bank passwords
-        from src.core.config import get_all_bank_passwords
-        all_passwords = get_all_bank_passwords()
-        if all_passwords:
-            logger.debug(f"Trying all known bank passwords for identification: {len(all_passwords)} variants")
-            for password in all_passwords:
-                if password in passwords: continue # Skip if already tried
-                try:
-                    text = extract_text_from_pdf(tmp_path, password)
-                    if text and text.strip():
-                        return text
-                except Exception:
-                    continue
     except Exception:
         return ""
     finally:

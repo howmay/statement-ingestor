@@ -12,7 +12,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # Import project modules
 from src.support.cache import ResultCache
-from src.support.config_validator import ConfigValidator
+from src.support.config_validator import validate_configuration as config_is_valid
 from src.core.config import TARGET_SENDERS, TARGET_KEYWORDS, DOWNLOAD_DIR, get_bank_password
 from src.integrations.gmail.auth import get_gmail_service
 from src.integrations.gmail.fetch import search_emails, list_attachments
@@ -169,7 +169,7 @@ class GmailExpenseParserApp:
         """Validate configuration before starting."""
         self.logger.info("Validating configuration...")
         try:
-            if not ConfigValidator().validate_all():
+            if not config_is_valid():
                 self.logger.error("Configuration validation failed.")
                 self.stats['errors'] += 1
                 return False

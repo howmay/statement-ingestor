@@ -10,8 +10,8 @@ from datetime import datetime
 from src.support.retry_enhanced import enhanced_retry_openai, JSONTruncationError
 from src.parsing.banks.factory import parse_with_bank_factory
 from src.parsing.llm.chunking import (
-    safe_env_int as _safe_env_int_impl,
-    get_chunking_config as _get_chunking_config_impl,
+    MAX_CHUNK_SIZE,
+    MIN_TRANSACTIONS_PER_CHUNK,
     should_enable_chunking as _should_enable_chunking_impl,
     calculate_max_tokens as _calculate_max_tokens_impl,
     chunk_text_by_transactions as _chunk_text_by_transactions_impl,
@@ -32,8 +32,9 @@ class ReceiptParsingError(Exception):
     pass
 
 
-def _is_truthy_env(name: str, default: str = "false") -> bool:
-    return os.getenv(name, default).lower() in {'1', 'true', 'yes', 'on'}
+# Trust a matched deterministic bank parser; the LLM is not a fallback for it.
+STRICT_BANK_PARSER = True
+ALLOW_MATCHED_BANK_LLM_FALLBACK = False
 
 
 def _get_llm_runtime_config() -> Dict[str, Any]:
@@ -64,24 +65,6 @@ def _get_llm_runtime_config() -> Dict[str, Any]:
             "supports_response_format": False,
         }
 
-    # Optional backward-compatible Ollama path
-    if provider == "ollama":
-        base_url = os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434").rstrip("/")
-        if not base_url.endswith("/v1"):
-            base_url = f"{base_url}/v1"
-
-        model = os.getenv("OLLAMA_MODEL", "lukey03/qwen3.5-9b-abliterated-vision")
-        api_key = os.getenv("OLLAMA_API_KEY", "ollama-local")
-
-        return {
-            "provider": "ollama",
-            "enabled": True,
-            "api_key": api_key,
-            "base_url": base_url,
-            "model": model,
-            "supports_response_format": False,
-        }
-
     # OpenAI cloud path
     api_key = os.getenv("OPENAI_API_KEY", "")
     model = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
@@ -101,16 +84,6 @@ def _get_llm_runtime_config() -> Dict[str, Any]:
 def _extract_json_payload(response_text: str) -> str:
     """Backward-compatible wrapper for JSON payload extraction."""
     return _extract_json_payload_impl(response_text)
-
-
-def _safe_env_int(name: str, default: int, minimum: int = 1, maximum: int = 100000) -> int:
-    """Backward-compatible wrapper for env int parsing."""
-    return _safe_env_int_impl(name, default, minimum, maximum)
-
-
-def _get_chunking_config() -> Dict[str, Any]:
-    """Backward-compatible wrapper for chunking config."""
-    return _get_chunking_config_impl()
 
 
 def parse_receipt_text(text: str, source_info: Dict[str, Any] = None) -> List[Dict[str, Any]]:
@@ -133,8 +106,6 @@ def parse_receipt_text(text: str, source_info: Dict[str, Any] = None) -> List[Di
     logger.info(f"Parsing receipt text ({len(text)} chars), source: {source_info.get('sender_tag', 'unknown')}")
 
     # 1) Deterministic bank parser first (accuracy-first path)
-    strict_bank_parser = _is_truthy_env('STRICT_BANK_PARSER', 'true')
-    allow_matched_bank_fallback = _is_truthy_env('ALLOW_MATCHED_BANK_LLM_FALLBACK', 'false')
     bank_result = parse_with_bank_factory(text, source_info)
     if bank_result.matched:
         if bank_result.transactions:
@@ -154,10 +125,10 @@ def parse_receipt_text(text: str, source_info: Dict[str, Any] = None) -> List[Di
         
         # For known deterministic parsers, default to trusting the parser match and
         # only allow LLM fallback via an explicit opt-in flag.
-        if strict_bank_parser or not allow_matched_bank_fallback:
+        if STRICT_BANK_PARSER or not ALLOW_MATCHED_BANK_LLM_FALLBACK:
             reason = (
                 "STRICT_BANK_PARSER=true"
-                if strict_bank_parser
+                if STRICT_BANK_PARSER
                 else "ALLOW_MATCHED_BANK_LLM_FALLBACK=false"
             )
             logger.info(f"{msg} Raising error to prevent LLM fallback ({reason}).")
@@ -240,15 +211,14 @@ def _parse_with_adaptive_strategy(
     force_chunking: bool = False,
 ) -> List[Dict[str, Any]]:
     """Adaptive parsing strategy for large transaction lists."""
-    chunk_cfg = _get_chunking_config()
     user_prompt_template = "Extract transactions from {source} text:\n{text}"
     filename = source_info.get('filename') or source_info.get('filepath') or '<unknown>'
 
     if _should_enable_chunking(text, source_info, force=force_chunking):
         chunks = _chunk_text_by_transactions(
             text,
-            max_chunk_size=chunk_cfg['max_chunk_size'],
-            min_transactions_per_chunk=chunk_cfg['min_transactions_per_chunk'],
+            max_chunk_size=MAX_CHUNK_SIZE,
+            min_transactions_per_chunk=MIN_TRANSACTIONS_PER_CHUNK,
         )
         logger.info(f"Split text into {len(chunks)} chunks for {filename}")
         logger.info(f"Chunking enabled for {filename}, processing {len(chunks)} chunks")

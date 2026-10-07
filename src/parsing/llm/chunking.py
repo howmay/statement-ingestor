@@ -2,46 +2,21 @@
 
 from __future__ import annotations
 
-import os
 import re
 from typing import Any, Dict, List, Tuple
 
 
-def safe_env_int(name: str, default: int, minimum: int = 1, maximum: int = 100000) -> int:
-    """Read int env var with bounds and fallback default."""
-    raw = os.getenv(name, str(default)).strip()
-    try:
-        val = int(raw)
-    except Exception:
-        return default
-    return max(minimum, min(maximum, val))
-
-
-def get_chunking_config() -> Dict[str, Any]:
-    """Read adaptive chunking controls from environment variables."""
-    enabled = os.getenv('ENABLE_ADAPTIVE_CHUNKING', 'true').strip().lower() in {'1', 'true', 'yes', 'on'}
-    max_chunk_size = safe_env_int('MAX_CHUNK_SIZE', 3500, minimum=500, maximum=20000)
-    min_tx_per_chunk = safe_env_int('MIN_TRANSACTIONS_PER_CHUNK', 5, minimum=1, maximum=100)
-    force_threshold = safe_env_int('FORCE_CHUNKING_TEXT_LENGTH', 8000, minimum=1000, maximum=50000)
-
-    return {
-        'enabled': enabled,
-        'max_chunk_size': max_chunk_size,
-        'min_transactions_per_chunk': min_tx_per_chunk,
-        'force_threshold': force_threshold,
-    }
+MAX_CHUNK_SIZE = 3500
+MIN_TRANSACTIONS_PER_CHUNK = 5
+FORCE_CHUNKING_TEXT_LENGTH = 8000
 
 
 def should_enable_chunking(text: str, source_info: Dict[str, Any], force: bool = False) -> bool:
     """Determine whether to enable chunking."""
-    cfg = get_chunking_config()
-    if not cfg['enabled'] and not force:
-        return False
-
     if force:
         return True
 
-    if len(text) > cfg['force_threshold']:
+    if len(text) > FORCE_CHUNKING_TEXT_LENGTH:
         return True
 
     sender_tag = source_info.get('sender_tag', '').lower()
