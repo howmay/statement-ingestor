@@ -27,7 +27,7 @@ def test_dbs_sg_bank_parser():
     text = "DBS BANK Account Statement\n01 MAR GIRO INWARD PAYNOW-FROM 1,000.00 5,000.00\n02 MAR IBANK WITHDRAWAL 200.00 4,800.00"
     # DBS keyword in text, Statement in filename
     source_info = {
-        'subject': 'Your Monthly Statement',
+        'subject': 'Your Monthly Statement 2026-03',
         'filename': 'test_user_Statement_0000000000.pdf'
     }
     parser = get_bank_parser(text, source_info)
@@ -38,12 +38,10 @@ def test_dbs_sg_bank_parser():
     assert len(result.transactions) == 2
     
     t1 = result.transactions[0]
-    assert t1['date'] == f"{datetime.now().year}-03-01"
+    assert t1['date'] == "2026-03-01"
     assert t1['amount'] == 1000.00
     assert t1['cashflow_side'] == 'income'
     
     t2 = result.transactions[1]
     assert t2['amount'] == 200.00
     assert t2['cashflow_side'] == 'expense'
-
-from datetime import datetime

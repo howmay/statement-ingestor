@@ -2,7 +2,7 @@ import re
 from datetime import datetime
 from typing import Dict, List, Optional
 
-from .base import BaseBankParser, BankParseResult
+from .base import BaseBankParser, BankParseResult, classify_expense_type, classify_bank_expense_type
 
 
 class TaishinCreditCardParser(BaseBankParser):
@@ -89,7 +89,7 @@ class TaishinCreditCardParser(BaseBankParser):
                 date=tx_date,
                 amount=amount,
                 expense_name=desc or body,
-                expense_type=_classify_expense_type(desc or body),
+                expense_type=classify_expense_type(desc or body),
                 source=self.SOURCE,
                 currency=self.CURRENCY,
                 confidence=0.96,
@@ -290,7 +290,7 @@ class TaishinBankParser(BaseBankParser):
             date=data["date"],
             amount=data["amount"],
             expense_name=expense_name,
-            expense_type=_classify_bank_expense_type(expense_name),
+            expense_type=classify_bank_expense_type(expense_name),
             source=self.SOURCE,
             currency=data["currency"],
             confidence=0.96,
@@ -311,19 +311,5 @@ def _infer_bank_cashflow_side(summary: str, note: str, amount: float) -> str:
     return "income" if amount == 0 else "expense"
 
 
-def _classify_bank_expense_type(desc: str) -> str:
-    lowered = desc.lower()
-    if any(keyword in lowered for keyword in ["卡費", "利息", "interest"]):
-        return "Bills"
-    if any(keyword in lowered for keyword in ["提款", "轉帳", "轉出", "支取", "ach"]):
-        return "Transfer"
-    return "Other"
 
 
-def _classify_expense_type(desc: str) -> str:
-    lowered = desc.lower()
-    if any(keyword in lowered for keyword in ["apple", "app store", "itunes"]):
-        return "Shopping"
-    if any(keyword in lowered for keyword in ["手續費", "服務費", "自動轉帳扣繳", "扣繳", "信用卡款"]):
-        return "Bills"
-    return "Other"

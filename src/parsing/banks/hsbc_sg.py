@@ -21,12 +21,6 @@ class HsbcSgCardParser(BaseBankParser):
         re.IGNORECASE,
     )
 
-    MONTH_MAP = {
-        'jan': 1, 'feb': 2, 'mar': 3, 'apr': 4,
-        'may': 5, 'jun': 6, 'jul': 7, 'aug': 8,
-        'sep': 9, 'oct': 10, 'nov': 11, 'dec': 12,
-    }
-
     def parse(self) -> BankParseResult:
         txs: List[Dict] = []
         
@@ -53,7 +47,7 @@ class HsbcSgCardParser(BaseBankParser):
             if not m:
                 continue
 
-            tx_date = self._month_name_day_to_iso(m.group('tx_day'), m.group('tx_mon'))
+            tx_date = self.month_name_day_to_iso(m.group('tx_day'), m.group('tx_mon'))
             body = m.group('body').strip()
 
             if not tx_date or not body:
@@ -93,17 +87,6 @@ class HsbcSgCardParser(BaseBankParser):
             transactions=txs,
         )
 
-    def _month_name_day_to_iso(self, day_text: str, mon_text: str) -> Optional[str]:
-        month = self.MONTH_MAP.get(mon_text.lower()[:3])
-        if month is None:
-            return None
-        try:
-            day = int(day_text)
-            year = self._infer_year_for_month_day(month, day)
-            return f"{year:04d}-{month:02d}-{day:02d}"
-        except Exception:
-            return None
-
 
 class HsbcSgBankParser(BaseBankParser):
     SOURCE = 'HSBC Singapore Bank'
@@ -115,12 +98,6 @@ class HsbcSgBankParser(BaseBankParser):
         r'|^(?P<day2>\d{1,2})\s+(?P<mon2>[A-Za-z]{3})',
         re.IGNORECASE
     )
-
-    MONTH_MAP = {
-        'jan': 1, 'feb': 2, 'mar': 3, 'apr': 4,
-        'may': 5, 'jun': 6, 'jul': 7, 'aug': 8,
-        'sep': 9, 'oct': 10, 'nov': 11, 'dec': 12,
-    }
 
     def parse(self) -> BankParseResult:
         txs: List[Dict] = []
@@ -191,13 +168,8 @@ class HsbcSgBankParser(BaseBankParser):
                 if is_new_tx_with_date:
                     # Parse date
                     day = m.group('day') or m.group('day2')
-                    mon_str = (m.group('mon') or m.group('mon2')).lower()[:3]
-                    month = self.MONTH_MAP.get(mon_str)
-                    if not month: continue
-                    
-                    year_str = m.group('year')
-                    year = int(year_str) if year_str else self._infer_year_for_month_day(month, int(day))
-                    date_iso = f"{year:04d}-{month:02d}-{int(day):02d}"
+                    date_iso = self.month_name_day_to_iso(day, m.group('mon') or m.group('mon2'), m.group('year'))
+                    if not date_iso: continue
                     
                     # Remainder of line
                     rest = line[m.end():].strip()

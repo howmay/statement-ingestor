@@ -1,7 +1,7 @@
 import re
 from typing import Dict, List, Optional
 
-from .base import BaseBankParser, BankParseResult
+from .base import BaseBankParser, BankParseResult, classify_expense_type
 
 
 class FirstBankCreditCardParser(BaseBankParser):
@@ -92,7 +92,7 @@ class FirstBankCreditCardParser(BaseBankParser):
                 date=tx_date,
                 amount=amount,
                 expense_name=desc or body,
-                expense_type=_classify_expense_type(desc or body),
+                expense_type=classify_expense_type(desc or body),
                 source=self.SOURCE,
                 currency=self.CURRENCY,
                 confidence=0.96,
@@ -109,12 +109,3 @@ class FirstBankCreditCardParser(BaseBankParser):
         )
 
 
-def _classify_expense_type(desc: str) -> str:
-    lowered = desc.lower()
-    if any(keyword in lowered for keyword in ["apple", "全支付", "全聯", "特斯拉"]):
-        return "Shopping"
-    if any(keyword in lowered for keyword in ["捷運", "悠遊卡"]):
-        return "Transportation"
-    if any(keyword in lowered for keyword in ["手續費", "回饋", "扣繳", "中華電信"]):
-        return "Bills"
-    return "Other"

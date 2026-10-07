@@ -5,6 +5,40 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 import re
 
+MONTH_MAP = {
+    'jan': 1, 'feb': 2, 'mar': 3, 'apr': 4, 'may': 5, 'jun': 6,
+    'jul': 7, 'aug': 8, 'sep': 9, 'oct': 10, 'nov': 11, 'dec': 12,
+}
+
+
+def classify_expense_type(desc: str) -> str:
+    d = desc.lower()
+    if re.search(r'\bfees?\b', d) or any(k in d for k in [
+        '自動轉帳繳款', '自動轉帳扣繳', '服務費', '國外交易服務費', '手續費', '年費', '電費', '水費',
+        '瓦斯費', '電話費', '信用卡轉', '信用卡款', '利息', '繳款', '扣繳', '自扣', '回饋',
+        '中華電信', 'payment',
+    ]):
+        return 'Bills'
+    if any(k in d for k in ['uber', 'taxi', 'grab', 'trip', '交通', '計程車', '高鐵', '台鐵', '捷運', '悠遊卡']):
+        return 'Transportation'
+    if any(k in d for k in ['spotify', 'netflix', 'youtube', 'google', 'movie', '電影', '遊戲']):
+        return 'Entertainment'
+    if any(k in d for k in [
+        'amazon', 'apple', 'app store', 'itunes', 'pchome', 'momo', 'shopping', '購物', '寶島',
+        '全支付', '全聯', '大全聯', '特斯拉',
+    ]):
+        return 'Shopping'
+    return 'Other'
+
+
+def classify_bank_expense_type(desc: str) -> str:
+    d = desc.lower()
+    if any(k in d for k in ['利息', 'interest', '/ccp/', '卡費']):
+        return 'Bills'
+    if any(k in d for k in ['轉帳', 'global transfer', 'fisc', 'hiba881', '提款', '轉出', '支取', 'ach']):
+        return 'Transfer'
+    return 'Other'
+
 
 @dataclass
 class BankParseResult:
@@ -42,12 +76,6 @@ class BaseBankParser:
                 pass
 
         # 2) English date patterns (e.g. 28 Feb 2024 or February 2024)
-        month_map = {
-            'jan': 1, 'feb': 2, 'mar': 3, 'apr': 4, 'may': 5, 'jun': 6,
-            'jul': 7, 'aug': 8, 'sep': 9, 'oct': 10, 'nov': 11, 'dec': 12,
-            'january': 1, 'february': 2, 'march': 3, 'april': 4, 'june': 6,
-            'july': 7, 'august': 8, 'september': 9, 'october': 10, 'november': 11, 'december': 12
-        }
         # Pattern for "DD MMM YYYY" or "MMM YYYY"
         eng_m = re.search(
             r'(?P<day>\d{1,2})?\s*(?P<mon>[A-Za-z]{3,10})\s+(?P<year>\d{4})',
@@ -57,7 +85,7 @@ class BaseBankParser:
         if eng_m:
             year = int(eng_m.group('year'))
             mon_str = eng_m.group('mon').lower()
-            month = month_map.get(mon_str) or month_map.get(mon_str[:3])
+            month = MONTH_MAP.get(mon_str[:3])
             if month:
                 day = int(eng_m.group('day')) if eng_m.group('day') else 1
                 try:
@@ -115,6 +143,17 @@ class BaseBankParser:
 
         try:
             return datetime(year, month, day).strftime('%Y-%m-%d')
+        except ValueError:
+            return None
+
+    def month_name_day_to_iso(self, day_text: str, mon_text: str, year_text: Optional[str] = None) -> Optional[str]:
+        month = MONTH_MAP.get(mon_text.lower()[:3])
+        if month is None:
+            return None
+        try:
+            day = int(day_text)
+            year = int(year_text) if year_text else self._infer_year_for_month_day(month, day)
+            return f"{year:04d}-{month:02d}-{day:02d}"
         except ValueError:
             return None
 

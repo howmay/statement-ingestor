@@ -1,7 +1,7 @@
 import re
 from typing import Dict, List, Optional
 
-from .base import BaseBankParser, BankParseResult
+from .base import BaseBankParser, BankParseResult, classify_expense_type
 
 
 class SinopacCreditCardParser(BaseBankParser):
@@ -104,7 +104,7 @@ class SinopacCreditCardParser(BaseBankParser):
                 date=tx_date,
                 amount=amount,
                 expense_name=desc or body,
-                expense_type=_classify_expense_type(desc or body),
+                expense_type=classify_expense_type(desc or body),
                 source=self.SOURCE,
                 currency=currency,
                 confidence=0.96,
@@ -121,10 +121,3 @@ class SinopacCreditCardParser(BaseBankParser):
         )
 
 
-def _classify_expense_type(desc: str) -> str:
-    lowered = desc.lower()
-    if any(keyword in lowered for keyword in ["amazon", "apple", "全聯", "大全聯"]):
-        return "Shopping"
-    if any(keyword in lowered for keyword in ["回饋", "手續費", "自扣", "扣繳"]):
-        return "Bills"
-    return "Other"

@@ -1,7 +1,7 @@
 import re
 from typing import Dict, List
 
-from .base import BaseBankParser, BankParseResult
+from .base import BaseBankParser, BankParseResult, classify_expense_type
 
 
 class FubonBankParser(BaseBankParser):
@@ -90,7 +90,7 @@ class FubonBankParser(BaseBankParser):
                 continue
 
             desc = body[:amount_matches[0].start()].strip() or body
-            expense_type = _classify_expense_type(desc)
+            expense_type = classify_expense_type(desc)
             cashflow_side = _infer_cashflow_side(running_balance, amount, current_balance)
 
             txs.append(self._build_transaction(
@@ -201,7 +201,7 @@ class FubonCreditCardParser(BaseBankParser):
                 date=tx_date,
                 amount=amount,
                 expense_name=desc,
-                expense_type=_classify_expense_type(desc),
+                expense_type=classify_expense_type(desc),
                 source=self.SOURCE,
                 currency=currency,
                 confidence=0.95 if desc != line else 0.85,
@@ -226,17 +226,6 @@ def _date_slash_to_iso(date_str: str) -> str:
     return f'{int(y):04d}-{int(mo):02d}-{int(d):02d}'
 
 
-def _classify_expense_type(desc: str) -> str:
-    d = desc.lower()
-    if any(k in d for k in ['信用卡轉', '利息', '手續費', 'fee']):
-        return 'Bills'
-    if any(k in d for k in ['uber', '交通', '計程車', '高鐵', '台鐵']):
-        return 'Transportation'
-    if any(k in d for k in ['spotify', 'netflix', 'youtube']):
-        return 'Entertainment'
-    if any(k in d for k in ['amazon', 'pchome', 'momo', '購物']):
-        return 'Shopping'
-    return 'Other'
 
 
 def _infer_cashflow_side(

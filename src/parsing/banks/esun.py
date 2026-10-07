@@ -1,7 +1,7 @@
 import re
 from typing import Dict, List
 
-from .base import BaseBankParser, BankParseResult
+from .base import BaseBankParser, BankParseResult, classify_expense_type
 
 
 class EsunCardParser(BaseBankParser):
@@ -80,7 +80,7 @@ class EsunCardParser(BaseBankParser):
                 continue
 
             tx_date = self._month_day_to_iso(tx_md)
-            expense_type = _classify_expense_type(desc)
+            expense_type = classify_expense_type(desc)
 
             txs.append(self._build_transaction(
                 date=tx_date,
@@ -171,12 +171,3 @@ class EsunBankParser(BaseBankParser):
         )
 
 
-def _classify_expense_type(desc: str) -> str:
-    d = desc.lower()
-    if any(k in d for k in ['自動轉帳繳款', '服務費', '費']):
-        return 'Bills'
-    if any(k in d for k in ['spotify', 'google', 'uber']):
-        return 'Entertainment'
-    if any(k in d for k in ['pchome', '寶島', '購物']):
-        return 'Shopping'
-    return 'Other'

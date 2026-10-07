@@ -17,11 +17,6 @@ class DbsSgCardParser(BaseBankParser):
         re.IGNORECASE
     )
 
-    MONTH_MAP = {
-        'JAN': 1, 'FEB': 2, 'MAR': 3, 'APR': 4, 'MAY': 5, 'JUN': 6,
-        'JUL': 7, 'AUG': 8, 'SEP': 9, 'OCT': 10, 'NOV': 11, 'DEC': 12
-    }
-
     def parse(self) -> BankParseResult:
         txs = []
         for line in self.text.splitlines():
@@ -30,13 +25,8 @@ class DbsSgCardParser(BaseBankParser):
             
             m = self.LINE_PATTERN.match(line)
             if m:
-                day = int(m.group('day'))
-                mon_str = m.group('mon').upper()
-                mon = self.MONTH_MAP.get(mon_str)
-                if not mon: continue
-                
-                year = self._infer_year_for_month_day(mon, day)
-                date_iso = f"{year}-{mon:02d}-{day:02d}"
+                date_iso = self.month_name_day_to_iso(m.group('day'), m.group('mon'))
+                if not date_iso: continue
                 
                 amount = float(m.group('amount').replace(',', ''))
                 if m.group('suffix') == 'CR':
@@ -74,11 +64,6 @@ class DbsSgBankParser(BaseBankParser):
     # Amount pattern for sequential numbers at the end
     AMOUNTS_PATTERN = re.compile(r'(?P<amount>[0-9,]+\.[0-9]{2})\s+(?P<balance>[0-9,]+\.[0-9]{2})$')
 
-    MONTH_MAP = {
-        'JAN': 1, 'FEB': 2, 'MAR': 3, 'APR': 4, 'MAY': 5, 'JUN': 6,
-        'JUL': 7, 'AUG': 8, 'SEP': 9, 'OCT': 10, 'NOV': 11, 'DEC': 12
-    }
-
     def parse(self) -> BankParseResult:
         txs = []
         lines = self.text.splitlines()
@@ -108,10 +93,8 @@ class DbsSgBankParser(BaseBankParser):
                     d, m, y = date_str.split('/')
                     date_iso = f"{y}-{m}-{d}"
                 else:
-                    d = int(date_match.group('day'))
-                    mon = self.MONTH_MAP.get(date_match.group('mon').upper())
-                    year = self._infer_year_for_month_day(mon, d)
-                    date_iso = f"{year}-{mon:02d}-{d:02d}"
+                    date_iso = self.month_name_day_to_iso(date_match.group('day'), date_match.group('mon'))
+                    if not date_iso: continue
                 
                 # Remainder of line
                 rest = line[date_match.end():].strip()

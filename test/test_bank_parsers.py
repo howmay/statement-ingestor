@@ -7,6 +7,7 @@ from pathlib import Path
 project_root = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(project_root))
 
+from src.parsing.banks.base import classify_expense_type
 from src.parsing.banks.factory import parse_with_bank_factory
 from src.parsing.ocr.hsbc_ocr import _extract_rows_from_ocr_text, _clean_ocr_desc
 
@@ -459,6 +460,17 @@ REF YWC5-13719 20,187.21 39,171.77
     assert fx_out['cashflow_side'] == 'expense'
 
 
+def test_classify_expense_type():
+    assert classify_expense_type('annual fee') == 'Bills'
+    assert classify_expense_type('年費') == 'Bills'
+    assert classify_expense_type('高鐵') == 'Transportation'
+    assert classify_expense_type('NETFLIX') == 'Entertainment'
+    assert classify_expense_type('MOMO') == 'Shopping'
+    assert classify_expense_type('STARBUCKS COFFEE') == 'Other'
+    assert classify_expense_type('UBER payment') == 'Bills'  # Bills wins over Transportation
+    assert classify_expense_type('coffee shop') == 'Other'  # "fee" only as a whole word
+
+
 if __name__ == '__main__':
     test_hsbc_parse()
     test_hsbc_tw_statement_table_style()
@@ -473,4 +485,5 @@ if __name__ == '__main__':
     test_taishin_credit_card_statement()
     test_taishin_bank_statement()
     test_hsbc_taiwan_bank_statement()
+    test_classify_expense_type()
     print('All parser tests passed ✅')

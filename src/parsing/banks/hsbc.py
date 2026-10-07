@@ -2,7 +2,7 @@ import logging
 import re
 from typing import Dict, List, Optional
 
-from .base import BaseBankParser, BankParseResult
+from .base import BaseBankParser, BankParseResult, classify_expense_type, classify_bank_expense_type
 from src.parsing.ocr.hsbc_ocr import enrich_hsbc_transactions_with_ocr
 
 logger = logging.getLogger(__name__)
@@ -117,7 +117,7 @@ class HsbcTwCardParser(BaseBankParser):
                 desc = line
                 warnings.append(f'Missing or numeric-only description: {line}')
 
-            expense_type = _classify_expense_type(desc)
+            expense_type = classify_expense_type(desc)
             confidence = 0.97 if desc and desc != line else 0.86
 
             txs.append(self._build_transaction(
@@ -274,7 +274,7 @@ class HsbcTwBankParser(BaseBankParser):
             date=pending['date'],
             amount=amount,
             expense_name=desc,
-            expense_type=_classify_bank_expense_type(desc),
+            expense_type=classify_bank_expense_type(desc),
             source=self.SOURCE,
             currency=pending['currency'],
             confidence=0.95,
@@ -327,19 +327,6 @@ def _apply_dr_cr_sign(amount: float, suffix: str) -> float:
     return amount
 
 
-def _classify_expense_type(desc: str) -> str:
-    d = desc.lower()
-    if any(k in d for k in ['uber', 'taxi', '交通', 'trip', '高鐵', '台鐵', 'grab']):
-        return 'Transportation'
-    if any(k in d for k in ['spotify', 'netflix', 'youtube', 'movie', '電影', '遊戲']):
-        return 'Entertainment'
-    if any(k in d for k in ['amazon', 'pchome', 'momo', '寶島', 'shopping', '購物']):
-        return 'Shopping'
-    if any(k in d for k in ['國外交易服務費', '手續費', 'fee', 'payment', '繳款']):
-        return 'Bills'
-    return 'Other'
-
-
 def _tw_bank_date_to_iso(date_str: str) -> Optional[str]:
     m = re.match(r'^(?P<day>\d{2})/(?P<month>\d{2})/(?P<year>\d{4})$', date_str)
     if not m:
@@ -357,12 +344,3 @@ def _looks_like_income(desc: str) -> bool:
 def _looks_like_expense(desc: str) -> bool:
     lowered = desc.lower()
     return any(k in lowered for k in ['to ', '至 ', 'fisc', '/ccp/'])
-
-
-def _classify_bank_expense_type(desc: str) -> str:
-    lowered = desc.lower()
-    if any(k in lowered for k in ['利息', 'interest', '/ccp/']):
-        return 'Bills'
-    if any(k in lowered for k in ['轉帳', 'global transfer', 'fisc', 'hiba881']):
-        return 'Transfer'
-    return 'Other'
