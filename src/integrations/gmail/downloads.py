@@ -3,6 +3,7 @@ import logging
 import re
 import hashlib
 import base64
+import glob
 import tempfile
 from email.utils import parseaddr
 from typing import List, Dict, Any, Optional
@@ -377,8 +378,13 @@ def download_attachment(
         )
         filepath = os.path.join(DOWNLOAD_DIR, safe_filename)
 
-        if os.path.exists(filepath):
-            logger.info(f"Skipping write: identical content already at {filepath}")
+        # Same bytes under a different name (other subject/sender label) share the hash10 suffix.
+        ext = os.path.splitext(safe_filename)[1]
+        suffix = glob.escape(f"_{build_hash10_suffix(file_data)}{ext}")
+        existing = sorted(glob.glob(os.path.join(glob.escape(DOWNLOAD_DIR), f"*{suffix}")))
+        if existing:
+            filepath = existing[0]
+            logger.info(f"Skipping download: same content already at {filepath}")
         else:
             with open(filepath, 'wb') as f:
                 f.write(file_data)

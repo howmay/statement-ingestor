@@ -28,7 +28,10 @@ class ResultCache:
             with open(self._index_path(), encoding='utf-8') as f: index = json.load(f)
         except (OSError, json.JSONDecodeError): index = {}
         index[f"{message_id}/{attachment_id}"] = path
-        with open(self._index_path(), 'w', encoding='utf-8') as f: json.dump(index, f, ensure_ascii=False, indent=0)
+        try:
+            with open(self._index_path(), 'w', encoding='utf-8') as f: json.dump(index, f, ensure_ascii=False, indent=0)
+        except OSError as e:
+            logger.warning(f"Could not write download index {self._index_path()}: {e}")
 
     def _get_cache_key(self, text: str, extra: str = "") -> str:
         """Generate a stable key for the given text and extra metadata."""

@@ -160,11 +160,7 @@ class TestGmailExpenseParserAppDownloadAttachments:
         
         # batch_download_pdfs is called once per email, so 2 emails = 2 calls
         # Each call returns 1 file, so total 2 files
-        with patch('src.runtime.app.list_attachments', return_value=[
-            [{'attachmentId': 'att1', 'filename': 'file1.pdf'}],
-            [{'attachmentId': 'att2', 'filename': 'file2.pdf'}]
-        ]), \
-             patch('src.runtime.app.batch_download_pdfs', return_value=[
+        with patch('src.runtime.app.batch_download_pdfs', return_value=[
                  {'filepath': '/downloads/file1.pdf', 'sender_tag': 'bank'}
              ]):
             result = app.download_attachments()
@@ -178,8 +174,7 @@ class TestGmailExpenseParserAppDownloadAttachments:
         """Test download with no emails."""
         app.emails = []
         
-        with patch('src.runtime.app.list_attachments', return_value=[]), \
-             patch('src.runtime.app.batch_download_pdfs'):
+        with patch('src.runtime.app.batch_download_pdfs'):
             result = app.download_attachments()
             
             assert result is True

@@ -106,6 +106,19 @@ class TestDownloadPDFsEnhanced:
         assert get_mock.call_count == 2
         assert len(os.listdir(download_dir)) == 1
 
+    @patch('src.integrations.gmail.downloads._extract_pdf_text_hint', return_value="")
+    def test_same_bytes_under_different_subjects_yields_one_file(self, _mock_hint, isolated):
+        download_dir, _cache = isolated
+        service = _service_returning(b"same content")
+
+        first = download_attachment(service, 'msg1', {'attachmentId': 'att1', 'filename': 'statement.pdf'},
+                                    subject='信用卡帳單 2026年01月')
+        second = download_attachment(service, 'msg2', {'attachmentId': 'att2', 'filename': 'statement.pdf'},
+                                     subject='銀行對帳單 2026年02月')
+
+        assert second == first
+        assert os.listdir(download_dir) == [os.path.basename(first)]
+
     def test_download_attachment_logs_index_hit(self, isolated, caplog):
         download_dir, cache = isolated
         existing = download_dir / "existing.pdf"

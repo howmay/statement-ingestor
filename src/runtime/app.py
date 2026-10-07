@@ -15,11 +15,11 @@ from src.support.cache import ResultCache
 from src.support.config_validator import validate_configuration as config_is_valid
 from src.core.config import get_bank_password
 from src.integrations.gmail.auth import get_gmail_service
-from src.integrations.gmail.fetch import search_emails, list_attachments
+from src.integrations.gmail.fetch import search_emails
 from src.integrations.gmail.downloads import batch_download_pdfs
 from src.parsing.pdf.pdf_to_text import extract_text_from_pdf
 from src.parsing.csv.statement_csv import parse_csv_statement
-from src.parsing.llm.parse_receipt import parse_receipt_text, ReceiptParsingError
+from src.parsing.llm.parse_receipt import parse_receipt_text
 from src.export.csv_writer import (
     export_receipts_to_csv,
     export_extracted_texts_to_csv,

@@ -16,7 +16,7 @@ This document describes the technical requirements for the **Gmail Expense Parse
 - **Language**: Python 3.8+
 - **Package Management**: `pip` + `pyproject.toml` (`requirements.lock` for pinned versions)
 - **Authentication**: Gmail API (OAuth2), OpenAI-compatible API (Local/Cloud)
-- **PDF Extraction**: `pypdfium2`, `pdfplumber`, `pdftotext` (multi-engine fallback)
+- **PDF Extraction**: `pdfplumber` -> `pypdfium2` (fallback)
 - **OCR**: Tesseract (for image-based attachments)
 
 ## 3. Core Modules
