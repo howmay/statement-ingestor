@@ -1,20 +1,13 @@
 """
 Edge case tests for config.py to improve coverage.
 """
-import pytest
-from unittest.mock import patch, MagicMock
-import sys
-from pathlib import Path
+from unittest.mock import patch
 import os
 import json
 import importlib
 
-sys.path.insert(0, str(Path(__file__).parent.parent / 'src'))
-
+import src.core.config as config_module
 from src.core.config import (
-    TARGET_SENDERS,
-    TARGET_KEYWORDS,
-    BANK_PASSWORDS,
     get_bank_password,
     OAUTH_CLIENT_SECRETS_PATH,
     OAUTH_TOKEN_PATH,
@@ -29,8 +22,6 @@ class TestConfigEdgeCases:
         """Test TARGET_SENDERS with empty environment."""
         with patch.dict(os.environ, {"TARGET_SENDERS": ""}, clear=False):
             # Reload module to re-evaluate constants
-            import importlib
-            import src.core.config as config_module
             importlib.reload(config_module)
             
             # Should be empty list
@@ -39,8 +30,6 @@ class TestConfigEdgeCases:
     def test_target_keywords_empty(self):
         """Test TARGET_KEYWORDS with empty environment."""
         with patch.dict(os.environ, {"TARGET_KEYWORDS": ""}, clear=False):
-            import importlib
-            import src.core.config as config_module
             importlib.reload(config_module)
             
             assert isinstance(config_module.TARGET_KEYWORDS, list)
@@ -48,8 +37,6 @@ class TestConfigEdgeCases:
     def test_bank_passwords_simple_list(self):
         """Test BANK_PASSWORDS parsing simple list."""
         with patch.dict(os.environ, {"BANK_PASSWORDS": "pass1,pass2,pass3"}, clear=False):
-            import importlib
-            import src.core.config as config_module
             importlib.reload(config_module)
             
             assert "pass1" in config_module.BANK_PASSWORDS
@@ -59,8 +46,6 @@ class TestConfigEdgeCases:
     def test_bank_passwords_legacy_format(self):
         """Test BANK_PASSWORDS parsing legacy key=value format."""
         with patch.dict(os.environ, {"BANK_PASSWORDS": "hsbc=TEST_ID_123,fubon=250496N12498"}, clear=False):
-            import importlib
-            import src.core.config as config_module
             importlib.reload(config_module)
             
             assert "TEST_ID_123" in config_module.BANK_PASSWORDS
@@ -69,8 +54,6 @@ class TestConfigEdgeCases:
     def test_bank_passwords_mixed_content(self):
         """Test BANK_PASSWORDS with whitespace variations."""
         with patch.dict(os.environ, {"BANK_PASSWORDS": "  pass1  ,  pass2  ,  pass3  "}, clear=False):
-            import importlib
-            import src.core.config as config_module
             importlib.reload(config_module)
             
             assert "pass1" in config_module.BANK_PASSWORDS
@@ -90,16 +73,9 @@ class TestConfigEdgeCases:
             result = get_bank_password("test@example.com")
             assert result == []
     
-    def test_get_bank_password_empty_passwords(self):
-        """Test get_bank_password with empty password list."""
-        with patch('src.core.config.BANK_PASSWORDS', []):
-            result = get_bank_password("test@example.com")
-            assert result == []
-    
     def test_get_bank_password_case_insensitive(self):
         """Test get_bank_password is case-insensitive."""
         # This tests the .lower() call in get_bank_password
-        passwords = ["password1"]
         # Even though the function lowercases the email, it only checks if the lowercase email is in the dict
         # Actually get_bank_password doesn't use case-insensitive matching for sender; just checks dictionary
         # But it does call .lower() on the sender
@@ -128,7 +104,6 @@ class TestConfigEdgeCases:
             }
         ]
         with patch.dict(os.environ, {"STATEMENT_SEARCH_PROFILES": json.dumps(profiles)}, clear=False):
-            import src.core.config as config_module
             importlib.reload(config_module)
 
             assert len(config_module.STATEMENT_SEARCH_PROFILES) == 1
@@ -137,7 +112,6 @@ class TestConfigEdgeCases:
 
     def test_statement_search_profiles_invalid_json_falls_back_to_default(self):
         with patch.dict(os.environ, {"STATEMENT_SEARCH_PROFILES": "{not-json"}, clear=False):
-            import src.core.config as config_module
             importlib.reload(config_module)
 
             assert isinstance(config_module.STATEMENT_SEARCH_PROFILES, list)
@@ -152,8 +126,6 @@ class TestConfigEdgeCases:
         os.environ["OAUTH_PORT"] = "3000"
         
         try:
-            import importlib
-            import src.core.config as config_module
             importlib.reload(config_module)
             
             assert config_module.OAUTH_CLIENT_SECRETS_PATH == "/custom/secrets.json"
@@ -168,6 +140,4 @@ class TestConfigEdgeCases:
             if "OAUTH_PORT" in os.environ:
                 del os.environ["OAUTH_PORT"]
             # Reload to restore original values
-            import importlib
-            import src.core.config as config_module
             importlib.reload(config_module)

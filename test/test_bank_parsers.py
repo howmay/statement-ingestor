@@ -1,15 +1,11 @@
-#!/usr/bin/env python3
-"""Quick deterministic parser tests."""
-
-import sys
-from pathlib import Path
-
-project_root = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(project_root))
-
 from src.parsing.banks.base import classify_expense_type
-from src.parsing.banks.factory import parse_with_bank_factory
+from src.parsing.banks.factory import parse_with_bank_factory, get_bank_parser
 from src.parsing.ocr.hsbc_ocr import _extract_rows_from_ocr_text, _clean_ocr_desc
+from src.parsing.banks.hsbc import HsbcTwCardParser, HsbcTwBankParser
+from src.parsing.banks.hsbc_sg import HsbcSgCardParser
+from src.parsing.banks.fubon import FubonCreditCardParser
+from src.parsing.banks.esun import EsunCardParser, EsunBankParser
+from src.parsing.banks.dbs import DbsSgCardParser
 
 
 def test_hsbc_parse():
@@ -471,19 +467,123 @@ def test_classify_expense_type():
     assert classify_expense_type('coffee shop') == 'Other'  # "fee" only as a whole word
 
 
-if __name__ == '__main__':
-    test_hsbc_parse()
-    test_hsbc_tw_statement_table_style()
-    test_hsbc_sg_credit_card_statement_style()
-    test_hsbc_ocr_row_extraction_parser()
-    test_hsbc_ocr_desc_cleanup()
-    test_esun_parse()
-    test_esun_statement_page_style()
-    test_fubon_parse()
-    test_fubon_transaction_detail_section_only()
-    test_fubon_credit_card_statement()
-    test_taishin_credit_card_statement()
-    test_taishin_bank_statement()
-    test_hsbc_taiwan_bank_statement()
-    test_classify_expense_type()
-    print('All parser tests passed ✅')
+class TestHSBCParser:
+    def test_hsbc_tw_format(self):
+        text = """
+        --- Page 1 ---
+        12/27 12/30 STARBUCKS TAIWAN TWD 150
+        01/02 01/05 UBER TRIP USD 10.00
+        """
+        source_info = {'sender_tag': 'hsbc_tw', 'filename': 'hsbc.pdf'}
+        parser = HsbcTwCardParser(text, source_info)
+        result = parser.parse()
+        
+        assert result.matched
+        assert len(result.transactions) == 2
+        assert result.transactions[0]['amount'] == 150.0
+        assert result.transactions[0]['currency'] == 'TWD'
+        assert 'STARBUCKS' in result.transactions[0]['expense_name']
+        
+    def test_hsbc_sg_format(self):
+        text = """
+        27Dec 30Dec NETFLIX.COM SGD 18.98
+        """
+        source_info = {'sender_tag': 'hsbc_sg', 'filename': 'hsbc_sg.pdf'}
+        parser = HsbcSgCardParser(text, source_info)
+        result = parser.parse()
+        
+        assert result.matched
+        assert len(result.transactions) == 1
+        assert result.transactions[0]['amount'] == 18.98
+        assert result.transactions[0]['currency'] == 'SGD'
+
+class TestDbsParser:
+    def test_dbs_sg_card(self):
+        text = "01 JAN STARBUCKS 15.00\n02 FEB UBER 20.00"
+        source_info = {'sender_tag': 'dbs_sg'}
+        parser = DbsSgCardParser(text, source_info)
+        result = parser.parse()
+        
+        assert result.matched
+        assert len(result.transactions) == 2
+        assert result.transactions[0]['amount'] == 15.0
+        assert result.transactions[1]['date'].endswith("-02-02")
+
+class TestBankFactory:
+    def test_get_bank_parser(self):
+        # HSBC Taiwan (bank statement, not credit card)
+        parser = get_bank_parser("text", {'sender': 'service@hsbc.com'})
+        assert isinstance(parser, HsbcTwBankParser)
+        
+        # HSBC Taiwan Credit Card
+        parser = get_bank_parser("text", {'sender': 'cards@estatements.hsbc.com.tw'})
+        assert isinstance(parser, HsbcTwCardParser)
+        
+        # Fubon
+        parser = get_bank_parser("text", {'sender': 'service@fubon.com', 'subject': '信用卡'})
+        assert isinstance(parser, FubonCreditCardParser)
+        
+        # Esun
+        parser = get_bank_parser("text", {'sender': 'service@esunbank.com'})
+        assert isinstance(parser, EsunBankParser)
+
+        # Esun debit card / signed debit card should use card parser
+        parser = get_bank_parser(
+            "text",
+            {
+                'sender': 'alert@esunbank.com.tw',
+                'sender_tag': 'esunbank',
+                'subject': '玉山銀行簽帳金融卡電子對帳單',
+                'filename': '玉山銀行簽帳金融卡電子對帳單(11502).pdf',
+            },
+        )
+        assert isinstance(parser, EsunCardParser)
+        
+        # None
+        parser = get_bank_parser("text", {'sender': 'unknown@gmail.com'})
+        assert parser is None
+
+    def test_get_bank_parser_prefers_hsbc_sg_card_from_text_signature_even_with_generic_attachment_name(self):
+        text = """
+        HSBC VISA REVOLUTION
+        POST TRAN ACCOUNT SUMMARY SGD
+        03Mar 02Mar Grab*A-92WTN9QWWVIAAV 29.70
+        06Mar 06Mar PAYMENT-THANKYOU 32.49CR
+        """
+        parser = get_bank_parser(
+            text,
+            {
+                'sender_tag': 'hsbc_sg_mail',
+                'sender': 'service@mail.hsbc.com.sg',
+                'subject': 'HSBC Singapore statement',
+                'filename': '20260322.pdf',
+            },
+        )
+        assert isinstance(parser, HsbcSgCardParser)
+
+    def test_parse_with_bank_factory(self):
+        # Use a more realistic HSBC Taiwan bank statement format
+        text = """
+        交易日期 記帳日期 摘要 幣別 金額
+        2026/01/02 2026/01/02 轉帳支出 TWD 20,000
+        2026/01/03 2026/01/03 存款收入 TWD 15,000
+        """
+        source_info = {'sender': 'service@hsbc.com'}
+        result = parse_with_bank_factory(text, source_info)
+        assert result.matched
+        # The parser may or may not extract transactions from this format
+        # At minimum it should match
+        assert result.parser_name == "HsbcTwBankParser"
+
+
+def test_esun_no_consumption_data():
+    """
+    測試玉山帳單顯示「本期無消費資料」的情況。
+    """
+    text = "玉山銀行信用卡帳單\n（本期無消費資料）\n如有疑問請洽客服"
+    parser = EsunCardParser(text)
+    result = parser.parse()
+    
+    assert result.matched
+    assert len(result.transactions) == 0
+    # 這裡不應拋出錯誤，且應該被視為成功的解析 (matched=True)

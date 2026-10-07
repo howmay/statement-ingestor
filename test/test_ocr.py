@@ -1,10 +1,7 @@
 """
 Tests for HSBC OCR enrichment module.
 """
-import pytest
-from unittest.mock import Mock, MagicMock, patch
-import os
-import sys
+from unittest.mock import MagicMock, patch
 
 from src.parsing.ocr.hsbc_ocr import (
     enrich_hsbc_transactions_with_ocr,
@@ -126,6 +123,3 @@ class TestHSBCOCR:
         assert transactions[0]['expense_name'] == 'STARBUCKS'
         assert transactions[0]['description_source'] == 'ocr'
         assert transactions[0]['confidence'] == 0.93
-
-if __name__ == "__main__":
-    pytest.main([__file__, "-v"])

@@ -1,26 +1,8 @@
-"""
-Unit tests for Gmail authentication module.
-"""
-import os
-import pickle
-from unittest.mock import Mock, patch, mock_open, MagicMock
 import pytest
+import src.integrations.gmail.auth as gmail_auth
+from unittest.mock import Mock, patch
 from google.oauth2.credentials import Credentials
-from google.auth.exceptions import RefreshError
-
-import sys
-from functools import wraps
-
-# No more sys.modules hack here
-
-# Now import the module
-from src.integrations.gmail.auth import (
-    get_gmail_service,
-    _test_token_usable,
-    SCOPES,
-    DEFAULT_CLIENT_SECRETS_FILE,
-    DEFAULT_TOKEN_FILE
-)
+from src.integrations.gmail.auth import get_gmail_service, _test_token_usable, SCOPES, DEFAULT_TOKEN_FILE
 
 
 class TestGmailAuth:
@@ -218,44 +200,61 @@ class TestGmailAuth:
         assert len(SCOPES) == 1
         assert 'https://www.googleapis.com/auth/gmail.readonly' in SCOPES
 
-    @patch('builtins.open', new_callable=mock_open)
-    @patch('src.integrations.gmail.auth.os.path.exists')
-    @patch('src.integrations.gmail.auth.Credentials.from_authorized_user_file')
-    @patch('src.integrations.gmail.auth._test_token_usable')
-    @patch('src.integrations.gmail.auth.build')
-    def test_get_gmail_service_custom_paths(
-        self, mock_build, mock_test_token, mock_creds_from_file, mock_exists, mock_open_file
-    ):
-        """Test getting Gmail service with custom file paths."""
-        # Mock file existence
-        mock_exists.return_value = True
 
-        # Mock token loading
-        mock_creds = Mock(spec=Credentials)
-        mock_creds.valid = True
-        mock_creds.expired = False
-        mock_creds_from_file.return_value = mock_creds
+def test_atomic_write_text(tmp_path):
+    json_path = tmp_path / "token.json"
+    gmail_auth._atomic_write_text(str(json_path), '{"ok": true}')
 
-        # Mock token test
-        mock_test_token.return_value = True
+    assert json_path.read_text(encoding="utf-8") == '{"ok": true}'
 
-        # Mock service build
-        mock_service = Mock()
-        mock_build.return_value = mock_service
+def test_load_credentials_from_token_file_json():
+    fake_creds = Mock()
 
-        # Custom paths
-        custom_client_secrets = '/custom/path/client_secrets.json'
-        custom_token = '/custom/path/token.json'
-        custom_port = 8080
+    with patch("src.integrations.gmail.auth.os.path.exists", return_value=True), \
+         patch("src.integrations.gmail.auth.Credentials.from_authorized_user_file", return_value=fake_creds):
+        assert gmail_auth._load_credentials_from_token_file("token.json") is fake_creds
 
-        # Call the function with custom paths
-        result = get_gmail_service(
-            client_secrets_path=custom_client_secrets,
-            token_path=custom_token,
-            port=custom_port
-        )
 
-        assert result == mock_service
-        # Note: The function uses the paths but we can't easily assert internal calls
-        # without more invasive mocking. This test at least ensures the function
-        # accepts custom parameters without error.
+def test_load_credentials_corrupted_token_quarantine():
+    with patch("src.integrations.gmail.auth.os.path.exists", return_value=True), \
+         patch("src.integrations.gmail.auth.Credentials.from_authorized_user_file", side_effect=ValueError("bad json")), \
+         patch("src.integrations.gmail.auth.os.replace") as mock_replace, \
+         patch("src.integrations.gmail.auth.os.remove"):
+        out = gmail_auth._load_credentials_from_token_file("token.json")
+
+    assert out is None
+    assert mock_replace.called
+
+def test_save_credentials_to_token_file_json():
+    json_creds = Mock()
+    json_creds.to_json.return_value = '{"token":"x"}'
+
+    with patch("src.integrations.gmail.auth._atomic_write_text") as mock_text:
+        gmail_auth._save_credentials_to_token_file(json_creds, "token.json")
+
+    mock_text.assert_called_once_with("token.json", '{"token":"x"}')
+
+def test_get_gmail_service_token_save_failure(monkeypatch):
+    """Token save helper logs a warning instead of crashing."""
+    creds = Mock()
+    creds.to_json.return_value = '{"token":"x"}'
+
+    with patch("src.integrations.gmail.auth._atomic_write_text", side_effect=OSError("permission denied")), \
+         patch("src.integrations.gmail.auth.logger.warning") as mock_warn:
+        # Should not raise
+        gmail_auth._save_credentials_to_token_file(creds, "token.json")
+
+    assert mock_warn.called
+
+def test_get_gmail_service_missing_client_secrets_and_build_failure():
+    with patch("src.integrations.gmail.auth.os.path.exists", return_value=False):
+        with pytest.raises(FileNotFoundError):
+            gmail_auth.get_gmail_service(client_secrets_path="missing.json", token_path="token.json", port=8080)
+
+    creds = Mock(valid=True, expired=False)
+    with patch("src.integrations.gmail.auth.os.path.exists", return_value=True), \
+         patch("src.integrations.gmail.auth._load_credentials_from_token_file", return_value=creds), \
+         patch("src.integrations.gmail.auth._test_token_usable", return_value=True), \
+         patch("src.integrations.gmail.auth.build", side_effect=RuntimeError("build fail")):
+        with pytest.raises(ValueError):
+            gmail_auth.get_gmail_service(client_secrets_path="client_secrets.json", token_path="token.json", port=8080)

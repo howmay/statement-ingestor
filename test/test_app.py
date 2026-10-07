@@ -1,16 +1,9 @@
-"""
-Unit tests for the main application (GmailExpenseParserApp).
-"""
 import pytest
-from unittest.mock import Mock, patch, MagicMock
-import sys
-from pathlib import Path
 import re
 import csv
 import tempfile
-
-sys.path.insert(0, str(Path(__file__).parent.parent / 'src'))
-
+from unittest.mock import Mock, patch
+from pathlib import Path
 from src.runtime.app import GmailExpenseParserApp
 from src.export.csv_writer import export_receipts_to_csv
 
@@ -76,13 +69,6 @@ class TestGmailExpenseParserAppAuthenticate:
             assert result is True
             assert app.service == mock_service
     
-    def test_authenticate_failure(self, app):
-        """Test authentication failure."""
-        with patch('src.runtime.app.get_gmail_service', side_effect=Exception("Auth failed")):
-            result = app.authenticate()
-            
-            assert result is False
-            assert app.service is None
 
 
 class TestGmailExpenseParserAppFetchEmails:
@@ -112,14 +98,6 @@ class TestGmailExpenseParserAppFetchEmails:
             assert app.emails == []
             assert app.stats['emails_found'] == 0
     
-    def test_fetch_emails_error(self, app):
-        """Test email fetching error."""
-        app.service = Mock()
-        with patch('src.runtime.app.search_emails', side_effect=Exception("API error")):
-            result = app.fetch_emails(max_results=10)
-            
-            assert result is False
-            assert app.stats['errors'] > 0
 
     def test_fetch_emails_with_date_range(self, app):
         """Email fetch should pass date range to search layer."""
@@ -170,16 +148,6 @@ class TestGmailExpenseParserAppDownloadAttachments:
             assert len(app.downloaded_files) == 1
             assert app.stats['pdfs_downloaded'] == 1
     
-    def test_download_attachments_no_emails(self, app):
-        """Test download with no emails."""
-        app.emails = []
-        
-        with patch('src.runtime.app.batch_download_pdfs'):
-            result = app.download_attachments()
-            
-            assert result is True
-            assert app.downloaded_files == []
-            assert app.stats['pdfs_downloaded'] == 0
 
 
 class TestGmailExpenseParserAppExtractTexts:
@@ -199,15 +167,6 @@ class TestGmailExpenseParserAppExtractTexts:
             assert len(app.extracted_texts) == 2
             assert app.stats['texts_extracted'] == 2
     
-    def test_extract_texts_no_files(self, app):
-        """Test extract with no files."""
-        app.downloaded_files = []
-        
-        result = app.extract_texts()
-        
-        assert result is True
-        assert app.extracted_texts == []
-        assert app.stats['texts_extracted'] == 0
 
     def test_extract_texts_reads_csv_without_pdf_extractor(self, app):
         with tempfile.NamedTemporaryFile('w', suffix='.csv', delete=False, encoding='utf-8') as tmp:
@@ -274,15 +233,6 @@ class TestGmailExpenseParserAppParseReceipts:
         extracted_file_info = app.extracted_texts[0]['file_info']
         assert extracted_file_info['file_md5'] == 'md5-1'
 
-    def test_parse_receipts_no_texts(self, app):
-        """Test parse with no extracted texts."""
-        app.extracted_texts = []
-        
-        result = app.parse_receipts()
-        
-        assert result is True
-        assert app.parsed_receipts == []
-        assert app.stats['receipts_parsed'] == 0
 
     def test_parse_receipts_error_logs_downloaded_filename(self, app):
         app.extracted_texts = [
@@ -332,16 +282,6 @@ class TestGmailExpenseParserAppExportResults:
         assert result is True
         mock_sort.assert_called_once_with(['/output/a.csv', '/output/b.csv'])
     
-    def test_export_results_no_data(self, app):
-        """Test export with no data."""
-        app.parsed_receipts = []
-        app.extracted_texts = []
-        
-        with patch('src.runtime.app.export_receipts_to_csv'), \
-             patch('src.runtime.app.export_extracted_texts_to_csv'):
-            result = app.export_results()
-            
-            assert result is True
 
     def test_export_receipts_to_csv_writes_bank_income_columns(self, tmp_path):
         receipts = [{
@@ -382,37 +322,6 @@ def test_new_src_packages_exist():
         assert importlib.import_module(name) is not None
 
 
-class TestGmailExpenseParserAppRun:
-    """Test full pipeline run."""
-    
-    def test_run_success(self, app):
-        """Test successful full pipeline run."""
-        with patch.object(app, 'validate_configuration', return_value=True), \
-             patch.object(app, 'authenticate', return_value=True), \
-             patch.object(app, 'fetch_emails', return_value=True), \
-             patch.object(app, 'download_attachments', return_value=True), \
-             patch.object(app, 'extract_texts', return_value=True), \
-             patch.object(app, 'parse_receipts', return_value=True), \
-             patch.object(app, 'export_results', return_value=True):
-            stats = app.run(max_results=20)
-            
-            assert app.stats['errors'] == 0
-    
-    def test_run_config_failure(self, app):
-        """Test run with configuration validation failure."""
-        with patch.object(app, 'validate_configuration', return_value=False):
-            stats = app.run(max_results=10)
-            
-            assert stats['errors'] > 0 or app.stats['errors'] >= 0
-    
-    def test_run_auth_failure(self, app):
-        """Test run with authentication failure."""
-        with patch.object(app, 'authenticate', return_value=False), \
-             patch.object(app, 'validate_configuration', return_value=True):
-            stats = app.run(max_results=10)
-            assert app.authenticate.called
-
-
 class TestGmailExpenseParserAppValidateConfiguration:
     """Test configuration validation."""
 
@@ -443,3 +352,275 @@ class TestGetBankAndCountry:
 
     def test_unknown(self, app):
         assert app._get_bank_and_country('', 'foo.pdf', [{}]) == ('Unknown', 'TW', '未知')
+
+
+class TestGmailExpenseParserAppErrorPaths:
+    """Failure and empty-input paths of each pipeline step."""
+    
+
+    def test_authenticate_with_exception(self, app):
+        """Test authentication when get_gmail_service raises an exception."""
+        
+        with patch('src.runtime.app.get_gmail_service', side_effect=Exception("Auth failed")):
+            result = app.authenticate()
+            
+            assert result is False
+            assert app.service is None
+            assert app.stats['errors'] == 1
+            app.logger.error.assert_called_once()
+    
+    def test_fetch_emails_with_exception(self, app):
+        """Test fetch_emails when search_emails raises an exception."""
+        app.service = Mock()
+        
+        with patch('src.runtime.app.search_emails', side_effect=Exception("Search failed")):
+            result = app.fetch_emails()
+            
+            assert result is False
+            assert app.emails == []
+            assert app.stats['errors'] == 1
+            app.logger.error.assert_called_once()
+    
+    def test_download_attachments_no_emails(self, app):
+        """Test download_attachments when there are no emails."""
+        app.emails = []
+        
+        result = app.download_attachments()
+        
+        assert result is True
+        assert app.downloaded_files == []
+        assert app.stats['pdfs_downloaded'] == 0
+        app.logger.info.assert_called_with("No emails to process.")
+    
+    def test_download_attachments_with_exception(self, app):
+        """Test download_attachments when batch_download_pdfs raises an exception."""
+        app.emails = [{'id': 'msg1', 'subject': 'Test'}]
+        app.service = Mock()
+        
+        with patch('src.runtime.app.batch_download_pdfs', side_effect=Exception("Download failed")):
+            result = app.download_attachments()
+            
+            # The method catches exceptions per email and still returns True
+            assert result is True
+            assert app.stats['errors'] >= 1
+    
+    def test_extract_texts_no_files(self, app):
+        """Test extract_texts when there are no downloaded files."""
+        app.downloaded_files = []
+        
+        result = app.extract_texts()
+        
+        assert result is True
+        assert app.extracted_texts == []
+        assert app.stats['texts_extracted'] == 0
+        app.logger.info.assert_called_with("No PDFs downloaded.")
+    
+    def test_extract_texts_with_exception(self, app):
+        """Test extract_texts when extract_text_from_pdf raises an exception."""
+        app.downloaded_files = [{'filepath': '/path/to/file1.pdf', 'filename': 'file1.pdf'}]
+        
+        with patch('src.runtime.app.extract_text_from_pdf', side_effect=Exception("Extraction failed")):
+            result = app.extract_texts()
+            
+            # extract_texts handles exceptions in process_file and returns True (but increments errors)
+            assert result is True
+            assert app.extracted_texts == []
+            assert app.stats['errors'] == 1
+            # Error should be logged for each failed file
+            app.logger.error.assert_called()
+    
+    def test_parse_receipts_no_texts(self, app):
+        """Test parse_receipts when there are no extracted texts."""
+        app.extracted_texts = []
+        
+        result = app.parse_receipts()
+        
+        assert result is True
+        assert app.parsed_receipts == []
+        assert app.stats['receipts_parsed'] == 0
+        app.logger.info.assert_called_with("No text to parse.")
+    
+    def test_parse_receipts_with_exception(self, app):
+        """Test parse_receipts when parse_receipt_text raises an exception."""
+        app.extracted_texts = [
+            {'text': 'text1', 'file_info': {'filepath': '/path/to/file1.pdf', 'filename': 'file1.pdf'}},
+            {'text': 'text2', 'file_info': {'filepath': '/path/to/file2.pdf', 'filename': 'file2.pdf'}}
+        ]
+        
+        with patch('src.runtime.app.parse_receipt_text', side_effect=Exception("Parsing failed")):
+            result = app.parse_receipts()
+            
+            assert result is True  # parse_receipts returns True even if individual parsing fails
+            assert app.parsed_receipts == []
+            app.logger.error.assert_called()
+    
+    def test_export_results_no_data(self, app):
+        """Test export_results when there is no data to export."""
+        app.parsed_receipts = []
+        app.extracted_texts = []
+        
+        result = app.export_results()
+        
+        assert result is True
+        app.logger.info.assert_called_with("No results to export.")
+    
+    def test_export_results_with_exception(self, app):
+        """Test export_results when export functions raise exceptions."""
+        app.parsed_receipts = [{'date': '2024-01-01', 'amount': 100.0}]
+        app.extracted_texts = ['text1']
+        
+        with patch('src.runtime.app.export_receipts_to_csv', side_effect=Exception("Export failed")):
+            result = app.export_results()
+            
+            assert result is False
+            assert app.stats['errors'] == 1
+            app.logger.error.assert_called_once()
+    
+    
+    
+    
+    
+    
+    
+    
+    def test_run_success_with_stats(self, app):
+        """Test successful run with statistics."""
+        
+        with patch.object(app, 'validate_configuration', return_value=True), \
+             patch.object(app, 'authenticate', return_value=True), \
+             patch.object(app, 'fetch_emails', return_value=True), \
+             patch.object(app, 'download_attachments', return_value=True), \
+             patch.object(app, 'extract_texts', return_value=True), \
+             patch.object(app, 'parse_receipts', return_value=True), \
+             patch.object(app, 'export_results', return_value=True):
+            result = app.run()
+            
+            # run() returns stats dict
+            assert isinstance(result, dict)
+            assert result['errors'] == 0
+            app.logger.info.assert_any_call("=" * 60)
+    
+    
+    
+
+
+_RUN_STEPS = ['validate_configuration', 'authenticate', 'fetch_emails', 'download_attachments',
+              'extract_texts', 'parse_receipts', 'export_results']
+
+
+@pytest.mark.parametrize('failing', range(len(_RUN_STEPS)), ids=_RUN_STEPS)
+def test_run_stops_at_first_failing_step(app, failing):
+    mocks = {name: Mock(return_value=i != failing) for i, name in enumerate(_RUN_STEPS)}
+    with patch.multiple(app, **mocks):
+        stats = app.run(max_results=10)
+
+    assert stats is app.stats
+    for i, name in enumerate(_RUN_STEPS):
+        assert mocks[name].called is (i <= failing), name
+
+
+def test_validate_configuration_exception_counts_as_failure(app):
+    with patch('src.runtime.app.config_is_valid', side_effect=RuntimeError("boom")):
+        assert app.validate_configuration() is False
+
+    assert app.stats['errors'] == 1
+    app.logger.error.assert_called_once()
+
+
+def test_bank_and_country_uses_sg_sender_tag(app):
+    assert app._get_bank_and_country('hsbc_sg_mail', 'dbs_statement.pdf') == ('DBS', 'SG', '銀行帳戶')
+
+
+def _pipeline_mocks(emails, downloads):
+    """Mocks for every external call of the pipeline, keyed by name in src.runtime.app."""
+    return {
+        'get_gmail_service': Mock(return_value=Mock()),
+        'search_emails': Mock(return_value=emails),
+        'batch_download_pdfs': Mock(return_value=downloads),
+        'extract_text_from_pdf': Mock(return_value='Extracted text content'),
+        'parse_receipt_text': Mock(return_value=[{'date': '2024-01-01', 'amount': 100.0}]),
+        'export_receipts_to_csv': Mock(return_value='/output/receipts.csv'),
+        'export_extracted_texts_to_csv': Mock(return_value='/output/texts.csv'),
+        'sort_exported_receipt_csvs': Mock(),
+    }
+
+
+def test_full_workflow_success(app):
+    mocks = _pipeline_mocks(
+        emails=[{'id': 'msg1', 'subject': 'Test', 'from': 'HSBC@mail.hsbc.com.sg'}],
+        downloads=[{'filepath': '/tmp/test1.pdf', 'filename': 'test1.pdf', 'sender': 'HSBC@mail.hsbc.com.sg'}],
+    )
+    with patch.object(app, 'validate_configuration', return_value=True), \
+         patch.multiple('src.runtime.app', **mocks):
+        stats = app.run()
+
+    assert (stats['emails_found'], stats['pdfs_downloaded'], stats['texts_extracted'], stats['receipts_parsed']) == (1, 1, 1, 1)
+    assert stats['errors'] == 0
+    mocks['export_receipts_to_csv'].assert_called_once()
+
+
+def test_workflow_with_no_emails(app):
+    mocks = _pipeline_mocks(emails=[], downloads=[])
+    with patch.object(app, 'validate_configuration', return_value=True), \
+         patch.multiple('src.runtime.app', **mocks):
+        stats = app.run()
+
+    assert stats['emails_found'] == 0
+    assert stats['errors'] == 0
+
+
+def test_workflow_partial_failure_in_extraction(app):
+    mocks = _pipeline_mocks(
+        emails=[{'id': 'msg1', 'subject': 'Test', 'from': 'test@example.com'}],
+        downloads=[
+            {'filepath': '/tmp/test1.pdf', 'filename': 'test1.pdf', 'sender': 'test@example.com'},
+            {'filepath': '/tmp/test2.pdf', 'filename': 'test2.pdf', 'sender': 'test@example.com'},
+        ],
+    )
+
+    def extract(pdf_path, password=None):
+        if 'test1' in pdf_path:
+            return "Text 1"
+        raise Exception("Extraction failed")
+
+    mocks['extract_text_from_pdf'] = Mock(side_effect=extract)
+    with patch.object(app, 'validate_configuration', return_value=True), \
+         patch.multiple('src.runtime.app', **mocks):
+        stats = app.run()
+
+    assert (stats['pdfs_downloaded'], stats['texts_extracted'], stats['receipts_parsed']) == (2, 1, 1)
+    assert stats['errors'] == 1
+
+
+def test_workflow_with_parse_failure(app):
+    mocks = _pipeline_mocks(
+        emails=[{'id': 'msg1', 'subject': 'Test'}],
+        downloads=[{'filepath': '/tmp/test1.pdf', 'filename': 'test1.pdf'}],
+    )
+    mocks['parse_receipt_text'] = Mock(side_effect=Exception("Parse failed"))
+    with patch.object(app, 'validate_configuration', return_value=True), \
+         patch.multiple('src.runtime.app', **mocks):
+        stats = app.run()
+
+    assert stats['texts_extracted'] == 1
+    assert stats['receipts_parsed'] == 0
+    mocks['export_receipts_to_csv'].assert_not_called()
+
+
+def test_multiple_emails_workflow(app):
+    emails = [{'id': f'msg{i}', 'subject': f'Test{i}', 'from': f'sender{i}@example.com'} for i in range(1, 4)]
+    downloads = [{'filepath': f'/tmp/test{i}.pdf', 'filename': f'test{i}.pdf', 'sender': f'sender{i}@example.com'}
+                 for i in range(1, 4)]
+    mocks = _pipeline_mocks(emails=emails, downloads=downloads)
+    with patch.object(app, 'validate_configuration', return_value=True), \
+         patch.multiple('src.runtime.app', **mocks):
+        stats = app.run()
+
+    assert stats['emails_found'] == 3
+    assert stats['pdfs_downloaded'] == 3
+
+
+def test_main_entrypoint_exists():
+    project_root = Path(__file__).resolve().parent.parent
+    content = (project_root / 'main.py').read_text()
+    assert 'def main()' in content
