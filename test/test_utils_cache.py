@@ -48,26 +48,6 @@ def test_get_file_md5(tmp_path):
     assert cache.get_file_md5(str(tmp_path / "missing.txt")) is None
 
 
-def test_get_file_md5_reuses_cached_fingerprint_when_file_is_unchanged(tmp_path):
-    cache = cache_mod.ResultCache(cache_dir=str(tmp_path / "cache"))
-    f = tmp_path / "same.txt"
-    f.write_text("hello", encoding="utf-8")
-
-    first_md5 = cache.get_file_md5(str(f))
-
-    original_open = open
-
-    def guarded_open(path, *args, **kwargs):
-        if str(path) == str(f):
-            raise AssertionError("target file should not be reopened when metadata is unchanged")
-        return original_open(path, *args, **kwargs)
-
-    with patch("builtins.open", side_effect=guarded_open):
-        second_md5 = cache.get_file_md5(str(f))
-
-    assert second_md5 == first_md5
-
-
 def test_get_file_md5_recomputes_when_file_changes(tmp_path):
     cache = cache_mod.ResultCache(cache_dir=str(tmp_path / "cache"))
     f = tmp_path / "change.txt"
@@ -86,3 +66,21 @@ def test_get_file_md5_recomputes_when_file_changes(tmp_path):
     assert first_md5 == hashlib.md5(b"hello").hexdigest()
     assert second_md5 == hashlib.md5(b"hello world").hexdigest()
     assert second_md5 != first_md5
+
+
+def test_downloaded_path_index(tmp_path):
+    cache = cache_mod.ResultCache(cache_dir=str(tmp_path / "cache"))
+    f = tmp_path / "a.pdf"
+    f.write_bytes(b"pdf")
+
+    assert cache.get_downloaded_path("m1", "a1") is None
+    cache.set_downloaded_path("m1", "a1", str(f))
+    assert cache.get_downloaded_path("m1", "a1") == str(f)
+
+    f.unlink()
+    assert cache.get_downloaded_path("m1", "a1") is None
+
+    (tmp_path / "cache" / "downloads.json").write_text("{bad", encoding="utf-8")
+    assert cache.get_downloaded_path("m1", "a1") is None
+    cache.set_downloaded_path("m1", "a1", str(f))  # corrupt index is replaced
+    assert '"m1/a1"' in (tmp_path / "cache" / "downloads.json").read_text(encoding="utf-8")

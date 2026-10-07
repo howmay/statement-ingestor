@@ -14,8 +14,14 @@ from src.integrations.gmail.fetch import list_attachments
 logger = logging.getLogger(__name__)
 
 
-def _file_md5_cache() -> ResultCache:
-    return ResultCache(cache_dir=os.path.join(os.getcwd(), ".cache"))
+_cache: Optional[ResultCache] = None
+
+
+def _get_cache() -> ResultCache:
+    global _cache
+    if _cache is None:
+        _cache = ResultCache()
+    return _cache
 
 
 def extract_sender_tag(sender: str) -> str:
@@ -325,98 +331,6 @@ def build_pdf_filename_by_sender(
     )
 
 
-def compute_md5_hash(data: bytes) -> str:
-    """Compute MD5 hash of binary data."""
-    return hashlib.md5(data).hexdigest()
-
-
-def _compute_file_md5_from_disk(filepath: str) -> Optional[str]:
-    try:
-        hasher = hashlib.md5()
-        with open(filepath, 'rb') as f:
-            for chunk in iter(lambda: f.read(4096), b""):
-                hasher.update(chunk)
-        return hasher.hexdigest()
-    except Exception:
-        return None
-
-
-def get_existing_file_by_md5(target_md5: str, directory: str = DOWNLOAD_DIR) -> Optional[str]:
-    """
-    Check if a file with the same MD5 hash already exists in directory.
-    Uses an efficient local cache to avoid re-scanning all files.
-    
-    Args:
-        target_md5: MD5 hash to search for.
-        directory: Directory to search in.
-    
-    Returns:
-        Path to existing file with matching MD5, or None if not found.
-    """
-    if not os.path.exists(directory):
-        return None
-    
-    for filename in os.listdir(directory):
-        if filename.startswith('.'):
-            continue
-
-        filepath = os.path.join(directory, filename)
-        if not os.path.isfile(filepath):
-            continue
-
-        try:
-            file_md5 = _file_md5_cache().get_file_md5(filepath)
-        except Exception:
-            file_md5 = None
-
-        if not file_md5:
-            file_md5 = _compute_file_md5_from_disk(filepath)
-
-        if file_md5 == target_md5:
-            return filepath
-
-    return None
-
-
-def _get_existing_download_by_message_attachment(
-    message_id: str,
-    original_filename: str,
-    size: Optional[int],
-    attachment_id: Optional[str] = None,
-) -> Optional[str]:
-    cache = _file_md5_cache()
-    cached = None
-    if message_id and original_filename and size is not None:
-        cached = cache.find_downloaded_attachment_reference(
-            message_id,
-            original_filename,
-            size,
-        )
-    elif message_id and attachment_id:
-        cached = cache.get_downloaded_attachment_reference(message_id, attachment_id)
-
-    if not cached:
-        return None
-
-    filepath = cached.get("downloaded_filepath")
-    if filepath and os.path.exists(filepath):
-        return filepath
-
-    logger.info(
-        f"Detected stale Gmail attachment index for {message_id}/{original_filename or attachment_id}/{size}; "
-        f"removing stale Gmail attachment index at {filepath or 'unknown path'}"
-    )
-    if message_id and original_filename and size is not None:
-        cache.delete_downloaded_attachment_references_by_message_file(
-            message_id,
-            original_filename,
-            size,
-        )
-    elif message_id and attachment_id:
-        cache.delete_downloaded_attachment_reference(message_id, attachment_id)
-    return None
-
-
 def download_attachment(
     service,
     message_id: str,
@@ -440,89 +354,39 @@ def download_attachment(
         Exception: If download fails.
     """
     try:
-        existing_attachment_file = _get_existing_download_by_message_attachment(
-            message_id,
-            attachment_info.get('filename', ''),
-            attachment_info.get('size'),
-            attachment_info.get('attachmentId'),
-        )
-        if existing_attachment_file:
-            logger.info(
-                f"Skipping download: reusing indexed Gmail attachment at {existing_attachment_file}"
-            )
-            return existing_attachment_file
+        attachment_id = attachment_info['attachmentId']
+        cached = _get_cache().get_downloaded_path(message_id, attachment_id)
+        if cached:
+            logger.info(f"Skipping download: reusing indexed Gmail attachment at {cached}")
+            return cached
 
-        # Get the attachment data
         attachment = service.users().messages().attachments().get(
             userId='me',
             messageId=message_id,
-            id=attachment_info['attachmentId']
+            id=attachment_id
         ).execute(num_retries=5)
-        
-        # Decode from base64
         file_data = base64.urlsafe_b64decode(attachment['data'].encode('UTF-8'))
-        
-        # Compute MD5 hash of file content
-        file_md5 = compute_md5_hash(file_data)
-        logger.debug(f"Attachment MD5: {file_md5}")
-        
-        # Check if file with same content already exists
-        existing_file = get_existing_file_by_md5(file_md5)
-        if existing_file:
-            _file_md5_cache().store_downloaded_attachment_reference(
-                message_id=message_id,
-                attachment_id=attachment_info.get('attachmentId', ''),
-                original_filename=attachment_info.get('filename', ''),
-                downloaded_filepath=existing_file,
-                size=len(file_data),
-                md5=file_md5,
-            )
-            logger.info(
-                f"Skipping download: reusing existing file by content MD5 at {existing_file}"
-            )
-            return existing_file
-        
-        # Ensure download directory exists
+
+        # The filename embeds a content hash, so identical bytes map to the same path.
         os.makedirs(DOWNLOAD_DIR, exist_ok=True)
-        
-        # Generate filename by user rule: sender_name + base64_tail8(file content)
-        original_filename = attachment_info['filename']
         safe_filename = build_pdf_filename_by_sender(
             sender or 'unknown',
-            original_filename,
+            attachment_info['filename'],
             file_data,
             subject=subject,
         )
-        
         filepath = os.path.join(DOWNLOAD_DIR, safe_filename)
-        
-        # Handle duplicate filenames (by name, not content)
-        base, ext = os.path.splitext(filepath)
-        counter = 1
-        while os.path.exists(filepath):
-            filepath = f"{base}_{counter}{ext}"
-            counter += 1
-        
-        # Write file
-        with open(filepath, 'wb') as f:
-            f.write(file_data)
 
-        cache = _file_md5_cache()
-        cache.store_file_md5(filepath, file_md5)
-        cache.store_downloaded_attachment_reference(
-            message_id=message_id,
-            attachment_id=attachment_info.get('attachmentId', ''),
-            original_filename=original_filename,
-            downloaded_filepath=filepath,
-            size=len(file_data),
-            md5=file_md5,
-        )
-        
-        logger.info(
-            f"Downloaded attachment to {filepath} ({len(file_data)} bytes, MD5: {file_md5})"
-        )
+        if os.path.exists(filepath):
+            logger.info(f"Skipping write: identical content already at {filepath}")
+        else:
+            with open(filepath, 'wb') as f:
+                f.write(file_data)
+            logger.info(f"Downloaded attachment to {filepath} ({len(file_data)} bytes)")
+
+        _get_cache().set_downloaded_path(message_id, attachment_id, filepath)
         return filepath
-        
+
     except Exception as e:
         logger.error(f"Failed to download attachment {attachment_info.get('filename')}: {e}")
         raise
@@ -602,29 +466,3 @@ def batch_download_pdfs(service, email_list: List[Dict[str, Any]]) -> List[Dict[
     
     logger.info(f"Total prepared attachments: {len(all_downloaded)}")
     return all_downloaded
-
-
-if __name__ == '__main__':
-    # Simple test when run directly
-    import sys
-    from src.integrations.gmail.auth import get_gmail_service
-    from .fetch_emails import search_emails
-    
-    logging.basicConfig(level=logging.INFO)
-    
-    try:
-        service = get_gmail_service()
-        emails = search_emails(service, max_results=2)
-        print(f"Found {len(emails)} emails for testing")
-        
-        if emails:
-            downloaded = batch_download_pdfs(service, emails)
-            print(f"Downloaded {len(downloaded)} PDF(s)")
-            for i, file_info in enumerate(downloaded):
-                print(f"{i+1}. {file_info['filename']} -> {file_info['filepath']}")
-        else:
-            print("No emails found to test download")
-            
-    except Exception as e:
-        print(f"Test failed: {e}")
-        sys.exit(1)

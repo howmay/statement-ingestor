@@ -25,13 +25,12 @@ class TestDownloadPDFs:
         assert extract_sender_tag("unknown") == "unknown"
 
     @patch('src.integrations.gmail.downloads.DOWNLOAD_DIR', '/tmp/downloads')
+    @patch('src.integrations.gmail.downloads._cache', Mock(**{'get_downloaded_path.return_value': None}))
     @patch('src.integrations.gmail.downloads.os.makedirs')
-    @patch('src.integrations.gmail.downloads.compute_md5_hash')
-    @patch('src.integrations.gmail.downloads.get_existing_file_by_md5')
     @patch('src.integrations.gmail.downloads.build_pdf_filename_by_sender')
     @patch('builtins.open', new_callable=Mock)
     def test_download_attachment_success(
-        self, mock_open_func, mock_build_filename, mock_get_existing, mock_hash, mock_makedirs, tmp_path
+        self, mock_open_func, mock_build_filename, mock_makedirs, tmp_path
     ):
         """Test downloading an attachment successfully."""
         from unittest.mock import mock_open
@@ -49,11 +48,9 @@ class TestDownloadPDFs:
             'data': base64.urlsafe_b64encode(b'fake pdf data').decode('UTF-8')
         }
         
-        mock_hash.return_value = "md5hash"
-        mock_get_existing.return_value = None
         mock_build_filename.return_value = "bank_test_123.pdf"
         
-        # We need to mock os.path.exists to return False so it doesn't try to increment suffix
+        # os.path.exists -> False: no identical file on disk yet
         with patch('src.integrations.gmail.downloads.os.path.exists', return_value=False):
             filepath = download_attachment(mock_service, 'msg1', attachment_info, 'bank@example.com')
             

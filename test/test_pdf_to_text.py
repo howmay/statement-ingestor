@@ -13,16 +13,8 @@ from src.parsing.pdf.pdf_to_text import (
     extract_text_from_pdf,
     _extract_with_pdfium,
     _extract_with_pdfplumber,
-    _extract_with_pypdf,
-    _extract_with_pdftotext,
-    is_text_based_pdf
 )
 
-
-def test_pdf_to_text_module_uses_pypdf_not_pypdf2():
-    source = Path("src/parsing/pdf/pdf_to_text.py").read_text(encoding="utf-8")
-    assert "import pypdf" in source
-    assert "PyPDF2" not in source
 
 class TestPDFTextExtraction:
     """Test PDF text extraction functionality."""
@@ -56,58 +48,22 @@ class TestPDFTextExtraction:
 
     @patch('src.parsing.pdf.pdf_to_text._extract_with_pdfium')
     @patch('src.parsing.pdf.pdf_to_text._extract_with_pdfplumber')
-    @patch('src.parsing.pdf.pdf_to_text._extract_with_pypdf')
-    @patch('src.parsing.pdf.pdf_to_text._extract_with_pdftotext')
-    @patch('src.parsing.pdf.pdf_to_text.select_pdf_library')
-    def test_extract_text_fallback_chain(self, mock_select_library, mock_pdftotext, mock_pypdf, mock_pdfplumber, mock_pdfium, tmp_path):
-        """Test the fallback chain of PDF extractors."""
+    def test_extract_text_fallback_chain(self, mock_pdfplumber, mock_pdfium, tmp_path):
+        """pdfplumber first, pypdfium2 fallback, None when both are empty."""
         pdf_file = tmp_path / "test.pdf"
         pdf_file.write_bytes(b"%PDF-1.4 minimal pdf content")
-        
-        
-        # Reset all mock return values to empty strings to avoid MagicMock truthiness
-        mock_pdfplumber.return_value = ""
-        mock_pdfium.return_value = ""
-        mock_pdftotext.return_value = ""
-        mock_pypdf.return_value = ""
 
-        # Test 1: First library in order (pdfplumber) succeeds
         mock_pdfplumber.return_value = "Text from pdfplumber"
-        result = extract_text_from_pdf(str(pdf_file))
-        assert result == "Text from pdfplumber"
-        mock_pdfplumber.assert_called_once()
-        
-        # Reset mocks
-        mock_pdfplumber.reset_mock()
-        mock_pdfium.reset_mock()
-        mock_pdftotext.reset_mock()
-        mock_pypdf.reset_mock()
-        mock_pdfplumber.return_value = ""
-        
-        # Test 2: First fails, second (pdfium) succeeds
-        mock_pdfium.return_value = "Text from pdfium"
-        result = extract_text_from_pdf(str(pdf_file))
-        assert result == "Text from pdfium"
-        mock_pdfplumber.assert_called_once()
-        mock_pdfium.assert_called_once()
-        
-        # Reset mocks
-        mock_pdfplumber.reset_mock()
-        mock_pdfium.reset_mock()
-        mock_pdftotext.reset_mock()
-        mock_pypdf.reset_mock()
-        mock_pdfplumber.return_value = ""
         mock_pdfium.return_value = ""
-        
-        # Test 3: Multiple fallbacks
-        mock_pdftotext.return_value = "Text from pdftotext"
-        result = extract_text_from_pdf(str(pdf_file))
-        assert result == "Text from pdftotext"
-        
-        # Test 4: All extractors fail
-        mock_pdftotext.return_value = ""
-        result = extract_text_from_pdf(str(pdf_file))
-        assert result is None
+        assert extract_text_from_pdf(str(pdf_file)) == "Text from pdfplumber"
+        mock_pdfium.assert_not_called()
+
+        mock_pdfplumber.return_value = ""
+        mock_pdfium.return_value = "Text from pdfium"
+        assert extract_text_from_pdf(str(pdf_file)) == "Text from pdfium"
+
+        mock_pdfium.return_value = ""
+        assert extract_text_from_pdf(str(pdf_file)) is None
 
     def test_extract_with_pdfium_success(self):
         """Test pdfium extraction success."""
@@ -149,41 +105,6 @@ class TestPDFTextExtraction:
             assert "Extracted text from pdfplumber" in result
             assert "--- Page 1 ---" in result
 
-    def test_extract_with_pypdf_success(self, tmp_path):
-        """Test pypdf extraction success."""
-        # Create a real file to avoid FileNotFoundError
-        pdf_path = tmp_path / "test.pdf"
-        pdf_path.write_bytes(b"%PDF")
-        
-        mock_pypdf = MagicMock()
-        # Mocking the exceptions
-        mock_pypdf.errors = MagicMock()
-        mock_pypdf.errors.FileNotDecryptedError = type('FileNotDecryptedError', (Exception,), {})
-        mock_pypdf.errors.PdfReadError = type('PdfReadError', (Exception,), {})
-        
-        mock_page = MagicMock()
-        mock_page.extract_text.return_value = "Extracted text from pypdf"
-        mock_reader = MagicMock()
-        mock_reader.pages = [mock_page]
-        mock_pypdf.PdfReader.return_value = mock_reader
-        
-        with patch.dict('sys.modules', {'pypdf': mock_pypdf}):
-            result = _extract_with_pypdf(str(pdf_path))
-            assert "Extracted text from pypdf" in result
-            assert "--- Page 1 ---" in result
-
-    def test_is_text_based_pdf(self, tmp_path):
-        """Test text-based PDF detection."""
-        pdf_file = tmp_path / "text.pdf"
-        pdf_file.write_bytes(b"%PDF-1.4 content")
-        
-        with patch('src.parsing.pdf.pdf_to_text.extract_text_from_pdf') as mock_extract:
-            mock_extract.return_value = "Some text content"
-            assert is_text_based_pdf(str(pdf_file)) is True
-            
-            mock_extract.return_value = "   "
-            assert is_text_based_pdf(str(pdf_file)) is False
-
     @patch('src.parsing.pdf.pdf_to_text.os.path.getsize')
     def test_extract_text_with_password(self, mock_getsize, tmp_path):
         """Test extraction with password parameter."""
@@ -196,19 +117,6 @@ class TestPDFTextExtraction:
             result = extract_text_from_pdf(str(pdf_file), password="secret")
             assert result == "Decrypted text"
             mock_pdfium.assert_called_with(str(pdf_file), "secret")
-
-    def test_extract_with_pdftotext_success(self):
-        """Test pdftotext extraction success."""
-        mock_proc = MagicMock()
-        mock_proc.returncode = 0
-        mock_proc.stdout = "Text from pdftotext"
-        
-        with patch('shutil.which', return_value='/usr/bin/pdftotext'):
-            with patch('subprocess.run', return_value=mock_proc) as mock_run:
-                result = _extract_with_pdftotext("/path/to/test.pdf")
-                assert result == "Text from pdftotext"
-                mock_run.assert_called()
-                assert 'pdftotext' in mock_run.call_args[0][0]
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

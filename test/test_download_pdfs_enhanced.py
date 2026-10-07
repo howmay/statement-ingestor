@@ -17,12 +17,31 @@ from src.integrations.gmail.downloads import (
     build_file_base64_suffix,
     build_hash10_suffix,
     build_pdf_filename_by_sender,
-    compute_md5_hash,
-    get_existing_file_by_md5,
     download_attachment,
     batch_download_pdfs,
     download_pdf_attachments
 )
+import src.integrations.gmail.downloads as downloads
+from src.support.cache import ResultCache
+
+
+@pytest.fixture
+def isolated(tmp_path, monkeypatch):
+    """Point downloads at a tmp DOWNLOAD_DIR and a tmp attachment index."""
+    download_dir = tmp_path / "downloads"
+    download_dir.mkdir()
+    cache = ResultCache(str(tmp_path / ".cache"))
+    monkeypatch.setattr(downloads, 'DOWNLOAD_DIR', str(download_dir))
+    monkeypatch.setattr(downloads, '_cache', cache)
+    return download_dir, cache
+
+
+def _service_returning(data: bytes) -> Mock:
+    service = Mock()
+    service.users.return_value.messages.return_value.attachments.return_value.get.return_value.execute.return_value = {
+        'data': base64.urlsafe_b64encode(data).decode('UTF-8')
+    }
+    return service
 
 class TestDownloadPDFsEnhanced:
     """Enhanced test suite for PDF download functions."""
@@ -67,229 +86,31 @@ class TestDownloadPDFsEnhanced:
         assert name.startswith("滙豐(台灣)_銀行帳戶對帳單_2026-02_")
         assert name.endswith(".pdf")
 
-    def test_compute_md5(self):
-        """Test MD5 computation."""
-        data = b"hello world"
-        expected = hashlib.md5(data).hexdigest()
-        assert compute_md5_hash(data) == expected
-
-    @patch('src.integrations.gmail.downloads.os.path.exists')
-    @patch('src.integrations.gmail.downloads.os.listdir')
-    def test_get_existing_file_by_md5(self, mock_listdir, mock_exists):
-        """Test finding existing file by MD5."""
-        mock_exists.return_value = True
-        mock_listdir.return_value = ["existing.pdf"]
-
-        data = b"file content"
-        target_md5 = hashlib.md5(data).hexdigest()
-
-        with patch('builtins.open', mock_open(read_data=data)):
-            # Mock os.path.isfile to return True for the existing file
-            with patch('src.integrations.gmail.downloads.os.path.isfile', return_value=True):
-                result = get_existing_file_by_md5(target_md5, "/tmp/dir")
-                assert result == "/tmp/dir/existing.pdf"
-
-    def test_get_existing_file_by_md5_uses_sqlite_index_instead_of_json_cache(self, tmp_path, monkeypatch):
-        monkeypatch.chdir(tmp_path)
-        directory = tmp_path / "downloads"
-        directory.mkdir()
-        existing = directory / "existing.pdf"
-        existing.write_bytes(b"file content")
-
-        target_md5 = hashlib.md5(b"file content").hexdigest()
-
-        result = get_existing_file_by_md5(target_md5, str(directory))
-
-        assert result == str(existing)
-        assert not (directory / ".md5_cache.json").exists()
-        assert Path(".cache/performance_index.sqlite3").exists()
-
-    def test_get_existing_file_by_md5_refreshes_stale_entry_when_file_changes(self, tmp_path, monkeypatch):
-        monkeypatch.chdir(tmp_path)
-        directory = tmp_path / "downloads"
-        directory.mkdir()
-        existing = directory / "existing.pdf"
-        existing.write_bytes(b"old content")
-
-        old_md5 = hashlib.md5(b"old content").hexdigest()
-        new_md5 = hashlib.md5(b"new content").hexdigest()
-
-        assert get_existing_file_by_md5(old_md5, str(directory)) == str(existing)
-
-        existing.write_bytes(b"new content")
-        stat_info = existing.stat()
-        os.utime(existing, (stat_info.st_mtime + 1, stat_info.st_mtime + 1))
-
-        assert get_existing_file_by_md5(old_md5, str(directory)) is None
-        assert get_existing_file_by_md5(new_md5, str(directory)) == str(existing)
-
-    @patch('src.integrations.gmail.downloads.DOWNLOAD_DIR', '/tmp/downloads')
-    @patch('src.integrations.gmail.downloads.os.makedirs')
-    @patch('src.integrations.gmail.downloads.get_existing_file_by_md5')
-    @patch('src.integrations.gmail.downloads.os.path.exists')
-    @patch('builtins.open', new_callable=mock_open)
-    def test_download_attachment_already_exists(self, mock_file, mock_exists, mock_get_existing, mock_makedirs):
-        """Test skipping download if file exists."""
-        mock_get_existing.return_value = "/tmp/downloads/existing.pdf"
-
-        mock_service = Mock()
-        attachment_info = {'attachmentId': 'att-md5-only', 'filename': 'content-dedupe-only.pdf'}
-        mock_service.users().messages().attachments().get().execute.return_value = {
-            'data': base64.urlsafe_b64encode(b'data').decode('UTF-8')
-        }
-
-        result = download_attachment(mock_service, 'msg1', attachment_info)
-        assert result == "/tmp/downloads/existing.pdf"
-        mock_file.assert_not_called()
-
-    @patch('src.integrations.gmail.downloads.get_existing_file_by_md5')
-    def test_download_attachment_backfills_attachment_index_when_md5_dedupe_hits(
-        self,
-        mock_get_existing,
-        tmp_path,
-        monkeypatch,
-    ):
-        monkeypatch.chdir(tmp_path)
-        download_dir = tmp_path / "downloads"
-        download_dir.mkdir()
-        existing = download_dir / "existing.pdf"
-        existing.write_bytes(b"same content")
-
-        monkeypatch.setattr('src.integrations.gmail.downloads.DOWNLOAD_DIR', str(download_dir))
-        mock_get_existing.return_value = str(existing)
-
-        mock_service = Mock()
+    @patch('src.integrations.gmail.downloads._extract_pdf_text_hint', return_value="")
+    def test_same_bytes_twice_yields_one_file_and_one_api_call(self, _mock_hint, isolated):
+        download_dir, _cache = isolated
+        service = _service_returning(b"same content")
+        get_mock = service.users.return_value.messages.return_value.attachments.return_value.get
         attachment_info = {'attachmentId': 'att1', 'filename': 'statement.pdf'}
-        mock_service.users().messages().attachments().get().execute.return_value = {
-            'data': base64.urlsafe_b64encode(b'same content').decode('UTF-8')
-        }
 
-        result = download_attachment(mock_service, 'msg1', attachment_info)
+        first = download_attachment(service, 'msg1', attachment_info)
+        second = download_attachment(service, 'msg1', attachment_info)
 
-        assert result == str(existing)
+        assert first == second
+        assert get_mock.call_count == 1
+        assert os.listdir(download_dir) == [os.path.basename(first)]
 
-        from src.integrations.gmail.downloads import _file_md5_cache
-        cached = _file_md5_cache().get_downloaded_attachment_reference('msg1', 'att1')
-        assert cached is not None
-        assert cached['downloaded_filepath'] == str(existing)
+        # Different attachment id, same bytes: fetched once more but no new file.
+        third = download_attachment(service, 'msg2', {'attachmentId': 'att2', 'filename': 'statement.pdf'})
+        assert third == first
+        assert get_mock.call_count == 2
+        assert len(os.listdir(download_dir)) == 1
 
-    @patch('src.integrations.gmail.downloads.get_existing_file_by_md5')
-    def test_download_attachment_uses_backfilled_attachment_index_on_second_run(
-        self,
-        mock_get_existing,
-        tmp_path,
-        monkeypatch,
-    ):
-        monkeypatch.chdir(tmp_path)
-        download_dir = tmp_path / "downloads"
-        download_dir.mkdir()
-        existing = download_dir / "existing.pdf"
-        existing.write_bytes(b"same content")
-
-        monkeypatch.setattr('src.integrations.gmail.downloads.DOWNLOAD_DIR', str(download_dir))
-        mock_get_existing.return_value = str(existing)
-
-        first_service = Mock()
-        attachment_info = {'attachmentId': 'att1', 'filename': 'statement.pdf'}
-        first_service.users().messages().attachments().get().execute.return_value = {
-            'data': base64.urlsafe_b64encode(b'same content').decode('UTF-8')
-        }
-
-        first_result = download_attachment(first_service, 'msg1', attachment_info)
-        assert first_result == str(existing)
-
-        second_service = Mock()
-        second_result = download_attachment(second_service, 'msg1', attachment_info)
-
-        assert second_result == str(existing)
-        second_service.users.assert_not_called()
-
-    @patch('src.integrations.gmail.downloads.get_existing_file_by_md5')
-    def test_download_attachment_reuses_index_when_attachment_id_changes_but_filename_and_size_match(
-        self,
-        mock_get_existing,
-        tmp_path,
-        monkeypatch,
-    ):
-        monkeypatch.chdir(tmp_path)
-        download_dir = tmp_path / "downloads"
-        download_dir.mkdir()
-        existing = download_dir / "existing.pdf"
-        existing.write_bytes(b"same content")
-
-        monkeypatch.setattr('src.integrations.gmail.downloads.DOWNLOAD_DIR', str(download_dir))
-        mock_get_existing.return_value = str(existing)
-
-        first_service = Mock()
-        first_attachment = {
-            'attachmentId': 'att-old',
-            'filename': 'statement.pdf',
-            'size': len(b'same content'),
-        }
-        first_service.users().messages().attachments().get().execute.return_value = {
-            'data': base64.urlsafe_b64encode(b'same content').decode('UTF-8')
-        }
-
-        first_result = download_attachment(first_service, 'msg1', first_attachment)
-        assert first_result == str(existing)
-
-        second_service = Mock()
-        second_attachment = {
-            'attachmentId': 'att-new',
-            'filename': 'statement.pdf',
-            'size': len(b'same content'),
-        }
-        second_result = download_attachment(second_service, 'msg1', second_attachment)
-
-        assert second_result == str(existing)
-        second_service.users.assert_not_called()
-
-    def test_download_attachment_reuses_indexed_gmail_attachment_when_local_file_exists(self, tmp_path, monkeypatch):
-        monkeypatch.chdir(tmp_path)
-        download_dir = tmp_path / "downloads"
-        download_dir.mkdir()
+    def test_download_attachment_logs_index_hit(self, isolated, caplog):
+        download_dir, cache = isolated
         existing = download_dir / "existing.pdf"
         existing.write_bytes(b"existing data")
-
-        monkeypatch.setattr('src.integrations.gmail.downloads.DOWNLOAD_DIR', str(download_dir))
-
-        from src.integrations.gmail.downloads import _file_md5_cache
-        cache = _file_md5_cache()
-        cache.store_downloaded_attachment_reference(
-            message_id='msg1',
-            attachment_id='att1',
-            original_filename='statement.pdf',
-            downloaded_filepath=str(existing),
-            size=existing.stat().st_size,
-            md5=hashlib.md5(b"existing data").hexdigest(),
-        )
-
-        mock_service = Mock()
-        attachment_info = {'attachmentId': 'att1', 'filename': 'statement.pdf'}
-        result = download_attachment(mock_service, 'msg1', attachment_info)
-
-        assert result == str(existing)
-        mock_service.users.assert_not_called()
-
-    def test_download_attachment_logs_index_hit(self, tmp_path, monkeypatch, caplog):
-        monkeypatch.chdir(tmp_path)
-        download_dir = tmp_path / "downloads"
-        download_dir.mkdir()
-        existing = download_dir / "existing.pdf"
-        existing.write_bytes(b"existing data")
-
-        monkeypatch.setattr('src.integrations.gmail.downloads.DOWNLOAD_DIR', str(download_dir))
-
-        from src.integrations.gmail.downloads import _file_md5_cache
-        cache = _file_md5_cache()
-        cache.store_downloaded_attachment_reference(
-            message_id='msg1',
-            attachment_id='att1',
-            original_filename='statement.pdf',
-            downloaded_filepath=str(existing),
-            size=existing.stat().st_size,
-            md5=hashlib.md5(b"existing data").hexdigest(),
-        )
+        cache.set_downloaded_path('msg1', 'att1', str(existing))
 
         mock_service = Mock()
         attachment_info = {'attachmentId': 'att1', 'filename': 'statement.pdf'}
@@ -301,69 +122,22 @@ class TestDownloadPDFsEnhanced:
         mock_service.users.assert_not_called()
         assert "reusing indexed Gmail attachment" in caplog.text
 
-    def test_download_attachment_redownloads_when_indexed_file_was_deleted(self, tmp_path, monkeypatch, caplog):
-        monkeypatch.chdir(tmp_path)
-        download_dir = tmp_path / "downloads"
-        download_dir.mkdir()
+    def test_download_attachment_redownloads_when_indexed_file_was_deleted(self, isolated, caplog):
+        download_dir, cache = isolated
         stale = download_dir / "missing.pdf"
-
-        monkeypatch.setattr('src.integrations.gmail.downloads.DOWNLOAD_DIR', str(download_dir))
-
-        from src.integrations.gmail.downloads import _file_md5_cache
-        cache = _file_md5_cache()
-        cache.store_downloaded_attachment_reference(
-            message_id='msg1',
-            attachment_id='att1',
-            original_filename='statement.pdf',
-            downloaded_filepath=str(stale),
-            size=123,
-            md5='old-md5',
-        )
+        cache.set_downloaded_path('msg1', 'att1', str(stale))
 
         file_data = b'new attachment bytes'
-        mock_service = Mock()
+        mock_service = _service_returning(file_data)
         attachment_info = {'attachmentId': 'att1', 'filename': 'statement.pdf'}
-        mock_service.users().messages().attachments().get().execute.return_value = {
-            'data': base64.urlsafe_b64encode(file_data).decode('UTF-8')
-        }
 
         with caplog.at_level(logging.INFO):
             result = download_attachment(mock_service, 'msg1', attachment_info)
 
-        assert os.path.exists(result)
         assert Path(result).read_bytes() == file_data
         assert result != str(stale)
-        assert cache.get_downloaded_attachment_reference('msg1', 'att1') is not None
-        assert "removing stale Gmail attachment index" in caplog.text
+        assert cache.get_downloaded_path('msg1', 'att1') == result
         assert "Downloaded attachment to" in caplog.text
-
-    @patch('src.integrations.gmail.downloads.DOWNLOAD_DIR', '/tmp/downloads')
-    @patch('src.integrations.gmail.downloads.os.makedirs')
-    @patch('src.integrations.gmail.downloads.get_existing_file_by_md5')
-    @patch('src.integrations.gmail.downloads.os.path.exists')
-    @patch('builtins.open', new_callable=mock_open)
-    def test_download_attachment_logs_content_dedupe_reuse(
-        self,
-        mock_file,
-        mock_exists,
-        mock_get_existing,
-        mock_makedirs,
-        caplog,
-    ):
-        mock_get_existing.return_value = "/tmp/downloads/existing.pdf"
-
-        mock_service = Mock()
-        attachment_info = {'attachmentId': 'att1', 'filename': 'content-dedupe-only.pdf'}
-        mock_service.users().messages().attachments().get().execute.return_value = {
-            'data': base64.urlsafe_b64encode(b'data').decode('UTF-8')
-        }
-
-        with caplog.at_level(logging.INFO):
-            result = download_attachment(mock_service, 'msg-log-md5-unique', attachment_info)
-
-        assert result == "/tmp/downloads/existing.pdf"
-        assert "reusing existing file by content MD5" in caplog.text
-        mock_file.assert_not_called()
 
     @patch('src.integrations.gmail.downloads.download_attachment')
     @patch('src.integrations.gmail.downloads.extract_sender_tag')

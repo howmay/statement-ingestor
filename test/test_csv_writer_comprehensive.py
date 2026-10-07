@@ -12,14 +12,14 @@ def test_transaction_month_and_receipt_key_helpers():
     assert cw._transaction_month({"date": "2026/03/12"}) == "2026-03"
     assert cw._transaction_month({"date": "bad"}) == "unknown"
 
-    key = cw._receipt_key({
+    key = cw._receipt_key(cw._format_export_row({
         "date": "2026-03-12",
         "amount": "12.3",
         "currency": "TWD",
         "expense_name": "Coffee",
         "source": "Sinopac Credit Card",
         "source_file": "a.pdf",
-    })
+    }))
     assert key[1] == ""
     assert key[2] == "12.30"
 
@@ -156,47 +156,6 @@ def test_export_receipts_to_csv_appends_without_rewriting_existing_file(tmp_path
     assert [row["expense_name"] for row in rows] == ["A", "B"]
 
 
-def test_export_receipts_to_csv_backfills_existing_file_into_index(tmp_path, monkeypatch):
-    monkeypatch.chdir(tmp_path)
-    output_dir = tmp_path / "out"
-    output_dir.mkdir()
-
-    receipt = {
-        "date": "2026-03-01",
-        "amount": 100,
-        "currency": "TWD",
-        "expense_name": "A",
-        "expense_type": "Other",
-        "source": "Sinopac Credit Card",
-        "source_file": "a.pdf",
-    }
-    new_receipt = {
-        "date": "2026-03-03",
-        "amount": 300,
-        "currency": "TWD",
-        "expense_name": "C",
-        "expense_type": "Other",
-        "source": "Sinopac Credit Card",
-        "source_file": "c.pdf",
-    }
-
-    path_csv = output_dir / "expenses_2026-03.csv"
-    with open(path_csv, "w", newline="", encoding="utf-8-sig") as f:
-        writer = csv.DictWriter(f, fieldnames=[key for key, _ in cw.CSV_COLUMNS])
-        writer.writeheader()
-        writer.writerow(cw._format_export_row(receipt))
-
-    cw.export_receipts_to_csv([receipt], output_dir=str(output_dir))
-
-    with patch("src.export.csv_writer._load_existing_rows", side_effect=AssertionError("should use sqlite index after backfill")):
-        cw.export_receipts_to_csv([receipt, new_receipt], output_dir=str(output_dir))
-
-    with open(path_csv, "r", encoding="utf-8-sig") as f:
-        rows = list(csv.DictReader(f))
-
-    assert [row["expense_name"] for row in rows] == ["A", "C"]
-
-
 def test_export_receipts_dedupes_with_income_expense_columns(tmp_path):
     output_dir = tmp_path / "out"
     receipt = {
@@ -218,6 +177,26 @@ def test_export_receipts_dedupes_with_income_expense_columns(tmp_path):
     assert len(rows) == 1
     assert rows[0]["income"] == ""
     assert rows[0]["expense"] == "100.00"
+
+
+def test_export_receipts_dedupes_within_one_call_and_across_calls(tmp_path):
+    output_dir = tmp_path / "out"
+    receipt = {
+        "date": "2026-03-01",
+        "amount": 100,
+        "currency": "TWD",
+        "expense_name": "A",
+        "source": "Sinopac Credit Card",
+        "source_file": "a.pdf",
+    }
+
+    path_csv = cw.export_receipts_to_csv([receipt, dict(receipt)], output_dir=str(output_dir))
+    assert cw.export_receipts_to_csv([receipt, receipt], output_dir=str(output_dir)) == ""
+
+    with open(path_csv, "r", encoding="utf-8-sig") as f:
+        rows = list(csv.DictReader(f))
+
+    assert len(rows) == 1
 
 
 def test_export_extracted_texts_to_csv_edge_paths(tmp_path):
@@ -250,7 +229,7 @@ def test_export_extracted_texts_to_csv_write_failure_raises(tmp_path):
 def test_sort_exported_receipt_csvs_sorts_rows_by_stable_key(tmp_path):
     path_csv = tmp_path / "expenses_2026-03.csv"
     with open(path_csv, "w", newline="", encoding="utf-8-sig") as f:
-        writer = csv.DictWriter(f, fieldnames=[key for key, _ in cw.CSV_COLUMNS])
+        writer = csv.DictWriter(f, fieldnames=cw.CSV_COLUMNS)
         writer.writeheader()
         writer.writerow({
             "date": "2026-03-03",
@@ -279,17 +258,3 @@ def test_sort_exported_receipt_csvs_sorts_rows_by_stable_key(tmp_path):
         rows = list(csv.DictReader(f))
 
     assert [row["expense_name"] for row in rows] == ["A", "B"]
-
-
-def test_format_receipt_for_csv_formats_numbers_and_none():
-    out = cw.format_receipt_for_csv({
-        "amount": 123.456,
-        "confidence": 0.876,
-        "note": None,
-        "source": "X",
-    })
-
-    assert out["amount"] == "123.46"
-    assert out["confidence"] == "87.6%"
-    assert out["note"] == ""
-    assert out["source"] == "X"

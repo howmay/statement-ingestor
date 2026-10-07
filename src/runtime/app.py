@@ -13,7 +13,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 # Import project modules
 from src.support.cache import ResultCache
 from src.support.config_validator import validate_configuration as config_is_valid
-from src.core.config import TARGET_SENDERS, TARGET_KEYWORDS, DOWNLOAD_DIR, get_bank_password
+from src.core.config import get_bank_password
 from src.integrations.gmail.auth import get_gmail_service
 from src.integrations.gmail.fetch import search_emails, list_attachments
 from src.integrations.gmail.downloads import batch_download_pdfs

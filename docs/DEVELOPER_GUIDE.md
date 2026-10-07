@@ -32,7 +32,7 @@ If you write production code before a test, you must delete it and start over.
 - **TDD Tip**: Mock `googleapiclient` or use sample base64 email data in tests.
 
 ### 2. PDF Extraction (`src/parsing/pdf/`)
-- Multi-engine fallback: `pypdfium2` -> `pdftotext` -> `pdfplumber`.
+- Engine fallback: `pdfplumber` -> `pypdfium2`.
 - **TDD Tip**: Place small sample PDFs in `test/data/` (or use `test_dummy.pdf`) to verify text extraction logic.
 
 ### 3. Bank Parsers (`src/parsing/banks/`)
