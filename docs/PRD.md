@@ -46,7 +46,7 @@
 ### 2.2 執行解析
 
 1. **準備執行**
-   - 確保已安裝所有依賴（使用 `pip install -r requirements.txt`）
+   - 確保已安裝所有依賴（使用 `pip install -e .`）
    - 確認 `.env` 配置正確
 
 2. **開始掃描**
@@ -180,7 +180,7 @@
 
 3. 安裝依賴：
    ```bash
-   pip install -r requirements.txt
+   pip install -e .
    ```
 
 4. 複製範例配置：

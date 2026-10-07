@@ -48,7 +48,7 @@ Ensure you have **Python 3.13** installed.
    ```
 3. **Install dependencies:**
    ```bash
-   pip install -r requirements-dev.txt
+   pip install -e ".[dev]"
    ```
 4. **Setup Environment Variables:**
    ```bash
