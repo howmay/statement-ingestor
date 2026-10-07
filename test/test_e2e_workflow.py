@@ -17,9 +17,11 @@ class TestEndToEndWorkflow:
     """End-to-end workflow tests."""
     
     @pytest.fixture
-    def app(self):
-        """Create an app instance."""
-        app = GmailExpenseParserApp(use_enhancements=True)
+    def app(self, tmp_path, monkeypatch):
+        """Create an app instance (logs and cache land in tmp_path)."""
+        monkeypatch.chdir(tmp_path)
+        with patch('src.runtime.app.logging.basicConfig'):
+            app = GmailExpenseParserApp()
         app.logger = Mock()
         yield app
     
@@ -31,7 +33,7 @@ class TestEndToEndWorkflow:
              patch('src.runtime.app.search_emails') as mock_search, \
              patch('src.runtime.app.batch_download_pdfs') as mock_download, \
              patch('src.runtime.app.extract_text_from_pdf') as mock_extract, \
-             patch('src.runtime.app.parse_multiple_receipts') as mock_parse, \
+             patch('src.runtime.app.parse_receipt_text') as mock_parse, \
              patch('src.runtime.app.export_receipts_to_csv') as mock_export_receipts, \
              patch('src.runtime.app.export_extracted_texts_to_csv') as mock_export_texts:
             
@@ -89,7 +91,7 @@ class TestEndToEndWorkflow:
              patch('src.runtime.app.search_emails') as mock_search, \
              patch('src.runtime.app.batch_download_pdfs') as mock_download, \
              patch('src.runtime.app.extract_text_from_pdf') as mock_extract, \
-             patch('src.runtime.app.parse_multiple_receipts') as mock_parse, \
+             patch('src.runtime.app.parse_receipt_text') as mock_parse, \
              patch('src.runtime.app.export_receipts_to_csv') as mock_export:
             
             mock_service.return_value = Mock()
@@ -121,7 +123,7 @@ class TestEndToEndWorkflow:
              patch('src.runtime.app.search_emails') as mock_search, \
              patch('src.runtime.app.batch_download_pdfs') as mock_download, \
              patch('src.runtime.app.extract_text_from_pdf') as mock_extract, \
-             patch('src.runtime.app.parse_multiple_receipts') as mock_parse, \
+             patch('src.runtime.app.parse_receipt_text') as mock_parse, \
              patch('src.runtime.app.export_receipts_to_csv') as mock_export:
             
             mock_service.return_value = Mock()
@@ -142,7 +144,7 @@ class TestEndToEndWorkflow:
              patch('src.runtime.app.search_emails') as mock_search, \
              patch('src.runtime.app.batch_download_pdfs') as mock_download, \
              patch('src.runtime.app.extract_text_from_pdf') as mock_extract, \
-             patch('src.runtime.app.parse_multiple_receipts') as mock_parse, \
+             patch('src.runtime.app.parse_receipt_text') as mock_parse, \
              patch('src.runtime.app.export_receipts_to_csv') as mock_export, \
              patch('src.parsing.llm.parse_receipt._get_llm_runtime_config') as mock_llm_config:
             

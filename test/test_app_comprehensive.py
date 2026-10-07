@@ -17,31 +17,14 @@ class TestGmailExpenseParserAppComprehensive:
     """Comprehensive tests for GmailExpenseParserApp."""
     
     @pytest.fixture
-    def app_without_enhancements(self):
-        """Create an app instance without enhancements."""
-        with patch('src.runtime.app.ENHANCEMENTS_AVAILABLE', False):
-            app = GmailExpenseParserApp(use_enhancements=True)
-            yield app
-    
-    @pytest.fixture
-    def app_with_enhancements(self):
-        """Create an app instance with enhancements."""
-        app = GmailExpenseParserApp(use_enhancements=True)
+    def app_with_enhancements(self, tmp_path, monkeypatch):
+        """Create an app instance (logs and cache land in tmp_path)."""
+        monkeypatch.chdir(tmp_path)
+        with patch('src.runtime.app.logging.basicConfig'):
+            app = GmailExpenseParserApp()
         app.logger = Mock()
         yield app
-    
-    def test_init_without_enhancements(self, app_without_enhancements):
-        """Test initialization when enhancement modules are not available."""
-        app = app_without_enhancements
-        assert app.use_enhancements is False
-        # When enhancements not available, a basic logger is still created
-        assert app.logger is not None
-    
-    def test_init_with_enhancements_disabled(self):
-        """Test initialization with enhancements explicitly disabled."""
-        app = GmailExpenseParserApp(use_enhancements=False)
-        assert app.use_enhancements is False
-    
+
     def test_authenticate_with_exception(self, app_with_enhancements):
         """Test authentication when get_gmail_service raises an exception."""
         app = app_with_enhancements
@@ -132,7 +115,7 @@ class TestGmailExpenseParserAppComprehensive:
         app.logger.info.assert_called_with("No text to parse.")
     
     def test_parse_receipts_with_exception(self, app_with_enhancements):
-        """Test parse_receipts when parse_multiple_receipts raises an exception."""
+        """Test parse_receipts when parse_receipt_text raises an exception."""
         app = app_with_enhancements
         app.extracted_texts = [
             {'text': 'text1', 'file_info': {'filepath': '/path/to/file1.pdf', 'filename': 'file1.pdf'}},
@@ -274,22 +257,11 @@ class TestGmailExpenseParserAppComprehensive:
             assert result['errors'] == 0
             app.logger.info.assert_any_call("=" * 60)
     
-    def test_validate_configuration_legacy_return(self, app_with_enhancements):
-        """Test validate_configuration with legacy tuple return."""
-        app = app_with_enhancements
-        
-        with patch('src.support.config_validator.ConfigValidator') as mock_validator_class:
-            mock_validator = mock_validator_class.return_value
-            mock_validator.validate_all.return_value = (True, "Config OK")
-            result = app.validate_configuration()
-            
-            assert result is True
-    
     def test_validate_configuration_bool_return(self, app_with_enhancements):
         """Test validate_configuration with boolean return."""
         app = app_with_enhancements
         
-        with patch('src.support.config_validator.ConfigValidator') as mock_validator_class:
+        with patch('src.runtime.app.ConfigValidator') as mock_validator_class:
             mock_validator = mock_validator_class.return_value
             mock_validator.validate_all.return_value = True
             result = app.validate_configuration()
@@ -300,7 +272,7 @@ class TestGmailExpenseParserAppComprehensive:
         """Test validate_configuration when it fails."""
         app = app_with_enhancements
         
-        with patch('src.support.config_validator.ConfigValidator') as mock_validator_class:
+        with patch('src.runtime.app.ConfigValidator') as mock_validator_class:
             mock_validator = mock_validator_class.return_value
             mock_validator.validate_all.return_value = False
             
@@ -308,11 +280,3 @@ class TestGmailExpenseParserAppComprehensive:
             
             assert result is False
     
-    def test_validate_configuration_skipped(self, app_without_enhancements):
-        """Test validate_configuration when enhancements are not available."""
-        app = app_without_enhancements
-        
-        result = app.validate_configuration()
-        
-        assert result is True
-        # Should not call validate_config_util when enhancements not available

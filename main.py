@@ -13,11 +13,6 @@ def main():
     # Canonical CLI entry point for the maintained application path.
     parser = argparse.ArgumentParser(description='Gmail Expense Parser')
     parser.add_argument(
-        '--no-enhancements', 
-        action='store_true', 
-        help='Disable enhanced logging and progress indicators'
-    )
-    parser.add_argument(
         '--debug', 
         action='store_true', 
         help='Enable debug level logging'
@@ -44,13 +39,14 @@ def main():
     args = parser.parse_args()
     
     # Initialize and run the application
-    app = GmailExpenseParserApp(use_enhancements=not args.no_enhancements)
+    app = GmailExpenseParserApp()
     
     # Override log level if debug requested
     if args.debug:
-        logging.getLogger().setLevel(logging.DEBUG)
-        # Also set for app logger
-        app.logger.setLevel(logging.DEBUG)
+        root = logging.getLogger()
+        root.setLevel(logging.DEBUG)
+        for handler in root.handlers:
+            handler.setLevel(logging.DEBUG)
     
     # Execute the pipeline
     stats = app.run(

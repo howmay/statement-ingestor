@@ -35,9 +35,11 @@ def test_active_code_does_not_use_legacy_src_import_paths():
 
 
 @pytest.fixture
-def app():
-    """Create an app instance with enhancements enabled."""
-    app = GmailExpenseParserApp(use_enhancements=True)
+def app(tmp_path, monkeypatch):
+    """Create an app instance (logs and cache land in tmp_path)."""
+    monkeypatch.chdir(tmp_path)
+    with patch('src.runtime.app.logging.basicConfig'):
+        app = GmailExpenseParserApp()
     # Replace the logger with a mock
     app.logger = Mock()
     yield app
@@ -48,7 +50,6 @@ class TestGmailExpenseParserAppInit:
     
     def test_init(self, app):
         """Test initialization."""
-        assert app.use_enhancements is True
         assert app.service is None
         assert app.user_email is None
         assert app.emails == []
@@ -260,7 +261,6 @@ class TestGmailExpenseParserAppParseReceipts:
     def test_extract_and_parse_reuse_cached_file_md5(self, app):
         """MD5 should be computed once and then carried in file_info across steps."""
         app.cache = Mock()
-        app.cache.content_cache_enabled = True
         app.cache.get_file_md5.return_value = 'md5-1'
         app.cache.get.return_value = None
         app.downloaded_files = [
@@ -278,20 +278,6 @@ class TestGmailExpenseParserAppParseReceipts:
         assert app.cache.get_file_md5.call_count == 1
         extracted_file_info = app.extracted_texts[0]['file_info']
         assert extracted_file_info['file_md5'] == 'md5-1'
-
-    def test_extract_texts_does_not_persist_content_cache_when_disabled(self, app):
-        app.cache = Mock()
-        app.cache.get.return_value = None
-        app.cache.get_file_md5.return_value = 'md5-1'
-        app.downloaded_files = [
-            {'filepath': '/downloads/file1.pdf', 'sender': 'bank', 'subject': 'stmt', 'filename': 'file1.pdf'}
-        ]
-
-        with patch('src.runtime.app.extract_text_from_pdf', return_value='Extracted text'):
-            result = app.extract_texts(max_workers=1)
-
-        assert result is True
-        app.cache.set.assert_not_called()
 
     def test_parse_receipts_no_texts(self, app):
         """Test parse with no extracted texts."""
@@ -437,31 +423,28 @@ class TestGmailExpenseParserAppValidateConfiguration:
 
     def test_validate_configuration_success_bool_return(self, app):
         """Current validator returns bool; app should handle it."""
-        app.use_enhancements = True
         with patch('src.support.config_validator.ConfigValidator.validate_all', return_value=True):
             result = app.validate_configuration()
         assert result is True
 
     def test_validate_configuration_failure_bool_return(self, app):
         """False bool return should fail gracefully (no tuple unpack crash)."""
-        app.use_enhancements = True
         with patch('src.support.config_validator.ConfigValidator.validate_all', return_value=False):
             result = app.validate_configuration()
         assert result is False
         assert app.stats['errors'] >= 1
 
-    def test_validate_configuration_legacy_tuple_return(self, app):
-        """Legacy tuple return should still be supported."""
-        app.use_enhancements = True
-        with patch(
-            'src.support.config_validator.ConfigValidator.validate_all',
-            return_value=(False, ['missing TARGET_SENDERS'])
-        ):
-            result = app.validate_configuration()
-        assert result is False
 
-    def test_validate_configuration_skipped(self, app):
-        """Test configuration validation skipped when enhancements disabled."""
-        app.use_enhancements = False
-        result = app.validate_configuration()
-        assert result is True
+class TestGetBankAndCountry:
+    """Bank lookup: parser_name first, then filename."""
+
+    def test_parser_name_wins_over_filename(self, app):
+        receipts = [{'parser_name': 'HsbcSgCardParser'}]
+        assert app._get_bank_and_country('x', 'fubon.pdf', receipts) == ('HSBC', 'SG', '信用卡')
+
+    def test_filename_fallback(self, app):
+        assert app._get_bank_and_country('', '玉山信用卡_202603.pdf') == ('E.SUN', 'TW', '信用卡')
+        assert app._get_bank_and_country('', 'wise_statement.csv') == ('Wise', 'Global', '銀行帳戶')
+
+    def test_unknown(self, app):
+        assert app._get_bank_and_country('', 'foo.pdf', [{}]) == ('Unknown', 'TW', '未知')
