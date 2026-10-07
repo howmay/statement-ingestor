@@ -6,20 +6,8 @@ import json
 import tempfile
 from pathlib import Path
 
-from src.support.logger import setup_logging, get_logger
 from src.support.config_validator import ConfigValidator
 from src.support.retry import APIRetry, RetryConfig
-from src.support.progress import track_progress
-
-
-def test_logger_setup_and_emit():
-    setup_logging(log_level='DEBUG', log_to_file=False, log_to_console=False)
-    logger = get_logger(__name__)
-
-    # Should not raise
-    logger.info('info message', component='test')
-    logger.warning('warn message', threshold=5)
-
 
 
 def test_config_validator_env_and_files():
@@ -73,10 +61,3 @@ def test_retry_executes_until_success():
     result = retry.execute(flaky)
     assert result == 'ok'
     assert calls['n'] == 3
-
-
-
-def test_track_progress_iterates_all_items():
-    items = list(range(5))
-    got = [x for x in track_progress(items, description='test-progress')]
-    assert got == items

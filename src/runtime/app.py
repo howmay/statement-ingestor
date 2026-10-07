@@ -15,9 +15,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # Import enhanced utilities
 try:
-    from src.support.logger import setup_logging, get_logger
     from src.support.config_validator import validate_configuration as validate_config_util
-    from src.support.progress import ProgressIndicator, ProgressStyle, track_progress
     from src.support.retry import retry_gmail, retry_openai
     from src.support.cache import ResultCache
     ENHANCEMENTS_AVAILABLE = True
@@ -49,24 +47,11 @@ class GmailExpenseParserApp:
         self.use_enhancements = use_enhancements and ENHANCEMENTS_AVAILABLE
         self.start_time = datetime.now()
         
-        # Setup logging based on availability
-        if self.use_enhancements:
-            setup_logging(
-                log_level='INFO',
-                log_format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-                date_format='%Y-%m-%d %H:%M:%S',
-                log_dir='logs',
-                log_to_file=True,
-                log_to_console=True
-            )
-            self.logger = get_logger(__name__)
-        else:
-            # Basic logging for compatibility
-            logging.basicConfig(
-                level=logging.INFO,
-                format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-            )
-            self.logger = logging.getLogger(__name__)
+        logging.basicConfig(
+            level=logging.INFO,
+            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+        )
+        self.logger = logging.getLogger(__name__)
         
         # Application state
         self.service = None
@@ -92,9 +77,6 @@ class GmailExpenseParserApp:
         
         # Initialize cache
         self.cache = ResultCache() if self.use_enhancements else None
-        
-        # Progress indicators
-        self.progress = None
     
     def log(self, level: str, message: str, **kwargs):
         """Log message with appropriate level."""

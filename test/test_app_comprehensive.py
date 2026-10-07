@@ -26,11 +26,9 @@ class TestGmailExpenseParserAppComprehensive:
     @pytest.fixture
     def app_with_enhancements(self):
         """Create an app instance with enhancements."""
-        with patch('src.runtime.app.setup_logging'), \
-             patch('src.runtime.app.get_logger'):
-            app = GmailExpenseParserApp(use_enhancements=True)
-            app.logger = Mock()
-            yield app
+        app = GmailExpenseParserApp(use_enhancements=True)
+        app.logger = Mock()
+        yield app
     
     def test_init_without_enhancements(self, app_without_enhancements):
         """Test initialization when enhancement modules are not available."""
@@ -41,10 +39,8 @@ class TestGmailExpenseParserAppComprehensive:
     
     def test_init_with_enhancements_disabled(self):
         """Test initialization with enhancements explicitly disabled."""
-        with patch('src.runtime.app.setup_logging'), \
-             patch('src.runtime.app.get_logger'):
-            app = GmailExpenseParserApp(use_enhancements=False)
-            assert app.use_enhancements is False
+        app = GmailExpenseParserApp(use_enhancements=False)
+        assert app.use_enhancements is False
     
     def test_authenticate_with_exception(self, app_with_enhancements):
         """Test authentication when get_gmail_service raises an exception."""

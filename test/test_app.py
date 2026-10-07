@@ -37,12 +37,10 @@ def test_active_code_does_not_use_legacy_src_import_paths():
 @pytest.fixture
 def app():
     """Create an app instance with enhancements enabled."""
-    with patch('src.runtime.app.setup_logging'), \
-         patch('src.runtime.app.get_logger'):
-        app = GmailExpenseParserApp(use_enhancements=True)
-        # Replace the logger with a mock
-        app.logger = Mock()
-        yield app
+    app = GmailExpenseParserApp(use_enhancements=True)
+    # Replace the logger with a mock
+    app.logger = Mock()
+    yield app
 
 
 class TestGmailExpenseParserAppInit:

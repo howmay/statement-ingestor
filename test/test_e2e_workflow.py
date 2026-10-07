@@ -19,11 +19,9 @@ class TestEndToEndWorkflow:
     @pytest.fixture
     def app(self):
         """Create an app instance."""
-        with patch('src.runtime.app.setup_logging'), \
-             patch('src.runtime.app.get_logger'):
-            app = GmailExpenseParserApp(use_enhancements=True)
-            app.logger = Mock()
-            yield app
+        app = GmailExpenseParserApp(use_enhancements=True)
+        app.logger = Mock()
+        yield app
     
     def test_full_workflow_success(self, app):
         """Test complete successful workflow."""

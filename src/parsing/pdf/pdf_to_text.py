@@ -4,14 +4,7 @@ import re
 import time
 from typing import Optional, Dict, Any
 
-from src.support.performance import profile, PerformanceMonitor
-from src.parsing.pdf.pdf_cache import get_pdf_cache
-from src.parsing.pdf.preload import preload_pdf_libraries, ensure_libraries_preloaded
-
 logger = logging.getLogger(__name__)
-
-# Preload libraries in background when module is imported
-preload_pdf_libraries(background=True)
 
 
 def select_pdf_library(pdf_path: str, password: str = None) -> str:
@@ -28,7 +21,6 @@ def select_pdf_library(pdf_path: str, password: str = None) -> str:
     return 'pdfplumber'
 
 
-@profile
 def extract_text_from_pdf(pdf_path: str, password: str = None) -> Optional[str]:
     """
     Extract text content from a PDF file using pdfplumber as the primary engine.
@@ -45,13 +37,6 @@ def extract_text_from_pdf(pdf_path: str, password: str = None) -> Optional[str]:
     file_size = os.path.getsize(pdf_path)
     if file_size == 0:
         raise ValueError(f"PDF file is empty: {pdf_path}")
-    
-    # Check cache first
-    cache = get_pdf_cache()
-    cached_text = cache.get(pdf_path, password)
-    if cached_text is not None:
-        logger.info(f"Cache hit for {pdf_path}, returning cached text ({len(cached_text)} chars)")
-        return cached_text
     
     logger.info(f"Extracting text using pdfplumber (Accuracy Priority): {pdf_path}")
     
@@ -75,7 +60,6 @@ def extract_text_from_pdf(pdf_path: str, password: str = None) -> Optional[str]:
 
             if text and text.strip():
                 logger.info(f"Successfully extracted {len(text)} characters using {library}")
-                cache.set(pdf_path, text, password)
                 return text
         except Exception as e:
             last_exception = e
