@@ -6,11 +6,11 @@ import src.integrations.gmail.fetch as fe
 
 
 def _wrapped_search_emails():
-    return fe.search_emails.__wrapped__
+    return fe.search_emails
 
 
 def _wrapped_list_attachments():
-    return fe.list_attachments.__wrapped__
+    return fe.list_attachments
 
 
 def test_normalize_gmail_date_formats():

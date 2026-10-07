@@ -24,12 +24,6 @@ from src.integrations.gmail.auth import (
 class TestGmailAuthSimple:
     """Simplified test suite for Gmail authentication."""
     
-    @pytest.fixture(autouse=True)
-    def mock_retry(self):
-        """Mock the retry decorator for all tests in this class."""
-        with patch('src.support.retry.retry_gmail', side_effect=lambda f: f):
-            yield
-            
     def test_scopes_constant(self):
         """Test that SCOPES constant is correctly defined."""
         assert SCOPES == ['https://www.googleapis.com/auth/gmail.readonly']

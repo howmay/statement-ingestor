@@ -8,7 +8,6 @@ from email.utils import parseaddr
 from typing import List, Dict, Any, Optional
 from src.core.config import DOWNLOAD_DIR, get_bank_password
 from src.parsing.pdf.pdf_to_text import extract_text_from_pdf
-from src.support.retry import retry_gmail
 from src.support.cache import ResultCache
 from src.integrations.gmail.fetch import list_attachments
 
@@ -418,7 +417,6 @@ def _get_existing_download_by_message_attachment(
     return None
 
 
-@retry_gmail
 def download_attachment(
     service,
     message_id: str,
@@ -427,7 +425,7 @@ def download_attachment(
     subject: str = '',
 ) -> str:
     """
-    Download a single attachment from Gmail with retry mechanism.
+    Download a single attachment from Gmail.
     
     Args:
         service: Authenticated Gmail API service object.
@@ -459,7 +457,7 @@ def download_attachment(
             userId='me',
             messageId=message_id,
             id=attachment_info['attachmentId']
-        ).execute()
+        ).execute(num_retries=5)
         
         # Decode from base64
         file_data = base64.urlsafe_b64decode(attachment['data'].encode('UTF-8'))

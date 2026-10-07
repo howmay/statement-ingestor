@@ -7,14 +7,8 @@ import pytest
 
 import src.integrations.gmail.auth as gmail_auth
 
-@pytest.fixture(autouse=True)
-def disable_retry_sleep(monkeypatch):
-    # Avoid waiting when retry wrappers are active.
-    monkeypatch.setattr("src.support.retry.time.sleep", lambda *_: None)
-
 def _wrapped_get_gmail_service():
-    # get_gmail_service is decorated; test core logic directly.
-    return gmail_auth.get_gmail_service.__wrapped__
+    return gmail_auth.get_gmail_service
 
 def test_is_json_token_path_and_atomic_writes(tmp_path):
     assert gmail_auth._is_json_token_path("token.json") is True

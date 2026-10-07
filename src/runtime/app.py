@@ -185,7 +185,7 @@ class GmailExpenseParserApp:
         self.logger.info("Step 1: Authenticating with Gmail API...")
         try:
             self.service = get_gmail_service()
-            profile = self.service.users().getProfile(userId='me').execute()
+            profile = self.service.users().getProfile(userId='me').execute(num_retries=5)
             self.user_email = profile.get('emailAddress')
             self.logger.info(f"✓ Authenticated as: {self.user_email}")
             return True

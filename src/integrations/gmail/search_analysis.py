@@ -71,14 +71,14 @@ def fetch_attachment_email_records(
             q=query,
             maxResults=page_size,
             pageToken=page_token,
-        ).execute()
+        ).execute(num_retries=5)
 
         for msg in response.get("messages", []):
             detail = service.users().messages().get(
                 userId="me",
                 id=msg["id"],
                 format="full",
-            ).execute()
+            ).execute(num_retries=5)
             records.append(_message_to_record(detail))
             if max_results is not None and len(records) >= max_results:
                 break

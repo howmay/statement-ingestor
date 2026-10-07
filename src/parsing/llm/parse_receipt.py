@@ -3,26 +3,11 @@ import json
 import logging
 import re
 import time
-from typing import Dict, List, Any, Optional, Tuple
+from typing import Dict, List, Any, Optional
 from datetime import datetime
 
-# Import enhanced utilities
-from src.support.retry_enhanced import enhanced_retry_openai, JSONTruncationError
 from src.parsing.banks.factory import parse_with_bank_factory
-from src.parsing.llm.chunking import (
-    MAX_CHUNK_SIZE,
-    MIN_TRANSACTIONS_PER_CHUNK,
-    should_enable_chunking as _should_enable_chunking_impl,
-    calculate_max_tokens as _calculate_max_tokens_impl,
-    chunk_text_by_transactions as _chunk_text_by_transactions_impl,
-    merge_transaction_results as _merge_transaction_results_impl,
-)
-from src.parsing.llm.json_repair import (
-    extract_json_payload as _extract_json_payload_impl,
-    fix_truncated_json as _fix_truncated_json_impl,
-    finalize_fixed_json as _finalize_fixed_json_impl,
-    fix_truncated_json_enhanced as _fix_truncated_json_enhanced_impl,
-)
+from src.parsing.llm import chunking, json_repair
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +15,25 @@ logger = logging.getLogger(__name__)
 class ReceiptParsingError(Exception):
     """Custom exception for receipt parsing errors."""
     pass
+
+
+class JSONTruncationError(ReceiptParsingError):
+    """LLM output hit max_tokens or could not be decoded."""
+
+
+_SOURCE_BY_TAG = (
+    ('hsbc', 'HSBC Bank'),
+    ('fubon', 'Fubon Bank'),
+    ('esunbank', 'Esun Bank'),
+    ('apple', 'Apple'),
+    ('uber', 'Uber'),
+    ('amazon', 'Amazon'),
+)
+
+
+def _source_from_tag(source_info: Dict[str, Any]) -> str:
+    sender_tag = source_info.get('sender_tag', 'unknown')
+    return next((label for tag, label in _SOURCE_BY_TAG if tag in sender_tag), "unknown")
 
 
 # Trust a matched deterministic bank parser; the LLM is not a fallback for it.
@@ -79,11 +83,6 @@ def _get_llm_runtime_config() -> Dict[str, Any]:
         "model": model,
         "supports_response_format": True,
     }
-
-
-def _extract_json_payload(response_text: str) -> str:
-    """Backward-compatible wrapper for JSON payload extraction."""
-    return _extract_json_payload_impl(response_text)
 
 
 def parse_receipt_text(text: str, source_info: Dict[str, Any] = None) -> List[Dict[str, Any]]:
@@ -158,49 +157,6 @@ def parse_receipt_text(text: str, source_info: Dict[str, Any] = None) -> List[Di
         return _parse_with_heuristics(text, source_info)
 
 
-def _fix_truncated_json(json_str: str) -> Optional[str]:
-    """Backward-compatible wrapper for truncated JSON repair."""
-    return _fix_truncated_json_impl(json_str)
-
-
-def _finalize_fixed_json(parsed: Any, fixed_str: str, context: Dict[str, Any] = None) -> str:
-    """Backward-compatible wrapper for fixed JSON post-processing."""
-    return _finalize_fixed_json_impl(parsed, fixed_str, context)
-
-
-def _fix_truncated_json_enhanced(json_str: str, context: Dict[str, Any] = None) -> Optional[str]:
-    """Backward-compatible wrapper for enhanced JSON repair."""
-    return _fix_truncated_json_enhanced_impl(json_str, context)
-
-
-def _chunk_text_by_transactions(
-    text: str,
-    max_chunk_size: int = 3500,
-    min_transactions_per_chunk: int = 5,
-) -> List[Tuple[str, List[int]]]:
-    """Backward-compatible wrapper for transaction chunking."""
-    return _chunk_text_by_transactions_impl(
-        text,
-        max_chunk_size=max_chunk_size,
-        min_transactions_per_chunk=min_transactions_per_chunk,
-    )
-
-
-def _should_enable_chunking(text: str, source_info: Dict[str, Any], force: bool = False) -> bool:
-    """Backward-compatible wrapper for chunking decision."""
-    return _should_enable_chunking_impl(text, source_info, force=force)
-
-
-def _calculate_max_tokens(text_length: int) -> int:
-    """Backward-compatible wrapper for max token calculation."""
-    return _calculate_max_tokens_impl(text_length)
-
-
-def _merge_transaction_results(all_transactions: List[List[Dict[str, Any]]]) -> List[Dict[str, Any]]:
-    """Backward-compatible wrapper for merging chunked transactions."""
-    return _merge_transaction_results_impl(all_transactions)
-
-
 def _parse_with_adaptive_strategy(
     text: str,
     source_info: Dict[str, Any],
@@ -214,39 +170,45 @@ def _parse_with_adaptive_strategy(
     user_prompt_template = "Extract transactions from {source} text:\n{text}"
     filename = source_info.get('filename') or source_info.get('filepath') or '<unknown>'
 
-    if _should_enable_chunking(text, source_info, force=force_chunking):
-        chunks = _chunk_text_by_transactions(
+    if chunking.should_enable_chunking(text, source_info, force=force_chunking):
+        max_chunk_size = (
+            max(500, min(chunking.MAX_CHUNK_SIZE, len(text)) // 2) if force_chunking else chunking.MAX_CHUNK_SIZE
+        )
+        chunks = chunking.chunk_text_by_transactions(
             text,
-            max_chunk_size=MAX_CHUNK_SIZE,
-            min_transactions_per_chunk=MIN_TRANSACTIONS_PER_CHUNK,
+            max_chunk_size=max_chunk_size,
+            min_transactions_per_chunk=chunking.MIN_TRANSACTIONS_PER_CHUNK,
         )
         logger.info(f"Split text into {len(chunks)} chunks for {filename}")
-        logger.info(f"Chunking enabled for {filename}, processing {len(chunks)} chunks")
 
         all_transactions = []
         for i, (chunk_text, _) in enumerate(chunks):
             user_prompt = user_prompt_template.format(text=chunk_text, source=source_label)
             try:
                 logger.info(f"Processing chunk {i+1}/{len(chunks)} for {filename}")
-                result_text = call_llm(user_prompt, _calculate_max_tokens(len(chunk_text)))
-                json_payload = _extract_json_payload(result_text)
-                fixed_json = _fix_truncated_json_enhanced(json_payload, {'expected_keys': ['transactions']})
+                result_text = call_llm(user_prompt, chunking.calculate_max_tokens(len(chunk_text)))
+                json_payload = json_repair.extract_json_payload(result_text)
+                fixed_json = json_repair.fix_truncated_json_enhanced(json_payload, {'expected_keys': ['transactions']})
                 parsed = json.loads(fixed_json or json_payload)
                 all_transactions.append(
                     _extract_and_validate_transactions(parsed, source_info, chunk_text, model_name, provider_name)
                 )
+            except JSONTruncationError as e:
+                if not force_chunking:
+                    raise
+                logger.error(f"Chunk {i+1} truncated for {filename}: {e}")
             except Exception as e:
-                logger.error(f"Chunk {i+1} failed after retries for {filename}: {e}")
+                logger.error(f"Chunk {i+1} failed for {filename}: {e}")
 
         if not all_transactions:
             raise ReceiptParsingError("All chunks failed to parse")
 
-        return _merge_transaction_results(all_transactions)
+        return chunking.merge_transaction_results(all_transactions)
 
     user_prompt = user_prompt_template.format(text=text, source=source_label)
     result_text = call_llm(user_prompt, 4000)
-    json_payload = _extract_json_payload(result_text)
-    fixed_json = _fix_truncated_json_enhanced(json_payload, {'expected_keys': ['transactions']})
+    json_payload = json_repair.extract_json_payload(result_text)
+    fixed_json = json_repair.fix_truncated_json_enhanced(json_payload, {'expected_keys': ['transactions']})
 
     try:
         parsed = json.loads(fixed_json or json_payload)
@@ -256,12 +218,10 @@ def _parse_with_adaptive_strategy(
     return _extract_and_validate_transactions(parsed, source_info, text, model_name, provider_name)
 
 
-@enhanced_retry_openai
 def _parse_with_openai_enhanced(
     text: str,
     source_info: Dict[str, Any],
     llm_config: Optional[Dict[str, Any]] = None,
-    **kwargs
 ) -> List[Dict[str, Any]]:
     """LLM parsing via OpenAI-compatible API (OpenAI cloud or local Ollama)."""
     try:
@@ -277,25 +237,10 @@ def _parse_with_openai_enhanced(
     if cfg.get("base_url"):
         client_kwargs["base_url"] = cfg.get("base_url")
 
-    client = OpenAI(**client_kwargs)
+    client = OpenAI(max_retries=3, **client_kwargs)
     model_name = cfg.get("model", "gpt-4o-mini")
     provider_name = cfg.get("provider", "openai")
     supports_response_format = bool(cfg.get("supports_response_format", False))
-
-    sender_tag = source_info.get('sender_tag', 'unknown')
-    source = "unknown"
-    if 'hsbc' in sender_tag:
-        source = "HSBC Bank"
-    elif 'fubon' in sender_tag:
-        source = "Fubon Bank"
-    elif 'esunbank' in sender_tag:
-        source = "Esun Bank"
-    elif 'apple' in sender_tag:
-        source = "Apple"
-    elif 'uber' in sender_tag:
-        source = "Uber"
-    elif 'amazon' in sender_tag:
-        source = "Amazon"
 
     system_prompt = (
         "You are a financial data extraction expert. "
@@ -305,8 +250,7 @@ def _parse_with_openai_enhanced(
         "\"expense_name\":\"...\",\"expense_type\":\"Other\",\"source\":\"...\",\"confidence\":0.9}]}."
     )
 
-    @enhanced_retry_openai
-    def call_llm_with_retry(prompt_text: str, max_tokens: int) -> str:
+    def call_llm(prompt_text: str, max_tokens: int) -> str:
         api_kwargs = {
             "model": model_name,
             "messages": [
@@ -320,30 +264,26 @@ def _parse_with_openai_enhanced(
             api_kwargs["response_format"] = {"type": "json_object"}
 
         response = client.chat.completions.create(**api_kwargs)
-        content = response.choices[0].message.content or ""
+        if response.choices[0].finish_reason == 'length':
+            raise JSONTruncationError("LLM response hit max_tokens")
+        return response.choices[0].message.content or ""
 
-        # Check for truncation
-        if not content.strip().endswith('}') and not content.strip().endswith(']'):
-            try:
-                json.loads(content)
-            except json.JSONDecodeError:
-                logger.warning("Detected potentially truncated JSON response")
-                raise JSONTruncationError("JSON response appears truncated")
-
-        return content
-
-    # Check if we should force chunking (e.g. from a retry context)
-    force_chunking = kwargs.get('context', {}).get('force_chunking', False)
-
-    return _parse_with_adaptive_strategy(
-        text=text,
-        source_info=source_info,
-        source_label=source,
-        model_name=model_name,
-        provider_name=provider_name,
-        call_llm=call_llm_with_retry,
-        force_chunking=force_chunking,
-    )
+    filename = source_info.get('filename') or source_info.get('filepath') or '<unknown>'
+    for force_chunking in (False, True):
+        try:
+            return _parse_with_adaptive_strategy(
+                text=text,
+                source_info=source_info,
+                source_label=_source_from_tag(source_info),
+                model_name=model_name,
+                provider_name=provider_name,
+                call_llm=call_llm,
+                force_chunking=force_chunking,
+            )
+        except JSONTruncationError:
+            if force_chunking:
+                raise
+            logger.warning(f"JSON response truncated for {filename}; retrying with forced chunking")
 
 
 def _extract_and_validate_transactions(
@@ -391,11 +331,7 @@ def _parse_with_heuristics(text: str, source_info: Dict[str, Any]) -> List[Dict[
 
 def _extract_multiple_transactions_heuristic(text: str, source_info: Dict[str, Any]) -> List[Dict[str, Any]]:
     """Extract multiple via regex."""
-    sender_tag = source_info.get('sender_tag', 'unknown')
-    source = "unknown"
-    if 'hsbc' in sender_tag: source = "HSBC Bank"
-    elif 'fubon' in sender_tag: source = "Fubon Bank"
-    elif 'esunbank' in sender_tag: source = "Esun Bank"
+    source = _source_from_tag(source_info)
     
     date_patterns = [r'(\d{4})[-/](\d{1,2})[-/](\d{1,2})', r'(\d{3})[-/](\d{1,2})[-/](\d{1,2})', r'(\d{1,2})[-/](\d{1,2})[-/](\d{4})', r'(\d{4})年(\d{1,2})月(\d{1,2})日']
     amount_patterns = [(r'(?:NT\$|TWD)\s*(-?[0-9,]+(?:\.[0-9]+)?)', 'TWD'), (r'(?:US\$|USD)\s*(-?[0-9,]+(?:\.[0-9]+)?)', 'USD')]
@@ -434,11 +370,7 @@ def _extract_multiple_transactions_heuristic(text: str, source_info: Dict[str, A
 
 def _extract_single_transaction_heuristic(text: str, source_info: Dict[str, Any]) -> Dict[str, Any]:
     """Single transaction regex."""
-    sender_tag = source_info.get('sender_tag', 'unknown')
-    source = "unknown"
-    if 'hsbc' in sender_tag: source = "HSBC Bank"
-    elif 'fubon' in sender_tag: source = "Fubon Bank"
-    elif 'esunbank' in sender_tag: source = "Esun Bank"
+    source = _source_from_tag(source_info)
     result = {'date': None, 'amount': None, 'currency': 'TWD', 'expense_name': 'Bank Transaction', 'expense_type': 'Bills', 'source': source, 'confidence': 0.3}
     match = re.search(r'(\d{4})[-/](\d{1,2})[-/](\d{1,2})', text[:1000])
     if match: result['date'] = f"{match.group(1)}-{int(match.group(2)):02d}-{int(match.group(3)):02d}"
@@ -472,16 +404,6 @@ def _validate_and_normalize_transaction(parsed: Dict[str, Any], source_info: Dic
         parsed['expense_type'] = 'Other'
     parsed['confidence'] = float(parsed.get('confidence', 0.5))
     return parsed
-
-
-def parse_multiple_receipts(texts: List[str], source_infos: List[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
-    """Parse list."""
-    if source_infos is None: source_infos = [{} for _ in range(len(texts))]
-    all_results = []
-    for t, s in zip(texts, source_infos):
-        try: all_results.extend(parse_receipt_text(t, s))
-        except Exception as e: logger.error(f"Error: {e}")
-    return all_results
 
 
 if __name__ == '__main__':

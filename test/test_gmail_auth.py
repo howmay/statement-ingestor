@@ -26,12 +26,6 @@ from src.integrations.gmail.auth import (
 class TestGmailAuth:
     """Test suite for Gmail authentication functions."""
     
-    @pytest.fixture(autouse=True)
-    def mock_retry(self):
-        """Mock the retry decorator for all tests in this class."""
-        with patch('src.support.retry.retry_gmail', side_effect=lambda f: f):
-            yield
-            
     def test_test_token_usable_success(self):
         """Test token usability check with valid credentials."""
         # Create mock credentials

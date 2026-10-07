@@ -16,12 +16,6 @@ from src.integrations.gmail.downloads import extract_sender_tag, download_attach
 class TestDownloadPDFs:
     """Test suite for PDF download functions."""
     
-    @pytest.fixture(autouse=True)
-    def mock_retry(self):
-        """Mock the retry decorator for all tests in this class."""
-        with patch('src.support.retry.retry_gmail', side_effect=lambda f: f):
-            yield
-
     def test_extract_sender_tag(self):
         """Test extracting sender tag from email address."""
         assert extract_sender_tag("service@mail.hsbc.com.sg") == "hsbc_sg_mail"

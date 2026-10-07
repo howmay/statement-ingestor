@@ -125,8 +125,3 @@ def fix_truncated_json_enhanced(json_str: str, context: Optional[Dict[str, Any]]
                 return finalize_fixed_json(parsed, fixed, context)
 
     return None
-
-
-def fix_truncated_json(json_str: str) -> Optional[str]:
-    """Compatibility wrapper for legacy imports."""
-    return fix_truncated_json_enhanced(json_str)

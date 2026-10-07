@@ -10,7 +10,6 @@ from google.auth.transport.requests import AuthorizedSession
 from googleapiclient.discovery import build
 import logging
 from src.core.config import OAUTH_CLIENT_SECRETS_PATH, OAUTH_TOKEN_PATH, OAUTH_PORT
-from src.support.retry import retry_gmail
 
 logger = logging.getLogger(__name__)
 
@@ -108,7 +107,7 @@ def _test_token_usable(creds):
     """
     try:
         service = build('gmail', 'v1', credentials=creds)
-        service.users().getProfile(userId='me').execute()
+        service.users().getProfile(userId='me').execute(num_retries=5)
         return True
     except Exception as e:
         logger.warning(f"Token usability test failed: {e}")
@@ -156,11 +155,10 @@ def _get_oauth2_client_id_secret():
         "or create a client_secrets.json file."
     )
 
-@retry_gmail
 def get_gmail_service(client_secrets_path=None, token_path=None, port=None, 
                       manual_token=None, oob_callback=False):
     """
-    Authenticate and return a Gmail API service object using OAuth2 with retry mechanism.
+    Authenticate and return a Gmail API service object using OAuth2.
     
     Args:
         client_secrets_path (str): Path to client_secrets.json file.
@@ -327,7 +325,7 @@ def test_auth():
     try:
         service = get_gmail_service()
         # Call the Gmail API to verify access
-        profile = service.users().getProfile(userId='me').execute()
+        profile = service.users().getProfile(userId='me').execute(num_retries=5)
         logger.info(f"Authenticated as: {profile.get('emailAddress')}")
         return True
     except Exception as e:

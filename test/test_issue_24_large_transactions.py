@@ -13,15 +13,8 @@ from datetime import datetime
 # Add project root to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
-from src.parsing.llm.parse_receipt import (
-    parse_receipt_text,
-    _fix_truncated_json,
-    _fix_truncated_json_enhanced,
-    _chunk_text_by_transactions,
-    _should_enable_chunking,
-    _merge_transaction_results,
-    ReceiptParsingError
-)
+from src.parsing.llm import chunking, json_repair
+from src.parsing.llm.parse_receipt import parse_receipt_text, ReceiptParsingError
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -44,7 +37,7 @@ def test_json_repair_basic():
     ]
     
     for i, (input_json, expected) in enumerate(test_cases):
-        result = _fix_truncated_json_enhanced(input_json, {'expected_keys': ['transactions']})
+        result = json_repair.fix_truncated_json_enhanced(input_json, {'expected_keys': ['transactions']})
         if result:
             try:
                 parsed = json.loads(result)
@@ -80,7 +73,7 @@ def test_json_repair_complex():
       "expense_type": "Food",
       "source": "HSBC Bank"'''
     
-    fixed = _fix_truncated_json_enhanced(truncated_json, {
+    fixed = json_repair.fix_truncated_json_enhanced(truncated_json, {
         'expected_keys': ['transactions']
     })
     
@@ -113,7 +106,7 @@ def test_text_chunking():
 2026-02-23 NT$1,800.00 Clothing Store
 """
     
-    chunks = _chunk_text_by_transactions(sample_text, max_chunk_size=100, min_transactions_per_chunk=2)
+    chunks = chunking.chunk_text_by_transactions(sample_text, max_chunk_size=100, min_transactions_per_chunk=2)
     
     print(f"Number of chunks created: {len(chunks)}")
     for i, (chunk_text, indices) in enumerate(chunks):
@@ -141,7 +134,7 @@ def test_transaction_merging():
         {'date': '2024-01-03', 'amount': 200.0, 'expense_name': 'C'}
     ]
     
-    merged = _merge_transaction_results([transactions1, transactions2])
+    merged = chunking.merge_transaction_results([transactions1, transactions2])
     
     print(f"Original: 4, Merged: {len(merged)}")
     if len(merged) == 3:
@@ -162,7 +155,7 @@ def test_mock_openai_parsing():
         mock_openai_class.return_value = mock_client
         
         mock_client.chat.completions.create.return_value = MagicMock(
-            choices=[MagicMock(message=MagicMock(content=json.dumps({
+            choices=[MagicMock(finish_reason='stop', message=MagicMock(content=json.dumps({
                 "transactions": [
                     {
                         "date": "2024-01-01",

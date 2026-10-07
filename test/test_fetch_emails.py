@@ -15,12 +15,6 @@ from src.integrations.gmail.fetch import build_gmail_query, search_emails
 class TestFetchEmails:
     """Test suite for Gmail email fetching functions."""
 
-    @pytest.fixture(autouse=True)
-    def mock_retry(self):
-        """Mock the retry decorator for all tests in this class."""
-        with patch('src.support.retry.retry_gmail', side_effect=lambda f: f):
-            yield
-
     def test_build_gmail_query_single_sender_single_keyword(self):
         """Test building Gmail query with single sender and keyword."""
         senders = ["bank@example.com"]

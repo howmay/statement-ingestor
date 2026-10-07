@@ -8,12 +8,8 @@ from datetime import datetime
 from unittest.mock import MagicMock, patch
 
 import src.parsing.llm.parse_receipt as pr
-from src.parsing.llm.parse_receipt import (
-    _chunk_text_by_transactions,
-    _fix_truncated_json_enhanced,
-    _should_enable_chunking,
-    parse_receipt_text,
-)
+from src.parsing.llm import chunking, json_repair
+from src.parsing.llm.parse_receipt import parse_receipt_text
 
 
 def generate_large_hsbc_statement(num_transactions: int = 50) -> str:
@@ -43,9 +39,9 @@ def test_large_statement_chunking():
     large_text = generate_large_hsbc_statement(50)
     source_info = {'sender_tag': 'hsbc', 'sender': 'HSBC Bank'}
 
-    assert _should_enable_chunking(large_text, source_info) is True
+    assert chunking.should_enable_chunking(large_text, source_info) is True
 
-    chunks = _chunk_text_by_transactions(large_text, max_chunk_size=1000, min_transactions_per_chunk=3)
+    chunks = chunking.chunk_text_by_transactions(large_text, max_chunk_size=1000, min_transactions_per_chunk=3)
     assert len(chunks) > 1
     assert all(chunk_text for chunk_text, _ in chunks)
 
@@ -53,7 +49,7 @@ def test_large_statement_chunking():
 
 def test_truncated_json_repair():
     truncated_json = '{"transactions":[{"date":"2026-03-01","amount":1000.0,"currency":"TWD"'
-    fixed = _fix_truncated_json_enhanced(truncated_json, {'expected_keys': ['transactions']})
+    fixed = json_repair.fix_truncated_json_enhanced(truncated_json, {'expected_keys': ['transactions']})
 
     assert fixed is not None
     parsed = json.loads(fixed)
@@ -75,7 +71,7 @@ def test_mock_api_with_chunking(monkeypatch):
         mock_openai_class.return_value = mock_client
 
         mock_client.chat.completions.create.side_effect = [
-            MagicMock(choices=[MagicMock(message=MagicMock(content=json.dumps({
+            MagicMock(choices=[MagicMock(finish_reason='stop', message=MagicMock(content=json.dumps({
                 'transactions': [
                     {
                         'date': '2026-03-01',
@@ -96,39 +92,3 @@ def test_mock_api_with_chunking(monkeypatch):
 
         assert len(transactions) >= 1
         assert mock_client.chat.completions.create.call_count >= 1
-
-
-
-def test_error_handling_and_retry(monkeypatch):
-    monkeypatch.setattr(pr, "STRICT_BANK_PARSER", False)
-    monkeypatch.setattr(pr, "ALLOW_MATCHED_BANK_LLM_FALLBACK", True)
-    monkeypatch.setenv('OPENAI_API_KEY', 'test-key')
-    monkeypatch.setenv('LLM_PROVIDER', 'openai')
-
-    with patch('openai.OpenAI') as mock_openai_class:
-        mock_client = MagicMock()
-        mock_openai_class.return_value = mock_client
-
-        mock_client.chat.completions.create.side_effect = [
-            Exception('API timeout'),
-            MagicMock(choices=[MagicMock(message=MagicMock(content=json.dumps({
-                'transactions': [
-                    {
-                        'date': '2026-03-01',
-                        'amount': 1000.0,
-                        'currency': 'TWD',
-                        'expense_name': 'Test',
-                        'expense_type': 'Other',
-                        'source': 'HSBC Bank',
-                        'confidence': 0.9,
-                    }
-                ]
-            })))])
-        ]
-
-        text = '2026-03-01 NT$1000.00 Test Transaction'
-        source_info = {'sender_tag': 'hsbc', 'sender': 'HSBC Bank'}
-        transactions = parse_receipt_text(text, source_info)
-
-        assert len(transactions) == 1
-        assert mock_client.chat.completions.create.call_count >= 2

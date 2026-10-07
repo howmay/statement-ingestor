@@ -136,7 +136,7 @@ def test_parse_receipt_text_llm_failure_falls_back_to_heuristic(monkeypatch):
 
 
 def test_parse_with_adaptive_strategy_non_chunking(monkeypatch):
-    monkeypatch.setattr(pr, "_should_enable_chunking", lambda *_, **__: False)
+    monkeypatch.setattr(pr.chunking, "should_enable_chunking", lambda *_, **__: False)
 
     def fake_call_llm(prompt, max_tokens):
         assert "Extract transactions" in prompt
@@ -157,8 +157,8 @@ def test_parse_with_adaptive_strategy_non_chunking(monkeypatch):
 
 
 def test_parse_with_adaptive_strategy_chunking_and_merge(monkeypatch):
-    monkeypatch.setattr(pr, "_should_enable_chunking", lambda *_, **__: True)
-    monkeypatch.setattr(pr, "_chunk_text_by_transactions", lambda *_, **__: [("chunk1", [1]), ("chunk2", [2])])
+    monkeypatch.setattr(pr.chunking, "should_enable_chunking", lambda *_, **__: True)
+    monkeypatch.setattr(pr.chunking, "chunk_text_by_transactions", lambda *_, **__: [("chunk1", [1]), ("chunk2", [2])])
 
     responses = [
         '{"transactions":[{"date":"2026-01-01","amount":100,"currency":"TWD","expense_name":"A","expense_type":"Other","source":"Bank","confidence":0.8}]}',
@@ -187,8 +187,8 @@ def test_parse_with_adaptive_strategy_chunking_and_merge(monkeypatch):
 
 
 def test_parse_with_adaptive_strategy_all_chunks_fail(monkeypatch):
-    monkeypatch.setattr(pr, "_should_enable_chunking", lambda *_, **__: True)
-    monkeypatch.setattr(pr, "_chunk_text_by_transactions", lambda *_, **__: [("chunk1", [1])])
+    monkeypatch.setattr(pr.chunking, "should_enable_chunking", lambda *_, **__: True)
+    monkeypatch.setattr(pr.chunking, "chunk_text_by_transactions", lambda *_, **__: [("chunk1", [1])])
 
     def fake_call_llm(_prompt, _max_tokens):
         raise RuntimeError("boom")
@@ -206,7 +206,7 @@ def test_parse_with_adaptive_strategy_all_chunks_fail(monkeypatch):
 
     logged = "\n".join(str(call.args[0]) for call in mock_error.call_args_list if call.args)
     assert "wise.pdf" in logged
-    assert "Chunk 1 failed after retries" in logged
+    assert "Chunk 1 failed" in logged
 
 
 def test_extract_and_validate_transactions_paths():
@@ -275,30 +275,13 @@ def test_heuristic_extractors_and_helpers():
     assert normalized["expense_type"] == "Other"
 
 
-def test_parse_multiple_receipts_continues_on_error(monkeypatch):
-    calls = {"n": 0}
-
-    def fake_parse(text, source):
-        calls["n"] += 1
-        if text == "bad":
-            raise RuntimeError("bad")
-        return [{"expense_name": text}]
-
-    monkeypatch.setattr(pr, "parse_receipt_text", fake_parse)
-
-    out = pr.parse_multiple_receipts(["ok1", "bad", "ok2"], [{}, {}, {}])
-    assert len(out) == 2
-    assert calls["n"] == 3
-
-
 def test_parse_with_openai_enhanced_success_via_fake_client(monkeypatch):
-    # Use undecorated function body to focus on logic.
-    fn = pr._parse_with_openai_enhanced.__wrapped__
+    fn = pr._parse_with_openai_enhanced
 
     class FakeCompletions:
         def create(self, **kwargs):
             return SimpleNamespace(
-                choices=[SimpleNamespace(message=SimpleNamespace(content='{"transactions":[{"date":"2026-01-01","amount":100,"currency":"TWD","expense_name":"A","expense_type":"Other","source":"S","confidence":0.9}]}'))]
+                choices=[SimpleNamespace(message=SimpleNamespace(content='{"transactions":[{"date":"2026-01-01","amount":100,"currency":"TWD","expense_name":"A","expense_type":"Other","source":"S","confidence":0.9}]}'), finish_reason="stop")]
             )
 
     class FakeChat:
@@ -331,9 +314,70 @@ def test_parse_with_openai_enhanced_success_via_fake_client(monkeypatch):
 
 
 def test_parse_with_openai_enhanced_disabled_runtime_raises(monkeypatch):
-    fn = pr._parse_with_openai_enhanced.__wrapped__
+    fn = pr._parse_with_openai_enhanced
 
     fake_openai_module = types.SimpleNamespace(OpenAI=lambda **_: None)
     with patch.dict("sys.modules", {"openai": fake_openai_module}):
         with pytest.raises(ReceiptParsingError):
             fn(text="x", source_info={}, llm_config={"enabled": False})
+
+
+_TX_JSON = '{"transactions":[{"date":"2026-01-01","amount":100,"currency":"TWD","expense_name":"A","expense_type":"Other","source":"S","confidence":0.9}]}'
+_LLM_CONFIG = {"enabled": True, "api_key": "x", "model": "m", "provider": "openai"}
+
+
+def _fake_openai(finish_reasons):
+    """Fake OpenAI module whose responses carry the given finish_reasons in order."""
+    reasons = list(finish_reasons)
+
+    class FakeCompletions:
+        def create(self, **_kwargs):
+            return SimpleNamespace(
+                choices=[SimpleNamespace(message=SimpleNamespace(content=_TX_JSON), finish_reason=reasons.pop(0))]
+            )
+
+    class FakeOpenAI:
+        def __init__(self, **_kwargs):
+            self.chat = SimpleNamespace(completions=FakeCompletions())
+
+    return types.SimpleNamespace(OpenAI=FakeOpenAI)
+
+
+def test_truncated_json_retries_with_forced_chunking(monkeypatch):
+    sizes = []
+    real_chunk = pr.chunking.chunk_text_by_transactions
+
+    def spy_chunk(text, max_chunk_size, min_transactions_per_chunk):
+        sizes.append(max_chunk_size)
+        return real_chunk(text, max_chunk_size=max_chunk_size, min_transactions_per_chunk=min_transactions_per_chunk)
+
+    monkeypatch.setattr(pr.chunking, "chunk_text_by_transactions", spy_chunk)
+    text = "2026-01-01 NT$100.00 A\n" * 20  # 20 dates, short: first pass is single-shot
+
+    with patch.dict("sys.modules", {"openai": _fake_openai(["length", "stop", "stop", "stop", "stop", "stop"])}):
+        out = pr._parse_with_openai_enhanced(text, {"sender_tag": "hsbc"}, _LLM_CONFIG)
+
+    assert out
+    assert len(sizes) == 1  # first pass was single-shot, forced pass chunked
+    assert sizes[0] < pr.chunking.MAX_CHUNK_SIZE
+
+
+def test_first_pass_chunk_truncation_triggers_forced_pass(monkeypatch):
+    sizes = []
+    real_chunk = pr.chunking.chunk_text_by_transactions
+
+    def spy_chunk(text, max_chunk_size, min_transactions_per_chunk):
+        sizes.append(max_chunk_size)
+        return real_chunk(text, max_chunk_size=max_chunk_size, min_transactions_per_chunk=min_transactions_per_chunk)
+
+    monkeypatch.setattr(pr.chunking, "chunk_text_by_transactions", spy_chunk)
+    text = "2026-01-01 NT$100.00 A\n" * 400  # ~9.2k chars (>= 7000): first pass chunks at MAX_CHUNK_SIZE
+    assert len(text) >= 7000
+
+    with patch.dict("sys.modules", {"openai": _fake_openai(["length"] + ["stop"] * 50)}):
+        out = pr._parse_with_openai_enhanced(text, {"sender_tag": "hsbc"}, _LLM_CONFIG)
+
+    assert out
+    assert len(sizes) == 2
+    assert sizes[0] == pr.chunking.MAX_CHUNK_SIZE
+    assert sizes[1] < sizes[0]

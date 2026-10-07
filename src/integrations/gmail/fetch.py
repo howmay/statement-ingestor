@@ -1,7 +1,6 @@
 import logging
 from datetime import datetime, timedelta
 from typing import List, Dict, Any, Optional
-from src.support.retry import retry_gmail
 
 logger = logging.getLogger(__name__)
 
@@ -169,7 +168,6 @@ def _build_generic_statement_query() -> str:
     return f"{statement_query} {file_query} {exclude_query}"
 
 
-@retry_gmail
 def search_emails(
     service,
     senders=None,
@@ -180,7 +178,7 @@ def search_emails(
     date_to: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
     """
-    Search emails using Gmail API with retry mechanism.
+    Search emails using Gmail API.
     
     Args:
         service: Authenticated Gmail API service object.
@@ -246,7 +244,7 @@ def search_emails(
                 q=query,
                 maxResults=page_max_results,
                 pageToken=page_token
-            ).execute()
+            ).execute(num_retries=5)
 
             messages = response.get('messages', [])
             logger.info(f"Page {page_count}: Found {len(messages)} message(s)")
@@ -263,7 +261,7 @@ def search_emails(
                     id=msg_id,
                     format='metadata',
                     metadataHeaders=['From', 'Subject']
-                ).execute()
+                ).execute(num_retries=5)
 
                 headers = {h['name'].lower(): h['value'] for h in msg_detail.get('payload', {}).get('headers', [])}
                 sender = headers.get('from', 'Unknown')
@@ -295,7 +293,6 @@ def search_emails(
     return emails if max_results is None else emails[:max_results]
 
 
-@retry_gmail
 def list_attachments(service, message_id: str) -> List[Dict[str, Any]]:
     """
     List supported statement attachments in a message.
@@ -316,7 +313,7 @@ def list_attachments(service, message_id: str) -> List[Dict[str, Any]]:
             userId='me',
             id=message_id,
             format='full'
-        ).execute()
+        ).execute(num_retries=5)
     except Exception as e:
         logger.error(f"Error retrieving message {message_id}: {e}")
         raise
