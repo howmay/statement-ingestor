@@ -77,13 +77,19 @@ class BaseBankParser:
         Infer reference date from statement text/subject.
         Used to infer year for MM/DD style transaction rows.
         """
-        # 1) Prefer full Gregorian date in extracted text (YYYY/MM/DD)
-        m = re.search(r'(\d{4})/(\d{1,2})/(\d{1,2})', self.text)
-        if m:
-            try:
-                return datetime(int(m.group(1)), int(m.group(2)), int(m.group(3)))
-            except ValueError:
-                pass
+        # 1) Latest full date in the text (Gregorian YYYY/MM/DD or ROC YYY/MM/DD).
+        #    Statements carry their closing/due date; the latest one beats any
+        #    boilerplate date (e.g. "自2026/3/1起...") that happens to appear first.
+        candidates = []
+        for y, mo, d in re.findall(r'(?<!\d)(\d{3,4})/(\d{1,2})/(\d{1,2})(?!\d)', self.text):
+            year = int(y) + (1911 if len(y) == 3 else 0)
+            if 2000 <= year <= datetime.now().year + 1:
+                try:
+                    candidates.append(datetime(year, int(mo), int(d)))
+                except ValueError:
+                    pass
+        if candidates:
+            return max(candidates)
 
         # 2) English date patterns (e.g. 28 Feb 2024 or February 2024)
         # Pattern for "DD MMM YYYY" or "MMM YYYY"

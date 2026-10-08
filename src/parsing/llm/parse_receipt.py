@@ -110,15 +110,13 @@ def parse_receipt_text(text: str, source_info: Dict[str, Any] = None) -> List[Di
             )
             return bank_result.transactions
 
-        msg = f"Deterministic parser matched ({bank_result.parser_name}) but extracted 0 transactions."
-        
-        # Some banks explicitly warn when no transactions were found on a valid statement
-        if any(w in " ".join(bank_result.warnings).lower() for w in ["no transaction", "no consumption"]):
-            logger.info(f"{msg} Considered a valid empty statement.")
-            return []
-
-        # Trust a matched deterministic bank parser; the LLM is not a fallback for it.
-        raise ReceiptParsingError(msg)
+        # A matched bank statement with no rows is an empty month (carry-forward only,
+        # notice/advice document); never hand it to the LLM.
+        logger.warning(
+            f"Deterministic parser matched ({bank_result.parser_name}) but extracted 0 transactions; "
+            f"treating as an empty statement"
+        )
+        return []
 
     # 2) LLM path for non-bank text
     llm_config = _get_llm_runtime_config()
@@ -306,7 +304,9 @@ def _parse_with_heuristics(text: str, source_info: Dict[str, Any]) -> List[Dict[
     logger.info("Using heuristics")
     transactions = _extract_multiple_transactions_heuristic(text, source_info)
     if not transactions:
-        transactions = [_extract_single_transaction_heuristic(text, source_info)]
+        single = _extract_single_transaction_heuristic(text, source_info)
+        # No amount anywhere in the text means there is nothing to export.
+        transactions = [single] if single.get('amount') is not None else []
     return [_validate_and_normalize_transaction(tx, source_info) for tx in transactions]
 
 

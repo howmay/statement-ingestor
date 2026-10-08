@@ -1,4 +1,5 @@
 import re
+from datetime import datetime
 from typing import Dict, List
 
 from .base import BaseBankParser, BankParseResult, classify_expense_type
@@ -132,6 +133,12 @@ class FubonCreditCardParser(BaseBankParser):
         r'^(?P<tx_md>\d{1,2}/\d{1,2})\s+(?P<body>.+?)$'
     )
 
+    # Current layout (ROC dates, trailing TWD column):
+    # 115/07/03 UBER PENDING 166117 115/07/08 1150706/ HKD 50.30/ NLD 205
+    # 115/08/01 全家便利商店-桃園高鐵一店 115/08/03 TWD 25
+    LINE_ROC = re.compile(r'^(?P<roc>\d{3}/\d{1,2}/\d{1,2})\s+(?P<body>.+?)$')
+    ROC_POSTING_DATE = re.compile(r'\s+\d{3}/\d{1,2}/\d{1,2}\b')
+
     CURRENCY_AMOUNT_PATTERN = re.compile(
         r'(?P<currency>TWD|NTD|USD|SGD|HKD|JPY)\s*(?P<amount>-?[0-9,]+(?:\.[0-9]+)?)'
     )
@@ -157,9 +164,18 @@ class FubonCreditCardParser(BaseBankParser):
 
             tx_md = None
             body = None
+            tx_date = None
 
+            m_roc = self.LINE_ROC.match(line)
             m2 = self.LINE_TWO_DATES.match(line)
-            if m2:
+            if m_roc:
+                y, mo, d = m_roc.group('roc').split('/')
+                try:
+                    tx_date = datetime(int(y) + 1911, int(mo), int(d)).strftime('%Y-%m-%d')
+                except ValueError:
+                    continue
+                body = m_roc.group('body').strip()
+            elif m2:
                 tx_md = m2.group('tx_md')
                 body = m2.group('body').strip()
             else:
@@ -168,17 +184,24 @@ class FubonCreditCardParser(BaseBankParser):
                     tx_md = m1.group('tx_md')
                     body = m1.group('body').strip()
 
-            if not tx_md or not body:
+            if not body or (not tx_md and not tx_date):
                 continue
 
-            tx_date = self._month_day_to_iso(tx_md)
+            if tx_md:
+                tx_date = self._month_day_to_iso(tx_md)
 
             amount = None
             currency = self.CURRENCY
             desc = body
 
             curr_matches = list(self.CURRENCY_AMOUNT_PATTERN.finditer(body))
-            if curr_matches:
+            if m_roc:
+                # Amount is always the trailing TWD column; description ends at the posting date.
+                am = self.TRAILING_AMOUNT_PATTERN.search(body)
+                if am:
+                    amount = self._parse_amount(am.group('amount'))
+                    desc = self.ROC_POSTING_DATE.split(body)[0].strip() or body
+            elif curr_matches:
                 chosen = curr_matches[-1]
                 raw_currency = chosen.group('currency')
                 currency = 'TWD' if raw_currency == 'NTD' else raw_currency

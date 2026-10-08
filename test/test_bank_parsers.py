@@ -597,3 +597,38 @@ def test_esun_no_consumption_data():
     assert result.matched
     assert len(result.transactions) == 0
     # 這裡不應拋出錯誤，且應該被視為成功的解析 (matched=True)
+
+
+def test_reference_date_prefers_latest_full_date_over_boilerplate():
+    """Esun 115/07 statement: a boilerplate '2026/3/1' must not pull August rows into 2025."""
+    from src.parsing.banks.esun import EsunCardParser
+    text = (
+        "這是您 115年07月 信用卡帳單\n"
+        "115/09/07 7.88%\n"
+        "115/08/21 10,000 / 100,000 元\n"
+        "07/26 07/30 Ｐｉ－ＰＣＨＯＭＥ２４Ｈ購物 TWD 4,663\n"
+        "08/05 08/10 Ｐｉ－ＰＣＨＯＭＥ TWD 2,234\n"
+        "※玉山U Bear信用卡自2026/3/1起國內外一般消費回饋調整\n"
+    )
+    result = EsunCardParser(text, {"sender_tag": "esunbank", "subject": "玉山信用卡電子帳單"}).parse()
+    assert [t["date"] for t in result.transactions] == ["2026-07-26", "2026-08-05"]
+
+
+def test_fubon_credit_card_parses_roc_dated_rows():
+    """Current Fubon card layout: YYY/MM/DD desc YYY/MM/DD [fx] TWD amount, amount is the trailing TWD column."""
+    from src.parsing.banks.fubon import FubonCreditCardParser
+    text = (
+        "消費日期 消費說明 入帳日期 外幣折算日/幣別 外幣金額/消費地 台幣金額\n"
+        "JCB晶緻正卡末４碼3074\n"
+        "115/07/03 UBER PENDING 166117 115/07/08 1150706/ HKD 50.30/ NLD 205\n"
+        "115/07/03 國外交易服務費（簽帳 205 ) 115/07/08 TWD 3\n"
+        "115/08/01 全家便利商店-桃園高鐵一店 115/08/03 TWD 25\n"
+        "本期應繳金額 692\n"
+    )
+    result = FubonCreditCardParser(text, {"sender_tag": "fubon_tw", "subject": "2026年8月信用卡帳單"}).parse()
+    rows = [(t["date"], t["amount"], t["currency"], t["expense_name"]) for t in result.transactions]
+    assert rows == [
+        ("2026-07-03", 205.0, "TWD", "UBER PENDING 166117"),
+        ("2026-07-03", 3.0, "TWD", "國外交易服務費（簽帳 205 )"),
+        ("2026-08-01", 25.0, "TWD", "全家便利商店-桃園高鐵一店"),
+    ]

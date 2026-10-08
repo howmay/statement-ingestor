@@ -197,9 +197,10 @@ def export_extracted_texts_to_csv(extracted_texts: List[Dict[str, Any]], output_
     rows: List[Dict[str, Any]] = []
 
     for item in extracted_texts:
-        source_filename = item.get('filename', 'unknown.pdf')
-        sender_tag = item.get('sender_tag', 'unknown')
-        subject = item.get('subject', '')
+        info = item.get('file_info') or item  # app passes metadata under file_info
+        source_filename = info.get('filename') or os.path.basename(info.get('filepath', '')) or 'unknown.pdf'
+        sender_tag = info.get('sender_tag', 'unknown')
+        subject = info.get('subject', '')
         text = item.get('text', '') or ''
         file_char_count = len(text)
 

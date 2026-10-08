@@ -164,12 +164,11 @@ class TestCSVWriter:
 
     def test_export_extracted_texts_to_csv(self, tmp_path):
         """Test exporting extracted texts to CSV."""
+        # Shape produced by GmailExpenseParserApp.extract_texts: metadata lives under file_info.
         extracted_texts = [
             {
                 'text': 'Sample extracted text',
-                'filename': 'test.pdf',
-                'sender_tag': 'bank',
-                'subject': 'Test Subject',
+                'file_info': {'filename': 'test.pdf', 'sender_tag': 'bank', 'subject': 'Test Subject'},
             }
         ]
 

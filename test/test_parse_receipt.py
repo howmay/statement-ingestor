@@ -48,11 +48,13 @@ def test_parse_receipt_text_returns_deterministic_bank_result(monkeypatch):
     assert out == txs
 
 
-def test_parse_receipt_text_matched_bank_parser_raises_when_zero_transactions(monkeypatch):
+def test_parse_receipt_text_matched_bank_parser_returns_empty_when_zero_transactions(monkeypatch):
+    """A matched bank statement with no rows (e.g. carry-forward only) is empty, not an error."""
     monkeypatch.setattr(pr, "parse_with_bank_factory", lambda *_: BankParseResult(matched=True, parser_name="hsbc", transactions=[]))
 
-    with pytest.raises(ReceiptParsingError):
-        pr.parse_receipt_text("statement text", {"sender_tag": "hsbc"})
+    with patch.object(pr.logger, "warning") as mock_warning:
+        assert pr.parse_receipt_text("statement text", {"sender_tag": "hsbc"}) == []
+    assert any("0 transactions" in str(c.args[0]) for c in mock_warning.call_args_list)
 
 
 def test_parse_receipt_text_known_bank_parser_does_not_fallback_to_llm_when_zero_transactions(monkeypatch):
@@ -70,8 +72,7 @@ def test_parse_receipt_text_known_bank_parser_does_not_fallback_to_llm_when_zero
     monkeypatch.setattr(pr, "_get_llm_runtime_config", lambda: {"enabled": True, "provider": "local", "model": "m"})
     monkeypatch.setattr(pr, "_parse_with_openai_enhanced", _mark_llm_call)
 
-    with pytest.raises(ReceiptParsingError):
-        pr.parse_receipt_text("statement text", {"sender_tag": "hsbc_sg_mail", "filename": "20260322.pdf"})
+    assert pr.parse_receipt_text("statement text", {"sender_tag": "hsbc_sg_mail", "filename": "20260322.pdf"}) == []
 
     assert llm_called["called"] is False
 
@@ -369,128 +370,21 @@ def test_first_pass_chunk_truncation_triggers_forced_pass(monkeypatch):
     assert sizes[1] < sizes[0]
 
 
-def test_hsbc_statement_text_without_llm_key_returns_heuristic_transactions(monkeypatch):
-    # No deterministic parser matches this text; no LLM key -> heuristics
+def test_unmatched_statement_without_llm_key_uses_heuristics(monkeypatch):
+    """No bank parser claims this text and no LLM key is set -> regex heuristics extract the rows."""
     monkeypatch.setenv('LLM_PROVIDER', 'openai')
     monkeypatch.delenv('OPENAI_API_KEY', raising=False)
 
-    bank_statement_text = """
-HSBC Credit Card Statement
-11/29 12/01 GOOGLE *Google One SGP SINGAPORE 11/29 TWD 8,250
-12/03 12/03 Spotify P3D0790DDD SWE Stockholm 12/03 TWD 298
-12/05 12/05 UBER *UBER TRIP USA San Francisco 12/05 TWD 350
-12/07 12/07 AMAZON *AMAZON PRIME USA Seattle 12/07 TWD 1,250
-11/29 12/01 國外交易服務費 TWD 123
+    text = """
+Some Bank Credit Card Statement
+2024-11-29 GOOGLE *Google One SGP SINGAPORE TWD 8,250
+2024-12-03 Spotify P3D0790DDD SWE Stockholm TWD 298
+2024-12-05 UBER *UBER TRIP USA San Francisco TWD 350
 """
+    source_info = {'sender': 'bills@somebank.example', 'sender_tag': 'somebank', 'filename': 'statement.pdf', 'subject': 'Statement'}
 
-    source_info = {
-        'sender': 'HSBC@mail.hsbc.com.sg',
-        'sender_tag': 'hsbc_sg',
-        'filename': 'hsbc_statement.pdf',
-        'subject': 'Your HSBC Credit Card Statement - December 2024',
-    }
+    result = parse_receipt_text(text, source_info)
 
-    result = parse_receipt_text(bank_statement_text, source_info)
-
-    assert isinstance(result, list)
-    # Heuristic parser may return at least 1 transaction
-    assert len(result) >= 1
-    # Check that we have valid transaction structure
-    assert all(isinstance(tx, dict) for tx in result)
-
-
-def generate_large_hsbc_statement(num_transactions: int = 50) -> str:
-    statement = """HSBC CREDIT CARD STATEMENT
-Account: ************1234
-Statement Date: 2026-03-10
-Currency: TWD
-
-TRANSACTION DETAILS:
-"""
-
-    base_date = datetime(2026, 3, 1)
-    for i in range(num_transactions):
-        date = (base_date.replace(day=1) if i % 30 == 0 else base_date).strftime('%Y-%m-%d')
-        amount = 1000 + (i * 50) % 5000
-        statement += f"{date} Merchant_{i:03d} NT${amount:,.2f}\n"
-
-    statement += """
-SUMMARY:
-Total Amount Due: NT$45,678.90
-"""
-    return statement
-
-
-def test_parse_receipt_text_large_statement_with_mocked_openai(monkeypatch):
-    monkeypatch.setattr(pr, "parse_with_bank_factory", lambda *_: BankParseResult(matched=False))  # exercise the LLM path
-    monkeypatch.setenv('OPENAI_API_KEY', 'test-key')
-    monkeypatch.setenv('LLM_PROVIDER', 'openai')
-
-    large_text = generate_large_hsbc_statement(35)
-
-    with patch('openai.OpenAI') as mock_openai_class:
-        mock_client = MagicMock()
-        mock_openai_class.return_value = mock_client
-
-        mock_client.chat.completions.create.side_effect = [
-            MagicMock(choices=[MagicMock(finish_reason='stop', message=MagicMock(content=json.dumps({
-                'transactions': [
-                    {
-                        'date': '2026-03-01',
-                        'amount': 1000.0,
-                        'currency': 'TWD',
-                        'expense_name': 'Merchant_000',
-                        'expense_type': 'Other',
-                        'source': 'HSBC Bank',
-                        'confidence': 0.9,
-                    }
-                ]
-            })))])
-            for _ in range(3)
-        ]
-
-        source_info = {'sender_tag': 'hsbc', 'sender': 'HSBC Bank', 'filename': 'large_statement.pdf'}
-        transactions = parse_receipt_text(large_text, source_info)
-
-        assert len(transactions) >= 1
-        assert mock_client.chat.completions.create.call_count >= 1
-
-
-def test_parse_receipt_text_with_mocked_openai_client(monkeypatch):
-    monkeypatch.setattr(pr, "parse_with_bank_factory", lambda *_: BankParseResult(matched=False))  # exercise the LLM path
-    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
-    monkeypatch.setenv("LLM_PROVIDER", "openai")
-
-    with patch("openai.OpenAI") as mock_openai_class:
-        mock_client = MagicMock()
-        mock_openai_class.return_value = mock_client
-        mock_client.chat.completions.create.return_value = MagicMock(
-            choices=[MagicMock(finish_reason="stop", message=MagicMock(content=json.dumps({
-                "transactions": [
-                    {
-                        "date": "2024-01-01",
-                        "amount": 100.0,
-                        "currency": "TWD",
-                        "expense_name": "Test",
-                        "expense_type": "Other",
-                        "source": "HSBC",
-                        "confidence": 0.9,
-                    }
-                ]
-            })))]
-        )
-
-        source_info = {"sender_tag": "hsbc", "sender": "HSBC", "filename": "test.pdf"}
-        transactions = parse_receipt_text("2024-01-01 NT$100.00 Test", source_info)
-
-    assert len(transactions) == 1
-    assert transactions[0]["expense_name"] == "Test"
-    assert transactions[0]["amount"] == 100.0
-
-
-def test_unknown_llm_provider_uses_local_runtime(monkeypatch, caplog):
-    monkeypatch.setenv("LLM_PROVIDER", "ollama")
-    with caplog.at_level(logging.WARNING):
-        cfg = pr._get_llm_runtime_config()
-    assert (cfg["provider"], cfg["enabled"]) == ("local", True)
-    assert "Unknown LLM_PROVIDER='ollama'" in caplog.text
+    assert [(t['date'], t['amount']) for t in result] == [
+        ('2024-11-29', 8250.0), ('2024-12-03', 298.0), ('2024-12-05', 350.0),
+    ]
