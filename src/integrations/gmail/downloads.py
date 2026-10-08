@@ -309,10 +309,16 @@ def build_pdf_filename_by_sender(
     original_stem = os.path.splitext(os.path.basename(original_filename or 'statement'))[0]
 
     hint_text = " ".join(part for part in [subject, original_filename] if part)
-    extracted_hint = _extract_pdf_text_hint(file_data, sender, ext)
-    sender_label = _infer_bank_label(hint_text) or _infer_bank_label(extracted_hint) or extract_sender_display_name(sender)
-    statement_type = _infer_statement_type(hint_text) or _infer_statement_type(extracted_hint)
-    year_month = _extract_year_month(hint_text) or _extract_year_month(extracted_hint)
+    statement_type = _infer_statement_type(hint_text)
+    year_month = _extract_year_month(hint_text)
+    sender_label = _infer_bank_label(hint_text)
+    if not (statement_type and year_month):
+        # Subject/filename were not enough: open the PDF (slow: decrypt + text layer).
+        extracted_hint = _extract_pdf_text_hint(file_data, sender, ext)
+        sender_label = sender_label or _infer_bank_label(extracted_hint)
+        statement_type = statement_type or _infer_statement_type(extracted_hint)
+        year_month = year_month or _extract_year_month(extracted_hint)
+    sender_label = sender_label or extract_sender_display_name(sender)
 
     if statement_type and year_month:
         statement_label = f"{statement_type}_{year_month}"

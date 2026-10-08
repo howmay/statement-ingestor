@@ -98,3 +98,17 @@ def test_downloaded_path_index_tolerates_non_dict_or_truncated(tmp_path, content
     assert cache.get_downloaded_path("m1/a.pdf/3") is None
     cache.set_downloaded_path("m1/a.pdf/3", str(f))
     assert cache.get_downloaded_path("m1/a.pdf/3") == str(f)
+
+
+def test_download_index_survives_concurrent_writers(tmp_path):
+    """Four threads indexing at once must not lose each other's entries."""
+    import threading
+    from src.support.cache import ResultCache
+    cache = ResultCache(cache_dir=str(tmp_path))
+    (tmp_path / 'f.pdf').write_bytes(b'x')
+    def work(i):
+        for j in range(20):
+            cache.set_downloaded_path(f'msg{i}/{j}', str(tmp_path / 'f.pdf'))
+    threads = [threading.Thread(target=work, args=(i,)) for i in range(4)]
+    [t.start() for t in threads]; [t.join() for t in threads]
+    assert len(cache._read_index()) == 80

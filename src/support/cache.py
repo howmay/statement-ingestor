@@ -2,6 +2,7 @@ import os
 import json
 import hashlib
 import logging
+import threading
 from typing import Dict, Any, Optional
 
 logger = logging.getLogger(__name__)
@@ -12,6 +13,7 @@ class ResultCache:
     
     def __init__(self, cache_dir: str = ".cache"):
         self.cache_dir = cache_dir
+        self._index_lock = threading.Lock()  # downloads run in parallel; index is read-modify-write
         os.makedirs(self.cache_dir, exist_ok=True)
 
     # ponytail: JSON index rewritten per download; switch to sqlite if downloads exceed ~10k
@@ -28,12 +30,13 @@ class ResultCache:
         return path if isinstance(path, str) and os.path.exists(path) else None
 
     def set_downloaded_path(self, key: str, path) -> None:
-        index = self._read_index()
-        index[key] = path
-        try:
-            with open(self._index_path(), 'w', encoding='utf-8') as f: json.dump(index, f, ensure_ascii=False, indent=0)
-        except OSError as e:
-            logger.warning(f"Could not write download index {self._index_path()}: {e}")
+        with self._index_lock:
+            index = self._read_index()
+            index[key] = path
+            try:
+                with open(self._index_path(), 'w', encoding='utf-8') as f: json.dump(index, f, ensure_ascii=False, indent=0)
+            except OSError as e:
+                logger.warning(f"Could not write download index {self._index_path()}: {e}")
 
     def _get_cache_key(self, text: str, extra: str = "") -> str:
         """Generate a stable key for the given text and extra metadata."""

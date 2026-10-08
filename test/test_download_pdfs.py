@@ -322,3 +322,19 @@ class TestDownloadPDFs:
         results = batch_download_pdfs(mock_service, emails)
         assert len(results) == 2
         assert results[0]['filepath'] == "/path/to/f1.pdf"
+
+
+def test_filename_hint_skips_pdf_text_extraction_when_subject_is_enough():
+    """Subject already gives statement type + month: never open the PDF just to name it."""
+    with patch('src.integrations.gmail.downloads.extract_text_from_pdf') as extract:
+        name = build_pdf_filename_by_sender('"台北富邦銀行" <creditcard@taipeifubon.com.tw>', 'bill.pdf', b'%PDF-1.4 x', subject='2026年8月信用卡帳單')
+    assert name.startswith('台北富邦銀行_信用卡帳單_2026-08_')
+    extract.assert_not_called()
+
+
+def test_filename_hint_reads_pdf_when_subject_is_uninformative():
+    with patch('src.integrations.gmail.downloads.extract_text_from_pdf', return_value='滙豐(台灣) 信用卡帳單 2026年07月') as extract, \
+         patch('src.integrations.gmail.downloads.get_bank_password', return_value=['pw']):
+        name = build_pdf_filename_by_sender('cards@estatements.hsbc.com.tw', '20260720.pdf', b'%PDF-1.4 x', subject='Your statement')
+    assert name.startswith('滙豐(台灣)_信用卡帳單_2026-07_')
+    assert extract.call_count == 1

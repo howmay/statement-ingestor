@@ -284,3 +284,41 @@ def test_list_attachments_handles_message_fetch_error():
 
     with pytest.raises(RuntimeError):
         fe.list_attachments(service, "m1")
+
+
+class _FakeBatch:
+    """Mimics googleapiclient BatchHttpRequest: collects requests, runs them on execute()."""
+    def __init__(self, callback):
+        self.callback = callback
+        self.requests = []
+
+    def add(self, request, request_id=None):
+        self.requests.append((request_id, request))
+
+    def execute(self, http=None):
+        for request_id, request in self.requests:
+            self.callback(request_id, request.execute(), None)
+
+
+def test_search_emails_fetches_metadata_in_one_batch():
+    """Per-message metadata goes through new_batch_http_request, not one round trip per message."""
+    service = Mock()
+    service.users().messages().list.return_value.execute.return_value = {
+        'messages': [{'id': 'm1', 'threadId': 't1'}, {'id': 'm2', 'threadId': 't2'}]
+    }
+    service.new_batch_http_request.side_effect = lambda callback: _FakeBatch(callback)
+
+    def fake_get(userId, id, format, metadataHeaders):
+        req = Mock()
+        req.execute.return_value = {'internalDate': '1', 'payload': {'headers': [
+            {'name': 'From', 'value': f'{id}@bank.example'}, {'name': 'Subject', 'value': f'Statement {id}'}]}}
+        return req
+    service.users().messages().get.side_effect = fake_get
+
+    emails = search_emails(service, senders=['bank'], keywords=['statement'])
+
+    assert [(e['id'], e['subject']) for e in emails] == [('m1', 'Statement m1'), ('m2', 'Statement m2')]
+    assert service.new_batch_http_request.call_count == 1
+    # nothing was fetched outside the batch
+    for call in service.users().messages().get.return_value.execute.call_args_list:
+        raise AssertionError(f"unexpected single get: {call}")

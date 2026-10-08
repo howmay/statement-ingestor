@@ -140,7 +140,7 @@ class TestGmailExpenseParserAppDownloadAttachments:
         # Each call returns 1 file, so total 2 files
         with patch('src.runtime.app.batch_download_pdfs', return_value=[
                  {'filepath': '/downloads/file1.pdf', 'sender_tag': 'bank'}
-             ]):
+             ]), patch('src.runtime.app.get_gmail_service', return_value=Mock()):
             result = app.download_attachments()
             
             assert result is True

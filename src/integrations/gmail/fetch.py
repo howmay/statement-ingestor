@@ -168,6 +168,41 @@ def _build_generic_statement_query() -> str:
     return f"{statement_query} {file_query} {exclude_query}"
 
 
+def _metadata_request(service, msg_id: str):
+    return service.users().messages().get(
+        userId='me', id=msg_id, format='metadata', metadataHeaders=['From', 'Subject']
+    )
+
+
+def _fetch_metadata(service, msg_ids: List[str]) -> Dict[str, Dict[str, Any]]:
+    """Fetch From/Subject for many messages in one batched HTTP request.
+
+    Anything the batch did not answer (an error, or a client without batch
+    support) is fetched one by one with retries.
+    """
+    details: Dict[str, Dict[str, Any]] = {}
+
+    def _collect(request_id, response, exception):
+        if exception is None and response:
+            details[request_id] = response
+
+    requests = {msg_id: _metadata_request(service, msg_id) for msg_id in msg_ids}
+    for start in range(0, len(msg_ids), 100):  # Gmail batch limit
+        chunk = msg_ids[start:start + 100]
+        try:
+            batch = service.new_batch_http_request(callback=_collect)
+            for msg_id in chunk:
+                batch.add(requests[msg_id], request_id=msg_id)
+            batch.execute()
+        except Exception as e:
+            logger.warning(f"Batched metadata fetch failed, falling back to single requests: {e}")
+
+    for msg_id in msg_ids:
+        if msg_id not in details:
+            details[msg_id] = requests[msg_id].execute(num_retries=5)
+    return details
+
+
 def search_emails(
     service,
     senders=None,
@@ -249,26 +284,18 @@ def search_emails(
             messages = response.get('messages', [])
             logger.info(f"Page {page_count}: Found {len(messages)} message(s)")
 
-            for i, msg in enumerate(messages):
-                msg_id = msg['id']
-                if msg_id in seen_ids:
-                    continue
-                seen_ids.add(msg_id)
+            new_msgs = [msg for msg in messages if msg['id'] not in seen_ids]
+            seen_ids.update(msg['id'] for msg in new_msgs)
+            details = _fetch_metadata(service, [msg['id'] for msg in new_msgs])
 
-                logger.debug(f"Processing message {i+1}/{len(messages)}: {msg_id}")
-                msg_detail = service.users().messages().get(
-                    userId='me',
-                    id=msg_id,
-                    format='metadata',
-                    metadataHeaders=['From', 'Subject']
-                ).execute(num_retries=5)
-
+            for msg in new_msgs:
+                msg_detail = details[msg['id']]
                 headers = {h['name'].lower(): h['value'] for h in msg_detail.get('payload', {}).get('headers', [])}
                 sender = headers.get('from', 'Unknown')
                 subject = headers.get('subject', 'No Subject')
 
                 emails.append({
-                    'id': msg_id,
+                    'id': msg['id'],
                     'threadId': msg.get('threadId'),
                     'sender': sender,
                     'subject': subject,

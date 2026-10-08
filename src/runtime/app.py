@@ -3,6 +3,7 @@
 # Orchestrates the supported end-to-end pipeline used by main.py.
 import os
 import sys
+import threading
 import traceback
 from pathlib import Path
 from datetime import datetime
@@ -219,28 +220,35 @@ class GmailExpenseParserApp:
             self.stats['errors'] += 1
             return False
             
-    def download_attachments(self) -> bool:
-        """Step 3: Download PDF attachments.
+    def download_attachments(self, max_workers: int = 4) -> bool:
+        """Step 3: Download PDF attachments in parallel.
 
-        Note: Gmail API service objects are not reliably thread-safe. We process
-        emails sequentially here to avoid intermittent SSL / stream errors under
-        parallel access.
+        googleapiclient service objects are not thread-safe, so each worker
+        thread builds its own from the saved token.
         """
         if not self.emails:
             self.logger.info("No emails to process.")
             return True
 
-        self.logger.info("Step 3: Downloading PDF attachments...")
+        self.logger.info(f"Step 3: Downloading PDF attachments (parallelism={max_workers})...")
+        local = threading.local()
+
+        def _service():
+            if getattr(local, 'service', None) is None:
+                local.service = get_gmail_service()
+            return local.service
+
         try:
             all_downloaded_files = []
-
-            for email in self.emails:
-                try:
-                    downloaded_files = batch_download_pdfs(self.service, [email])
-                    all_downloaded_files.extend(downloaded_files)
-                except Exception as e:
-                    self.logger.error(f"✗ Failed to download attachments for email {email.get('id', 'unknown')}: {e}")
-                    self.stats['errors'] += 1
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                futures = {executor.submit(lambda e: batch_download_pdfs(_service(), [e]), email): email for email in self.emails}
+                for future in as_completed(futures):
+                    email = futures[future]
+                    try:
+                        all_downloaded_files.extend(future.result())
+                    except Exception as e:
+                        self.logger.error(f"✗ Failed to download attachments for email {email.get('id', 'unknown')}: {e}")
+                        self.stats['errors'] += 1
 
             # De-duplicate by physical file path (same attachment may appear in multiple emails)
             deduped = []
@@ -534,7 +542,7 @@ class GmailExpenseParserApp:
             if not self.fetch_emails(max_results=max_results, date_from=date_from, date_to=date_to):
                 return self.stats
                 
-            if not self.download_attachments():
+            if not self.download_attachments(max_workers=max_workers):
                 return self.stats
                 
             if not self.extract_texts(max_workers=max_workers):
