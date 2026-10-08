@@ -632,3 +632,15 @@ def test_main_entrypoint_exists():
     project_root = Path(__file__).resolve().parent.parent
     content = (project_root / 'main.py').read_text()
     assert 'def main()' in content
+
+
+def test_parse_receipts_collects_statement_balances_even_without_transactions(app, monkeypatch):
+    """An empty DBS statement yields no rows but its account balances still reach balances.csv."""
+    app.extracted_texts = [{'text': '帳戶摘要\n活期儲蓄存款 60765**818* TWD 1,234.50\n', 'file_info': {'filepath': '/tmp/dbs.pdf', 'filename': 'dbs.pdf', 'sender_tag': 'dbs'}}]
+    monkeypatch.setattr('src.runtime.app.parse_receipt_text', lambda *_a, **_k: [])
+    app.parse_receipts(max_workers=1)
+    assert [(b['bank'], b['balance'], b['source_file']) for b in app.balances] == [('DBS Taiwan', 1234.5, 'dbs.pdf')]
+    with patch('src.runtime.app.export_balances_to_csv', return_value='output/balances.csv') as exp, \
+         patch('src.runtime.app.export_extracted_texts_to_csv', return_value='x.csv'):
+        assert app.export_results() is True
+        exp.assert_called_once_with(app.balances)

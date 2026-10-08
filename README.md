@@ -155,7 +155,7 @@ pytest
 
 ## Report
 
-Render every `output/expenses_*.csv` into one self-contained page (monthly income/expense, totals by type and bank, latest statement balances, filterable detail table):
+Every run also writes `output/balances.csv` (statement-level account balances and card amounts due). Render everything into one self-contained page with a draggable time range, net assets per currency and their trend, monthly income/expense, spend by bank, and a detail table:
 
 ```bash
 python scripts/report.py && open output/report.html

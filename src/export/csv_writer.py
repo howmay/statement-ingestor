@@ -280,3 +280,35 @@ def export_extracted_texts_to_csv(extracted_texts: List[Dict[str, Any]], output_
     except Exception as e:
         logger.error(f"Failed to export extracted text CSV: {e}")
         raise
+
+
+BALANCE_COLUMNS = ['date', 'bank', 'account', 'currency', 'balance', 'kind', 'source_file']
+
+
+def export_balances_to_csv(balances: List[Dict[str, Any]], output_dir: str = "output") -> str:
+    """Append statement balances to output/balances.csv, de-duplicated by (date, bank, account, currency, source_file)."""
+    if not balances:
+        return ""
+    os.makedirs(output_dir, exist_ok=True)
+    filepath = os.path.join(output_dir, 'balances.csv')
+
+    def key(row):
+        return tuple(str(row.get(k) or '').strip() for k in ('date', 'bank', 'account', 'currency', 'source_file'))
+
+    seen = {key(r) for r in _load_existing_rows(filepath)}
+    new_rows = []
+    for b in balances:
+        row = {k: ('' if b.get(k) is None else str(b.get(k))) for k in BALANCE_COLUMNS}
+        row['balance'] = f"{float(b.get('balance') or 0):.2f}"
+        if key(row) not in seen:
+            seen.add(key(row))
+            new_rows.append(row)
+    if new_rows:
+        exists = os.path.exists(filepath) and os.path.getsize(filepath) > 0
+        with open(filepath, 'a' if exists else 'w', newline='', encoding='utf-8-sig') as f:
+            writer = csv.DictWriter(f, fieldnames=BALANCE_COLUMNS)
+            if not exists:
+                writer.writeheader()
+            writer.writerows(new_rows)
+        logger.info(f"Exported balances: new_rows={len(new_rows)} file={filepath}")
+    return filepath

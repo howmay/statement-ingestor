@@ -20,10 +20,12 @@ from src.integrations.gmail.fetch import search_emails
 from src.integrations.gmail.downloads import batch_download_pdfs
 from src.parsing.pdf.pdf_to_text import extract_text_from_pdf
 from src.parsing.csv.statement_csv import parse_csv_statement
+from src.parsing.banks.balances import extract_balances
 from src.parsing.llm.parse_receipt import parse_receipt_text
 from src.export.csv_writer import (
     export_receipts_to_csv,
     export_extracted_texts_to_csv,
+    export_balances_to_csv,
     sort_exported_receipt_csvs,
 )
 
@@ -67,6 +69,7 @@ class GmailExpenseParserApp:
         self.downloaded_files = []
         self.extracted_texts = []
         self.parsed_receipts = []
+        self.balances = []  # statement-level account balances / card dues
         
         # File processing reports
         self.processing_reports = []
@@ -432,6 +435,7 @@ class GmailExpenseParserApp:
         self.logger.info(f"Step 5: Parsing {len(self.extracted_texts)} receipt(s) using LLM (parallelism={max_workers})...")
         
         parsed_candidates: List[Dict[str, Any]] = []
+        balances: List[Dict[str, Any]] = []
 
         def process_item(item: Dict[str, Any]) -> List[Dict[str, Any]]:
             text = item['text']
@@ -450,6 +454,9 @@ class GmailExpenseParserApp:
             }
 
             try:
+                for b in extract_balances(text, source_info):
+                    b['source_file'] = filename
+                    balances.append(b)
                 if filename.lower().endswith('.csv'):
                     receipts = parse_csv_statement(text, source_info)
                 else:
@@ -487,6 +494,7 @@ class GmailExpenseParserApp:
                     self._add_file_report(filename, file_info.get('sender_tag', ''), "失敗", "未預期錯誤")
 
         self.parsed_receipts = parsed_candidates
+        self.balances = balances
         self.stats['receipts_parsed'] = len(self.parsed_receipts)
         self.logger.info(f"✓ Parsed {len(self.parsed_receipts)} receipt row(s) in total")
         return True
@@ -508,6 +516,9 @@ class GmailExpenseParserApp:
                     sort_exported_receipt_csvs(receipt_csv_paths)
                 self.logger.info(f"✓ Parsed receipts exported to: {csv_path}")
             
+            if self.balances:
+                self.logger.info(f"✓ Statement balances exported to: {export_balances_to_csv(self.balances)}")
+
             # Also export raw extracted texts for debugging/record
             if self.extracted_texts:
                 raw_texts_path = export_extracted_texts_to_csv(self.extracted_texts)
