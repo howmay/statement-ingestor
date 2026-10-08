@@ -7,7 +7,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-CSV_COLUMNS = ['date', 'income', 'expense', 'currency', 'expense_name', 'expense_type', 'source', 'source_file']
+CSV_COLUMNS = ['date', 'income', 'expense', 'currency', 'expense_name', 'expense_type', 'source', 'source_file', 'balance']
 
 
 def _transaction_month(receipt: Dict[str, Any]) -> str:
@@ -92,6 +92,11 @@ def _format_export_row(receipt: Dict[str, Any]) -> Dict[str, str]:
             row[key] = expense_str
         elif value is None:
             row[key] = ''
+        elif key == 'balance':
+            try:
+                row[key] = f"{float(value):.2f}"
+            except (TypeError, ValueError):
+                row[key] = str(value)
         else:
             row[key] = str(value)
 
@@ -152,6 +157,16 @@ def export_receipts_to_csv(receipts: List[Dict[str, Any]], output_dir: str = "ou
             continue
 
         file_exists = os.path.exists(filepath) and os.path.getsize(filepath) > 0
+        if file_exists:
+            with open(filepath, newline='', encoding='utf-8-sig') as f:
+                header = next(csv.reader(f), [])
+            if header != CSV_COLUMNS:
+                # Older file layout: rewrite it with the current columns before appending.
+                existing_rows = _load_existing_rows(filepath)
+                with open(filepath, 'w', newline='', encoding='utf-8-sig') as csvfile:
+                    writer = csv.DictWriter(csvfile, fieldnames=CSV_COLUMNS, extrasaction='ignore')
+                    writer.writeheader()
+                    writer.writerows(existing_rows)
         with open(filepath, 'a' if file_exists else 'w', newline='', encoding='utf-8-sig') as csvfile:
             writer = csv.DictWriter(csvfile, fieldnames=CSV_COLUMNS)
             if not file_exists:

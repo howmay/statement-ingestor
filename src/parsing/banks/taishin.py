@@ -299,6 +299,7 @@ class TaishinBankParser(BaseBankParser):
             parser_name="TaishinBankParser",
         )
         tx["cashflow_side"] = data["cashflow_side"]
+        tx["balance"] = data.get("balance")
         return tx
 
 

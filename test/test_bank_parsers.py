@@ -632,3 +632,18 @@ def test_fubon_credit_card_parses_roc_dated_rows():
         ("2026-07-03", 3.0, "TWD", "國外交易服務費（簽帳 205 )"),
         ("2026-08-01", 25.0, "TWD", "全家便利商店-桃園高鐵一店"),
     ]
+
+
+def test_bank_account_parsers_carry_running_balance():
+    from src.parsing.banks.taishin import TaishinBankParser
+    from src.parsing.banks.fubon import FubonBankParser
+    fubon = FubonBankParser(
+        "對帳單期間：2026/08/01~2026/08/31\n當 月 交 易 明 細\n台幣活存\n帳號 日期 摘要 支出 收入 餘額\n"
+        "00766168****65 2026/08/21 委代扣 1,000.00 台新銀行轉存款 2,580.00\n",
+        {"sender_tag": "fubon_tw_bhu"},
+    ).parse()
+    assert [(t["amount"], t.get("balance")) for t in fubon.transactions] == [(1000.0, 2580.0)]
+
+    text = "外幣帳戶的往來明細\n帳號 日期 摘要 幣別 支出 存入 餘額\n88875****337 2026/07/01 INTEREST JPY $0 $3 $95,353\n"
+    txs = TaishinBankParser(text, {"sender_tag": "taishin", "subject": "台新銀行 電子對帳單 2026-07"}).parse().transactions
+    assert txs and txs[0].get("balance") == 95353.0

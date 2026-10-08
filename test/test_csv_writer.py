@@ -440,3 +440,16 @@ def test_zero_amount_rows_are_not_exported(tmp_path):
     path = export_receipts_to_csv(receipts, output_dir=str(tmp_path))
     rows = list(csv.DictReader(open(path, encoding='utf-8-sig')))
     assert [r['expense_name'] for r in rows] == ['PCHOME']
+
+
+def test_balance_column_is_exported_and_old_files_are_migrated(tmp_path):
+    """Bank-account rows carry the running balance; a CSV written with the old header is upgraded in place."""
+    old = tmp_path / 'expenses_2026-07.csv'
+    old.write_text('﻿date,income,expense,currency,expense_name,expense_type,source,source_file\n'
+                   '2026-07-01,,100.00,TWD,OLD ROW,Other,Taishin Bank,old.pdf\n', encoding='utf-8')
+    receipts = [_card_receipt(50.0, date='2026-07-02', expense_name='NEW ROW', parser_name='TaishinBankParser',
+                              source='Taishin Bank', balance=1234.5, cashflow_side='expense')]
+    export_receipts_to_csv(receipts, output_dir=str(tmp_path))
+    rows = list(csv.DictReader(open(old, encoding='utf-8-sig')))
+    assert list(rows[0].keys())[-1] == 'balance'
+    assert [(r['expense_name'], r['balance']) for r in rows] == [('OLD ROW', ''), ('NEW ROW', '1234.50')]

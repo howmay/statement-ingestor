@@ -152,3 +152,11 @@ Run all tests to ensure parsers are working correctly:
 ```bash
 pytest
 ```
+
+## Report
+
+Render every `output/expenses_*.csv` into one self-contained page (monthly income/expense, totals by type and bank, latest statement balances, filterable detail table):
+
+```bash
+python scripts/report.py && open output/report.html
+```

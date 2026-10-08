@@ -108,6 +108,7 @@ class FubonBankParser(BaseBankParser):
             ))
             if cashflow_side:
                 txs[-1]['cashflow_side'] = cashflow_side
+            txs[-1]['balance'] = current_balance
             running_balance = current_balance
 
         return BankParseResult(
