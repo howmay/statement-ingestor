@@ -26,6 +26,13 @@ def _receipt_key(row: Dict[str, str]) -> Tuple[str, str, str, str, str, str]:
 
 
 def _detect_statement_kind(receipt: Dict[str, Any]) -> str:
+    # Bank parsers always set parser_name (…CardParser / …BankParser); trust it over labels.
+    parser_name = str(receipt.get('parser_name') or '')
+    if 'Card' in parser_name:
+        return 'credit_card'
+    if 'Bank' in parser_name:
+        return 'bank'
+
     source = str(receipt.get('source') or '').lower()
     sender_tag = str(receipt.get('sender_tag') or '').lower()
     source_file = str(receipt.get('source_file') or receipt.get('original_file') or '').lower()
@@ -115,9 +122,14 @@ def export_receipts_to_csv(receipts: List[Dict[str, Any]], output_dir: str = "ou
 
     os.makedirs(output_dir, exist_ok=True)
 
-    # Group by month bucket
+    # Group by month bucket; a row that moves no money (e.g. "INTEREST USD $0") is noise.
     grouped: Dict[str, List[Dict[str, Any]]] = {}
     for receipt in receipts:
+        try:
+            if float(receipt.get('amount') or 0) == 0:
+                continue
+        except (TypeError, ValueError):
+            pass
         month = _transaction_month(receipt)
         grouped.setdefault(month, []).append(receipt)
 

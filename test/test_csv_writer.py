@@ -415,3 +415,28 @@ def test_sort_exported_receipt_csvs_sorts_rows_by_stable_key(tmp_path):
         rows = list(csv.DictReader(f))
 
     assert [row["expense_name"] for row in rows] == ["A", "B"]
+
+
+def _card_receipt(amount, **extra):
+    base = {
+        'date': '2026-07-26', 'amount': amount, 'currency': 'TWD', 'expense_name': 'PCHOME',
+        'expense_type': 'Shopping', 'source': 'Esun Bank', 'parser_name': 'EsunCardParser',
+        'confidence': 0.9, 'source_file': 'ESUN_Estatement_11507.pdf',
+    }
+    base.update(extra)
+    return base
+
+
+def test_credit_card_side_is_decided_by_parser_name_not_source_label(tmp_path):
+    """Esun's card parser labels its source 'Esun Bank'; a positive amount is still a card purchase."""
+    path = export_receipts_to_csv([_card_receipt(4663.0), _card_receipt(-295.0, expense_name='自動轉帳繳款')], output_dir=str(tmp_path))
+    rows = list(csv.DictReader(open(path, encoding='utf-8-sig')))
+    assert [(r['income'], r['expense']) for r in rows] == [('', '4663.00'), ('295.00', '')]
+
+
+def test_zero_amount_rows_are_not_exported(tmp_path):
+    """A 0-interest line moves no money and must not become a blank row."""
+    receipts = [_card_receipt(0.0, expense_name='INTEREST', parser_name='TaishinBankParser', source='Taishin Bank'), _card_receipt(10.0)]
+    path = export_receipts_to_csv(receipts, output_dir=str(tmp_path))
+    rows = list(csv.DictReader(open(path, encoding='utf-8-sig')))
+    assert [r['expense_name'] for r in rows] == ['PCHOME']
